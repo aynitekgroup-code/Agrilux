@@ -12,13 +12,24 @@ function AppRoutes() {
   const { user, loading } = useAuth();
   const [plagaDetectada, setPlagaDetectada] = useState('');
 
-  if (loading) return (
-    <div className="fixed inset-0 flex items-center justify-center bg-white">
+    if (loading) return (
+    <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-green-50 to-green-200">
       <div className="text-center">
-        <div className="w-16 h-16 bg-primary rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-          <span className="text-3xl">🌾</span>
+        {/* Futurista + Agricultura: Hoja + circuito */}
+        <div className="w-20 h-20 flex items-center justify-center mx-auto mb-4 bg-white rounded-full shadow-xl border-[3px] border-green-300 animate-pulse relative">
+          <span className="text-4xl">🌱</span>
+          <svg 
+            className="absolute bottom-0 right-0 w-8 h-8 text-green-400 opacity-75"
+            fill="none" viewBox="0 0 32 32">
+            <path stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+              d="M16 22V30M16 30L21 28M16 30L11 28M16 22L8 24M16 22L24 24" />
+          </svg>
         </div>
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mt-4" />
+        <div className="text-green-700 text-lg font-semibold mb-2">Agrilux</div>
+        <div className="w-8 h-8 border-4 border-green-400 border-t-transparent rounded-full animate-spin mx-auto mt-4" />
+        <div className="mt-4 text-green-700 opacity-75 font-medium text-sm">
+          Cargando tu campo inteligente...
+        </div>
       </div>
     </div>
   );
