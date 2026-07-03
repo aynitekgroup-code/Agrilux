@@ -13,14 +13,14 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../lib/firebase';
-import { collection, getDocs, query, orderBy, onSnapshot, doc, setDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '../lib/AuthContext';
 import JSZip from 'jszip';
 import {
   Users, Camera, Download, RefreshCw, ChevronDown, ChevronUp,
   Search, X, MapPin, Phone, Calendar, TrendingUp, CloudUpload,
   CheckCircle, AlertCircle, Loader2, FolderOpen, ExternalLink,
-  Plus, Eye, EyeOff, Lock, UserPlus, LogOut, Truck,
+  Plus, Eye, EyeOff, Lock, UserPlus, LogOut, Truck, XCircle,
 } from 'lucide-react';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
@@ -108,18 +108,31 @@ async function subirArchivoADrive(token, carpetaId, nombre, blob) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // PANTALLA DE LOGIN ADMIN
 // ═══════════════════════════════════════════════════════════════════════════════
+const ADMIN_EMAIL = 'jose.llanos.d@uni.pe';
+
 function LoginAdmin({ onAcceso }) {
+  const [email, setEmail]     = useState('');
   const [clave, setClave]     = useState('');
   const [verClave, setVer]    = useState(false);
   const [error, setError]     = useState('');
   const [loading, setLoading] = useState(false);
+  const [paso, setPaso]       = useState('email'); // email → clave
+
+  const verificarEmail = () => {
+    setError('');
+    if (email.trim().toLowerCase() === ADMIN_EMAIL) {
+      setPaso('clave');
+    } else {
+      setError('Este correo no tiene acceso de administrador.');
+    }
+  };
 
   const intentar = async () => {
     setError('');
     const claveCorrecta = import.meta.env.VITE_ADMIN_KEY;
     if (!claveCorrecta) { setError('VITE_ADMIN_KEY no está configurada en .env'); return; }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 400)); // pequeño delay anti-brute
+    await new Promise(r => setTimeout(r, 400));
     if (clave === claveCorrecta) {
       onAcceso();
     } else {
@@ -145,29 +158,60 @@ function LoginAdmin({ onAcceso }) {
               <p className="text-red-400 text-sm">{error}</p>
             </div>
           )}
-          <div>
-            <label className="text-xs text-gray-400 font-semibold block mb-1.5">Clave de administrador</label>
-            <div className="relative">
-              <input
-                type={verClave ? 'text' : 'password'}
-                value={clave}
-                onChange={e => setClave(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && intentar()}
-                placeholder="••••••••••"
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-600 pr-12"
-              />
-              <button onClick={() => setVer(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
-                {verClave ? <EyeOff size={16} /> : <Eye size={16} />}
+
+          {paso === 'email' ? (
+            <>
+              <div>
+                <label className="text-xs text-gray-400 font-semibold block mb-1.5">Correo de administrador</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && verificarEmail()}
+                  placeholder="jose.llanos.d@uni.pe"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-600"
+                />
+              </div>
+              <button
+                onClick={verificarEmail}
+                disabled={loading || !email.trim()}
+                className="w-full bg-green-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-40"
+              >
+                Continuar →
               </button>
-            </div>
-          </div>
-          <button
-            onClick={intentar}
-            disabled={loading || !clave}
-            className="w-full bg-green-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-40"
-          >
-            {loading ? <span className="flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" /> Verificando...</span> : 'Entrar →'}
-          </button>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 text-xs text-green-400">
+                <span>✓</span>
+                <span>{email}</span>
+                <button onClick={() => { setPaso('email'); setClave(''); setError(''); }} className="text-gray-500 underline ml-auto">Cambiar</button>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 font-semibold block mb-1.5">Clave de administrador</label>
+                <div className="relative">
+                  <input
+                    type={verClave ? 'text' : 'password'}
+                    value={clave}
+                    onChange={e => setClave(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && intentar()}
+                    placeholder="••••••••••"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-600 pr-12"
+                  />
+                  <button onClick={() => setVer(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+                    {verClave ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+              <button
+                onClick={intentar}
+                disabled={loading || !clave}
+                className="w-full bg-green-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-40"
+              >
+                {loading ? <span className="flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" /> Verificando...</span> : 'Entrar →'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -190,25 +234,34 @@ function ModalAgregarUsuario({ onCerrar, onAgregado }) {
     setLoading(true);
     setError('');
     try {
-      // Crear en Firebase Auth vía fetch a la API REST
-      // (no podemos usar createUserWithEmailAndPassword sin cerrar sesión admin)
-      // Usamos Firestore directamente + guardamos los datos
-      // El usuario podrá hacer login con su nombre la próxima vez
-      const emailSintetico = nombreToEmail(form.nombre.trim());
-      const uid = `manual_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-
-      await setDoc(doc(db, 'usuarios', uid), {
-        nombre:         form.nombre.trim(),
-        emailSintetico,
-        rol:            form.rol,
-        celular:        form.celular || null,
-        ubicacion:      form.ubicacion || null,
-        passwordDefault: pass,   // el admin le da esta clave al agricultor
-        creadoPor:      'admin',
-        createdAt:      new Date().toISOString(),
-      });
-
-      onAgregado({ id: uid, ...form, emailSintetico, creadoPor: 'admin' });
+      if (form.rol === 'motorizado') {
+        const codigo = 'DEL-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+        const uid = `motorizado_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        await setDoc(doc(db, 'usuarios', uid), {
+          nombre:         form.nombre.trim(),
+          rol:            'motorizado',
+          celular:        form.celular || null,
+          ubicacion:      form.ubicacion || null,
+          codigoEntrega:  codigo,
+          creadoPor:      'admin',
+          createdAt:      new Date().toISOString(),
+        });
+        onAgregado({ id: uid, ...form, codigoEntrega: codigo, creadoPor: 'admin' });
+      } else {
+        const emailSintetico = nombreToEmail(form.nombre.trim());
+        const uid = `manual_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        await setDoc(doc(db, 'usuarios', uid), {
+          nombre:         form.nombre.trim(),
+          emailSintetico,
+          rol:            form.rol,
+          celular:        form.celular || null,
+          ubicacion:      form.ubicacion || null,
+          passwordDefault: pass,
+          creadoPor:      'admin',
+          createdAt:      new Date().toISOString(),
+        });
+        onAgregado({ id: uid, ...form, emailSintetico, creadoPor: 'admin' });
+      }
       onCerrar();
     } catch (e) {
       setError('Error al guardar: ' + e.message);
@@ -258,27 +311,44 @@ function ModalAgregarUsuario({ onCerrar, onAgregado }) {
           </select>
         </div>
 
-        <div>
-          <label className="text-xs font-semibold text-gray-600 block mb-1">Contraseña para el usuario</label>
-          <div className="relative">
-            <input
-              type={verPass ? 'text' : 'password'}
-              value={pass}
-              onChange={e => setPass(e.target.value)}
-              className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary pr-10"
-            />
-            <button onClick={() => setVer(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-              {verPass ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
+        {form.rol === 'motorizado' ? (
+          <div className="bg-purple-50 rounded-xl p-3">
+            <p className="text-xs text-purple-700 font-semibold">Código de acceso</p>
+            <p className="text-xs text-purple-600 mt-1">Se generará un código automático (ej: <strong>DEL-ABCD</strong>)</p>
+            <p className="text-xs text-purple-500 mt-1">El motorizado ingresará este código para acceder. No necesita correo ni contraseña.</p>
           </div>
-          <p className="text-xs text-gray-400 mt-1">Dile esta clave al agricultor. Podrá ingresar con su nombre completo.</p>
-        </div>
+        ) : (
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">Contraseña para el usuario</label>
+            <div className="relative">
+              <input
+                type={verPass ? 'text' : 'password'}
+                value={pass}
+                onChange={e => setPass(e.target.value)}
+                className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary pr-10"
+              />
+              <button onClick={() => setVer(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                {verPass ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">Dile esta clave al agricultor. Podrá ingresar con su nombre completo.</p>
+          </div>
+        )}
 
-        {form.nombre.trim() && (
+        {form.rol !== 'motorizado' && form.nombre.trim() && (
           <div className="bg-green-50 rounded-xl p-3">
             <p className="text-xs text-green-700 font-semibold">Vista previa de acceso:</p>
             <p className="text-xs text-green-600 mt-1">Nombre: <strong>{form.nombre}</strong></p>
             <p className="text-xs text-green-600">Contraseña: <strong>{pass}</strong></p>
+          </div>
+        )}
+
+        {form.rol === 'motorizado' && (
+          <div className="bg-blue-50 rounded-xl p-3">
+            <p className="text-xs text-blue-700 font-semibold">Instrucciones:</p>
+            <p className="text-xs text-blue-600 mt-1">1. El motorizado abre Agrilux</p>
+            <p className="text-xs text-blue-600">2. Toca "Soy delivery"</p>
+            <p className="text-xs text-blue-600">3. Ingresa el código que le des</p>
           </div>
         )}
 
@@ -287,7 +357,37 @@ function ModalAgregarUsuario({ onCerrar, onAgregado }) {
           disabled={loading || !form.nombre.trim()}
           className="w-full bg-primary text-white font-bold py-3.5 rounded-2xl text-sm disabled:opacity-40 flex items-center justify-center gap-2"
         >
-          {loading ? <><Loader2 size={16} className="animate-spin" /> Guardando...</> : <><UserPlus size={16} /> Agregar agricultor</>}
+          {loading ? <><Loader2 size={16} className="animate-spin" /> Guardando...</> : <><UserPlus size={16} /> {form.rol === 'motorizado' ? 'Crear motorizado' : 'Agregar agricultor'}</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SOLICITUD CARD
+// ═══════════════════════════════════════════════════════════════════════════════
+function SolicitudCard({ solicitud, onAccion }) {
+  return (
+    <div className="bg-white rounded-2xl p-4 shadow-sm border-l-4 border-yellow-500">
+      <div className="flex justify-between items-start mb-2">
+        <div>
+          <p className="font-bold text-sm text-gray-800">{solicitud.nombre}</p>
+          <p className="text-xs text-gray-500">📱 {solicitud.celular}</p>
+        </div>
+        <span className="text-xs font-bold px-2 py-1 rounded-full bg-yellow-100 text-yellow-700">⏳ Pendiente</span>
+      </div>
+      <p className="text-xs text-gray-600 mb-1">📍 {solicitud.ubicacion}</p>
+      {solicitud.motivo && <p className="text-xs text-gray-400 mb-2 italic">"{solicitud.motivo}"</p>}
+      <p className="text-xs text-gray-400 mb-3">{formatFecha(solicitud.createdAt)}</p>
+      <div className="flex gap-2">
+        <button onClick={() => onAccion('aceptar')}
+          className="flex-1 bg-green-500 text-white text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-1">
+          <CheckCircle size={14} /> Aceptar
+        </button>
+        <button onClick={() => onAccion('rechazar')}
+          className="flex-1 bg-red-100 text-red-600 text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-1">
+          <XCircle size={14} /> Rechazar
         </button>
       </div>
     </div>
@@ -302,6 +402,7 @@ export default function Admin() {
   const [tab, setTab]               = useState('usuarios');
   const [usuarios, setUsuarios]     = useState([]);
   const [diagnosticos, setDiagnosticos] = useState([]);
+  const [solicitudes, setSolicitudes] = useState([]);
   const [loading, setLoading]       = useState(true);
   const [busqueda, setBusqueda]     = useState('');
   const [expandido, setExpandido]   = useState(null);
@@ -351,6 +452,7 @@ export default function Admin() {
 
     cargar('usuarios', setUsuarios);
     cargar('diagnosticos', setDiagnosticos);
+    cargar('solicitudes', setSolicitudes);
     return () => unsubs.forEach(u => u());
   }, [autorizado]);
 
@@ -471,6 +573,7 @@ export default function Admin() {
         <div className="flex gap-1 bg-white/10 rounded-xl p-1">
           {[
             { id: 'usuarios', label: 'Usuarios', icon: Users },
+            { id: 'solicitudes', label: 'Solicitudes', icon: UserPlus },
             { id: 'motorizados', label: 'Motorizados', icon: Truck },
             { id: 'diagnosticos', label: 'Diagnósticos', icon: Camera },
             { id: 'exportar', label: 'Exportar', icon: Download },
@@ -585,6 +688,68 @@ export default function Admin() {
           </>
         )}
 
+        {/* ── SOLICITUDES ──────────────────────────────────────────────────── */}
+        {tab === 'solicitudes' && (
+          <>
+            <p className="text-xs text-gray-400">
+              {solicitudes.filter(s => s.estado === 'pendiente').length} pendientes · {solicitudes.filter(s => s.estado === 'aceptada').length} aceptadas · {solicitudes.filter(s => s.estado === 'rechazada').length} rechazadas
+            </p>
+
+            {solicitudes.length === 0 && (
+              <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
+                <p className="text-4xl mb-3">📋</p>
+                <p className="text-gray-500 text-sm">No hay solicitudes aún</p>
+              </div>
+            )}
+
+            {solicitudes.filter(s => s.estado === 'pendiente').length > 0 && (
+              <p className="text-xs font-bold text-yellow-600 uppercase tracking-wide mt-2">⏳ Pendientes</p>
+            )}
+            {solicitudes.filter(s => s.estado === 'pendiente').map(s => (
+              <SolicitudCard key={s.id} solicitud={s} onAccion={async (accion) => {
+                if (accion === 'aceptar') {
+                  const codigo = 'DEL-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+                  const uid = `motorizado_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+                  await setDoc(doc(db, 'usuarios', uid), {
+                    nombre: s.nombre,
+                    rol: 'motorizado',
+                    celular: s.celular || null,
+                    ubicacion: s.ubicacion || null,
+                    codigoEntrega: codigo,
+                    userId: s.userId,
+                    creadoPor: 'admin',
+                    createdAt: new Date().toISOString(),
+                  });
+                  await setDoc(doc(db, 'solicitudes', s.id), { estado: 'aceptada', codigoEntrega: codigo }, { merge: true });
+                } else {
+                  await setDoc(doc(db, 'solicitudes', s.id), { estado: 'rechazada' }, { merge: true });
+                }
+              }} />
+            ))}
+
+            {solicitudes.filter(s => s.estado === 'aceptada').length > 0 && (
+              <p className="text-xs font-bold text-green-600 uppercase tracking-wide mt-2">✅ Aceptadas</p>
+            )}
+            {solicitudes.filter(s => s.estado === 'aceptada').map(s => (
+              <div key={s.id} className="bg-white rounded-2xl p-4 shadow-sm border-l-4 border-green-500">
+                <p className="font-bold text-sm text-gray-800">{s.nombre}</p>
+                <p className="text-xs text-gray-500">📱 {s.celular} · 📍 {s.ubicacion}</p>
+                {s.codigoEntrega && <p className="text-xs text-green-600 font-semibold mt-1">Código: {s.codigoEntrega}</p>}
+              </div>
+            ))}
+
+            {solicitudes.filter(s => s.estado === 'rechazada').length > 0 && (
+              <p className="text-xs font-bold text-red-500 uppercase tracking-wide mt-2">❌ Rechazadas</p>
+            )}
+            {solicitudes.filter(s => s.estado === 'rechazada').map(s => (
+              <div key={s.id} className="bg-white rounded-2xl p-4 shadow-sm opacity-60">
+                <p className="font-bold text-sm text-gray-800">{s.nombre}</p>
+                <p className="text-xs text-gray-500">📱 {s.celular}</p>
+              </div>
+            ))}
+          </>
+        )}
+
         {/* ── MOTORIZADOS ──────────────────────────────────────────────────── */}
         {tab === 'motorizados' && (
           <>
@@ -639,6 +804,18 @@ export default function Admin() {
                         </button>
                         {expandido === m.id && (
                           <div className="px-4 pb-4 border-t border-gray-50 pt-3 space-y-2">
+                            {m.codigoEntrega && (
+                              <div className="bg-purple-50 rounded-xl p-3 flex items-center justify-between">
+                                <div>
+                                  <p className="text-xs text-purple-600 font-semibold">Código de acceso</p>
+                                  <p className="text-lg font-mono font-bold text-purple-700 tracking-wider">{m.codigoEntrega}</p>
+                                </div>
+                                <button onClick={() => { navigator.clipboard.writeText(m.codigoEntrega); }}
+                                  className="text-xs bg-purple-100 text-purple-600 px-3 py-1.5 rounded-lg font-semibold">
+                                  Copiar
+                                </button>
+                              </div>
+                            )}
                             <div className="grid grid-cols-2 gap-2">
                               {[
                                 { icon: Phone, label: 'Celular', val: m.celular || '—' },
@@ -657,6 +834,13 @@ export default function Admin() {
                                 💬 Contactar por WhatsApp
                               </a>
                             )}
+                            <button onClick={async () => {
+                              if (!confirm(`¿Eliminar motorizado "${m.nombre}"?`)) return;
+                              await deleteDoc(doc(db, 'usuarios', m.id));
+                            }}
+                              className="w-full bg-red-50 text-red-600 text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-1 mt-1">
+                              🗑️ Eliminar motorizado
+                            </button>
                           </div>
                         )}
                       </div>
