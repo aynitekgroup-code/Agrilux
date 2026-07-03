@@ -3,8 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import Layout from './components/Layout';
 import SelectorUbicacion from './components/SelectorUbicacion';
-import { InstallPromptProvider } from './components/InstallPrompt';
-import InstallScreen from './components/InstallScreen';
 import Registro from './pages/Registro';
 import Diagnostico from './pages/Diagnostico';
 import Mercado from './pages/Mercado';
@@ -49,24 +47,11 @@ function AppRoutes() {
 }
 
 export default function App() {
-  const isInstalled =
-    window.matchMedia('(display-mode: standalone)').matches ||
-    window.navigator.standalone;
-  const wasSkipped = localStorage.getItem('agrilux_install_dismissed');
-
-  const [showInstall, setShowInstall] = useState(!isInstalled && !wasSkipped);
-
-  if (showInstall) {
-    return <InstallScreen onContinue={() => setShowInstall(false)} />;
-  }
-
   return (
     <AuthProvider>
-      <InstallPromptProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </InstallPromptProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
     </AuthProvider>
   );
 }
