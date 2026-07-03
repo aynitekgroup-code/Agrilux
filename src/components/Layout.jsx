@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, ShieldCheck, LogOut, Menu, X, MapPin, Truck, Send, Loader2, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Camera, ShieldCheck, LogOut, Menu, X, MapPin, Truck, Send, Loader2, Clock, CheckCircle, XCircle, Shield } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { db } from '../lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -124,6 +124,12 @@ export default function Layout({ children }) {
   const [mostrarUbicacion, setMostrarUbicacion] = useState(false);
   const [solicitudModal, setSolicitudModal] = useState(false);
   const [solicitudEstado, setSolicitudEstado] = useState(null);
+  const [adminModal, setAdminModal] = useState(false);
+  const [adminClave, setAdminClave] = useState('');
+  const [adminError, setAdminError] = useState('');
+
+  const ADMIN_EMAIL = 'jose.llanos.d@uni.pe';
+  const esAdmin = user?.email === ADMIN_EMAIL;
 
   const navItems = user?.rol === 'motorizado' ? navItemsMotorizado : navItemsAgricultor;
 
@@ -158,6 +164,23 @@ export default function Layout({ children }) {
       alert('Tu solicitud está pendiente de revisión. Espera la aprobación del administrador.');
     } else {
       setSolicitudModal(true);
+    }
+  };
+
+  const handleActuarAdmin = () => {
+    setMenuOpen(false);
+    setAdminClave('');
+    setAdminError('');
+    setAdminModal(true);
+  };
+
+  const handleAdminLogin = () => {
+    if (adminClave === import.meta.env.VITE_ADMIN_KEY) {
+      sessionStorage.setItem('agrilux_admin_auth', 'true');
+      setAdminModal(false);
+      navigate('/admin');
+    } else {
+      setAdminError('Clave incorrecta');
     }
   };
 
@@ -204,6 +227,14 @@ export default function Layout({ children }) {
                 {solicitudEstado === 'aceptada' && user?.rol !== 'motorizado' && <CheckCircle size={12} className="text-green-500 ml-auto" />}
                 {solicitudEstado === 'rechazada' && <XCircle size={12} className="text-red-500 ml-auto" />}
               </button>
+              {esAdmin && (
+                <button
+                  onClick={handleActuarAdmin}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors text-sm font-medium rounded-lg">
+                  <Shield size={18} />
+                  Actuar como administrador
+                </button>
+              )}
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors text-sm font-medium rounded-lg">
@@ -245,6 +276,31 @@ export default function Layout({ children }) {
           onClose={() => setSolicitudModal(false)}
           onSolicitudEnviada={() => { setSolicitudEstado('pendiente'); setSolicitudModal(false); }}
         />
+      )}
+
+      {adminModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setAdminModal(false)}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-800 mb-1 flex items-center gap-2">
+              <Shield size={20} className="text-blue-600" />
+              Acceso administrador
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">Ingresa la clave de administrador:</p>
+            <input
+              type="password"
+              value={adminClave}
+              onChange={e => { setAdminClave(e.target.value); setAdminError(''); }}
+              onKeyDown={e => e.key === 'Enter' && handleAdminLogin()}
+              placeholder="Clave..."
+              className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            />
+            {adminError && <p className="text-red-500 text-xs mt-1">{adminError}</p>}
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setAdminModal(false)} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancelar</button>
+              <button onClick={handleAdminLogin} className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">Entrar</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
