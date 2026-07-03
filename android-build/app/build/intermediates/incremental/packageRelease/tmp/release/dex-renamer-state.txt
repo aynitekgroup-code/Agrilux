@@ -1,4 +1,0 @@
-#Wed Jun 17 13:12:42 PET 2026
-base.0=C\:\\Users\\LENOVO\\Documents\\Trabajos UNI\\agrilux\\android-build\\app\\build\\intermediates\\dex\\release\\minifyReleaseWithR8\\classes.dex
-renamed.0=classes.dex
-path.0=classes.dex
