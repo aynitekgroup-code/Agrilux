@@ -176,7 +176,7 @@ export default function Layout({ children }) {
 
   const handleAdminLogin = () => {
     if (adminClave === import.meta.env.VITE_ADMIN_KEY) {
-      sessionStorage.setItem('agrilux_admin_auth', 'true');
+      sessionStorage.setItem('agrilux_admin', 'ok');
       setAdminModal(false);
       navigate('/admin');
     } else {
