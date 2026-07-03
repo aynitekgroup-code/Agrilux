@@ -338,8 +338,8 @@ function PanelProveedor({ tienda, onVolver }) {
   const [pedidos, setPedidos] = useState([]);
   const [loadingP, setLoadingP] = useState(true);
   const [modalProducto, setModalProducto] = useState(false);
-  const [motorizados, setMotorizados] = useState([]);
-  const [modalAsignar, setModalAsignar] = useState(null);
+  const [pedidoTrackingOwner, setPedidoTrackingOwner] = useState(null);
+  const [trackingOwnerData, setTrackingOwnerData] = useState(null);
 
   useEffect(() => { cargarProductos(); }, []);
 
@@ -352,18 +352,18 @@ function PanelProveedor({ tienda, onVolver }) {
     return () => unsub();
   }, [tienda.id]);
 
-  useEffect(() => {
-    const q = query(collection(db, 'usuarios'), where('rol', '==', 'motorizado'));
-    const unsub = onSnapshot(q, snap => {
-      setMotorizados(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, () => {});
-    return () => unsub();
-  }, []);
-
   const cargarProductos = async () => {
     const snap = await getDocs(query(collection(db, 'productos'), where('tiendaId', '==', tienda.id)));
     setProductos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
   };
+
+  useEffect(() => {
+    if (!pedidoTrackingOwner?.id) return;
+    const unsub = onSnapshot(doc(db, 'pedidos', pedidoTrackingOwner.id), snap => {
+      if (snap.exists()) setTrackingOwnerData({ id: snap.id, ...snap.data() });
+    });
+    return () => unsub();
+  }, [pedidoTrackingOwner?.id]);
 
   const totalVentas = pedidos.filter(p => p.estado === 'entregado').reduce((s, p) => s + (p.total || 0), 0);
   const deudaTotal  = pedidos.filter(p => p.estado === 'entregado').reduce((s, p) => s + (p.comision || 0), 0);
@@ -382,17 +382,6 @@ function PanelProveedor({ tienda, onVolver }) {
       );
       window.open(`https://wa.me/${tienda.celular?.replace(/\D/g, '')}?text=${msg}`, '_blank');
     } catch (e) { alert('Error al aceptar'); }
-  };
-
-  const asignarMotorizado = async (pedido, motorizado) => {
-    try {
-      await updateDoc(doc(db, 'pedidos', pedido.id), {
-        motorizadoId: motorizado.id,
-        motorizadoNombre: motorizado.nombre,
-        motorizadoCelular: motorizado.celular,
-      });
-      setModalAsignar(null);
-    } catch (e) { alert('Error al asignar'); }
   };
 
   const cambiarEstado = (id, estado) => updateDoc(doc(db, 'pedidos', id), { estado });
@@ -465,7 +454,7 @@ function PanelProveedor({ tienda, onVolver }) {
                 ? <div className="bg-white rounded-2xl p-8 text-center"><Package size={36} className="mx-auto text-gray-200 mb-2" /><p className="text-gray-400 text-sm">Sin pedidos aún</p></div>
                 : pedidos.map(p => {
                   const est = ESTADOS[p.estado] || ESTADOS.pendiente;
-                  const puedeAsignar = p.estado === 'confirmado' && !p.motorizadoId;
+                  const showOwnerTracking = pedidoTrackingOwner?.id === p.id;
                   return (
                     <div key={p.id} className="bg-white rounded-2xl p-4 shadow-sm">
                       <div className="flex justify-between items-start mb-2">
@@ -492,16 +481,41 @@ function PanelProveedor({ tienda, onVolver }) {
                         </div>
                       )}
 
-                      {puedeAsignar && (
-                        <button onClick={() => setModalAsignar(p)}
-                          className="w-full bg-purple-500 text-white text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 mt-2">
-                          <Truck size={14} /> Asignar motorizado
-                        </button>
+                      {p.estado === 'confirmado' && !p.motorizadoId && (
+                        <div className="bg-blue-50 rounded-xl p-2.5 mt-2 text-center">
+                          <p className="text-xs font-bold text-blue-700">⏳ Esperando motorizado...</p>
+                          <p className="text-xs text-blue-500 mt-1">Aparece en el pool de delivery</p>
+                        </div>
                       )}
 
                       {p.motorizadoId && (
                         <div className="bg-gray-50 rounded-xl p-2.5 mt-2">
                           <p className="text-xs text-gray-600">🏍️ {p.motorizadoNombre} · {p.motorizadoCelular}</p>
+                          {p.costoDelivery > 0 && <p className="text-xs text-gray-500">Costo delivery: S/ {p.costoDelivery}</p>}
+                          {p.horaEstimada && <p className="text-xs text-gray-500">🕐 Est. {new Date(p.horaEstimada).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}</p>}
+                        </div>
+                      )}
+
+                      {p.estado === 'en_camino' && p.motorizadoId && (
+                        <div className="mt-2 bg-purple-50 rounded-xl p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Truck size={14} className="text-purple-600" />
+                            <p className="text-xs font-bold text-purple-700">🏍️ {p.motorizadoNombre} en camino</p>
+                          </div>
+                          {!showOwnerTracking ? (
+                            <button onClick={() => { setPedidoTrackingOwner(p); setTrackingOwnerData(p); }}
+                              className="w-full bg-purple-500 text-white text-xs font-bold py-2 rounded-xl flex items-center justify-center gap-1 mt-2">
+                              <Truck size={14} /> Ver ubicación en tiempo real
+                            </button>
+                          ) : (
+                            <div className="mt-2">
+                              <MapaTracking ubicacion={trackingOwnerData?.ubicacionMotorizado} />
+                              <button onClick={() => { setPedidoTrackingOwner(null); setTrackingOwnerData(null); }}
+                                className="w-full bg-gray-100 text-gray-600 text-xs font-bold py-2 rounded-xl mt-2">
+                                Cerrar mapa
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -517,34 +531,6 @@ function PanelProveedor({ tienda, onVolver }) {
           </div>
         )}
       </div>
-
-      {modalAsignar && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center">
-          <div className="bg-white rounded-t-3xl w-full max-w-[430px] p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display font-bold text-lg">Asignar motorizado</h3>
-              <button onClick={() => setModalAsignar(null)}><X size={20} className="text-gray-400" /></button>
-            </div>
-            <p className="text-xs text-gray-500 mb-3">Pedido: {modalAsignar.productoNombre}</p>
-            {motorizados.length === 0
-              ? <p className="text-sm text-gray-400 text-center py-4">No hay motorizados registrados. Pídele al admin que agregue uno.</p>
-              : motorizados.map(m => (
-                <button key={m.id} onClick={() => asignarMotorizado(modalAsignar, m)}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-primary/5 transition-colors mb-2">
-                  <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center font-bold text-purple-700">
-                    {m.nombre?.[0]?.toUpperCase()}
-                  </div>
-                  <div className="flex-1 text-left">
-                    <p className="text-sm font-semibold text-gray-800">{m.nombre}</p>
-                    <p className="text-xs text-gray-500">{m.celular}</p>
-                  </div>
-                  <Truck size={16} className="text-gray-300" />
-                </button>
-              ))
-            }
-          </div>
-        </div>
-      )}
     </div>
   );
 }

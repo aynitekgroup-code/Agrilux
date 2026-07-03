@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../lib/firebase';
 import {
   collection, query, where, onSnapshot, doc, updateDoc,
-  getDoc
 } from 'firebase/firestore';
 import { useAuth } from '../lib/AuthContext';
 import {
@@ -16,7 +15,7 @@ const ESTADOS = {
   entregado:  { label: 'Entregado',            color: 'bg-green-100 text-green-700',  icon: '📦' },
 };
 
-function ModalAceptarPedido({ pedido, onClose, onAceptado }) {
+function ModalAceptarPedido({ pedido, user, onClose, onAceptado }) {
   const [costo, setCosto] = useState('');
   const [horaEstimada, setHoraEstimada] = useState('');
   const [loading, setLoading] = useState(false);
@@ -27,6 +26,9 @@ function ModalAceptarPedido({ pedido, onClose, onAceptado }) {
     try {
       await updateDoc(doc(db, 'pedidos', pedido.id), {
         estado: 'en_camino',
+        motorizadoId: user.uid,
+        motorizadoNombre: user.nombre,
+        motorizadoCelular: user.celular || '',
         costoDelivery: parseFloat(costo),
         horaEstimada: new Date(horaEstimada).toISOString(),
       });
@@ -87,7 +89,8 @@ function ModalAceptarPedido({ pedido, onClose, onAceptado }) {
 
 export default function MotorizadoPanel() {
   const { user } = useAuth();
-  const [pedidos, setPedidos] = useState([]);
+  const [poolPedidos, setPoolPedidos] = useState([]);
+  const [miPedidoActivo, setMiPedidoActivo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modalPedido, setModalPedido] = useState(null);
   const [gpsActivo, setGpsActivo] = useState(false);
@@ -95,15 +98,29 @@ export default function MotorizadoPanel() {
 
   useEffect(() => {
     if (!user?.uid) return;
-    const q = query(collection(db, 'pedidos'),
-      where('motorizadoId', '==', user.uid),
-      where('estado', 'in', ['confirmado', 'en_camino'])
+    const qPool = query(collection(db, 'pedidos'),
+      where('estado', '==', 'confirmado')
     );
-    const unsub = onSnapshot(q, snap => {
-      setPedidos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const unsubPool = onSnapshot(qPool, snap => {
+      setPoolPedidos(snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(p => !p.motorizadoId)
+      );
       setLoading(false);
     }, () => setLoading(false));
-    return () => unsub();
+    return () => unsubPool();
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const qMine = query(collection(db, 'pedidos'),
+      where('motorizadoId', '==', user.uid),
+      where('estado', '==', 'en_camino')
+    );
+    const unsubMine = onSnapshot(qMine, snap => {
+      setMiPedidoActivo(snap.docs.length > 0 ? { id: snap.docs[0].id, ...snap.docs[0].data() } : null);
+    }, () => {});
+    return () => unsubMine();
   }, [user?.uid]);
 
   useEffect(() => {
@@ -115,9 +132,8 @@ export default function MotorizadoPanel() {
           await updateDoc(doc(db, 'usuarios', user.uid), {
             ubicacionActual: { lat: pos.coords.latitude, lng: pos.coords.longitude, timestamp: new Date().toISOString() }
           });
-          const activeOrders = pedidos.filter(p => p.estado === 'en_camino');
-          for (const p of activeOrders) {
-            await updateDoc(doc(db, 'pedidos', p.id), {
+          if (miPedidoActivo) {
+            await updateDoc(doc(db, 'pedidos', miPedidoActivo.id), {
               ubicacionMotorizado: { lat: pos.coords.latitude, lng: pos.coords.longitude }
             });
           }
@@ -129,7 +145,7 @@ export default function MotorizadoPanel() {
     return () => {
       if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
     };
-  }, [user?.uid, gpsActivo, pedidos]);
+  }, [user?.uid, gpsActivo, miPedidoActivo?.id]);
 
   const toggleGPS = () => {
     if (gpsActivo) {
@@ -150,8 +166,6 @@ export default function MotorizadoPanel() {
     } catch (e) { alert('Error al marcar entrega'); }
   };
 
-  const pedidoActivo = pedidos.find(p => p.estado === 'en_camino');
-
   return (
     <div className="min-h-screen pb-24 bg-gray-50">
       <div className="bg-primary text-white px-6 pt-10 pb-6">
@@ -171,29 +185,29 @@ export default function MotorizadoPanel() {
       </div>
 
       <div className="px-4 py-4 space-y-3">
-        {pedidoActivo && (
+        {miPedidoActivo && (
           <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <Truck size={16} className="text-purple-600" />
               <p className="text-sm font-bold text-purple-700">Pedido activo — Entregando</p>
             </div>
-            <p className="text-sm font-semibold text-gray-800">{pedidoActivo.productoNombre}</p>
-            <p className="text-xs text-gray-600 mt-1">📍 {pedidoActivo.direccionEntrega}</p>
-            {pedidoActivo.referencia && <p className="text-xs text-gray-400">📌 {pedidoActivo.referencia}</p>}
+            <p className="text-sm font-semibold text-gray-800">{miPedidoActivo.productoNombre}</p>
+            <p className="text-xs text-gray-600 mt-1">📍 {miPedidoActivo.direccionEntrega}</p>
+            {miPedidoActivo.referencia && <p className="text-xs text-gray-400">📌 {miPedidoActivo.referencia}</p>}
             <div className="flex items-center gap-3 mt-2">
-              <a href={`https://wa.me/51${pedidoActivo.agricultorCelular?.replace(/\D/g, '')}`}
+              <a href={`https://wa.me/51${miPedidoActivo.agricultorCelular?.replace(/\D/g, '')}`}
                 target="_blank" rel="noreferrer"
                 className="flex items-center gap-1 text-xs text-primary font-semibold">
-                <Phone size={12} /> {pedidoActivo.agricultorCelular}
+                <Phone size={12} /> {miPedidoActivo.agricultorCelular}
               </a>
-              {pedidoActivo.costoDelivery > 0 && (
-                <p className="text-xs text-gray-500">S/ {pedidoActivo.costoDelivery}</p>
+              {miPedidoActivo.costoDelivery > 0 && (
+                <p className="text-xs text-gray-500">S/ {miPedidoActivo.costoDelivery}</p>
               )}
-              {pedidoActivo.horaEstimada && (
-                <p className="text-xs text-gray-500">🕐 {new Date(pedidoActivo.horaEstimada).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}</p>
+              {miPedidoActivo.horaEstimada && (
+                <p className="text-xs text-gray-500">🕐 {new Date(miPedidoActivo.horaEstimada).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}</p>
               )}
             </div>
-            <button onClick={() => marcarEntregado(pedidoActivo)}
+            <button onClick={() => marcarEntregado(miPedidoActivo)}
               className="w-full mt-3 bg-green-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2">
               <CheckCircle size={16} /> Marcar como entregado
             </button>
@@ -202,19 +216,19 @@ export default function MotorizadoPanel() {
 
         <div className="flex items-center justify-between">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
-            Pedidos pendientes ({pedidos.filter(p => p.estado === 'confirmado').length})
+            Pedidos disponibles ({poolPedidos.length})
           </p>
         </div>
 
         {loading
           ? <div className="flex justify-center py-8"><Loader2 size={24} className="animate-spin text-primary" /></div>
-          : pedidos.filter(p => p.estado === 'confirmado').length === 0
+          : poolPedidos.length === 0
             ? <div className="bg-white rounded-2xl p-8 text-center">
                 <Package size={36} className="mx-auto text-gray-200 mb-2" />
-                <p className="text-gray-400 text-sm">No hay pedidos pendientes</p>
+                <p className="text-gray-400 text-sm">No hay pedidos disponibles</p>
                 <p className="text-gray-300 text-xs mt-1">Los nuevos pedidos aparecerán aquí</p>
               </div>
-            : pedidos.filter(p => p.estado === 'confirmado').map(p => (
+            : poolPedidos.map(p => (
               <div key={p.id} className="bg-white rounded-2xl p-4 shadow-sm">
                 <div className="flex justify-between items-start mb-2">
                   <div>
@@ -251,7 +265,7 @@ export default function MotorizadoPanel() {
       </div>
 
       {modalPedido && (
-        <ModalAceptarPedido pedido={modalPedido}
+        <ModalAceptarPedido pedido={modalPedido} user={user}
           onClose={() => setModalPedido(null)}
           onAceptado={() => setModalPedido(null)} />
       )}
