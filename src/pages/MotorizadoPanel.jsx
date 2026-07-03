@@ -5,8 +5,8 @@ import {
 } from 'firebase/firestore';
 import { useAuth } from '../lib/AuthContext';
 import {
-  Package, Clock, CheckCircle, Truck, MapPin,
-  Phone, Loader2, Navigation, X, Send
+  Package, CheckCircle, Truck,
+  Phone, Loader2, Navigation, X
 } from 'lucide-react';
 
 const ESTADOS = {

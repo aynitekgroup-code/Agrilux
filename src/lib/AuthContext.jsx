@@ -106,15 +106,18 @@ export const AuthProvider = ({ children }) => {
 
     const perfilDoc = snap.docs[0];
     const perfil = perfilDoc.data();
-    const oldUid = perfilDoc.id;
 
-    // Si ya tiene email en Firestore, ya tiene cuenta Firebase Auth
-    if (perfil.email) {
-      const cred = await signInWithEmailAndPassword(auth, perfil.email, codigoLimpio);
-      return cred.user;
+    // Si ya tiene email y password en Firestore, intentar sign in
+    if (perfil.email && perfil._passwordReady) {
+      try {
+        const cred = await signInWithEmailAndPassword(auth, perfil.email, codigoLimpio);
+        return cred.user;
+      } catch (e) {
+        // Si falla, crear cuenta nueva más abajo
+      }
     }
 
-    // Primer login: crear cuenta Firebase Auth con uid propio
+    // Crear cuenta Firebase Auth con uid propio
     const emailFirebase = `moto-${codigoLimpio}@agrilux.app`;
     const cred = await createUserWithEmailAndPassword(auth, emailFirebase, codigoLimpio);
     await updateProfile(cred.user, { displayName: perfil.nombre });
@@ -124,6 +127,7 @@ export const AuthProvider = ({ children }) => {
     await setDoc(doc(db, 'usuarios', cred.user.uid), {
       ...datos,
       email: emailFirebase,
+      _passwordReady: true,
       createdAt: new Date().toISOString(),
     });
 

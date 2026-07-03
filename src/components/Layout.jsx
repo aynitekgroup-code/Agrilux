@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Camera, ShieldCheck, LogOut, Menu, X, MapPin, Truck, Send, Loader2, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { db } from '../lib/firebase';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import SelectorUbicacion from './SelectorUbicacion';
 
 const navItemsAgricultor = [
@@ -152,6 +152,10 @@ export default function Layout({ children }) {
       navigate('/motorizado');
     } else if (solicitudEstado === 'aceptada') {
       navigate('/motorizado');
+    } else if (solicitudEstado === 'rechazada') {
+      alert('Tu solicitud fue rechazada. Contacta al administrador para más información.');
+    } else if (solicitudEstado === 'pendiente') {
+      alert('Tu solicitud está pendiente de revisión. Espera la aprobación del administrador.');
     } else {
       setSolicitudModal(true);
     }

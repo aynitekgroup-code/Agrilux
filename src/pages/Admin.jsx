@@ -707,22 +707,19 @@ export default function Admin() {
             )}
             {solicitudes.filter(s => s.estado === 'pendiente').map(s => (
               <SolicitudCard key={s.id} solicitud={s} onAccion={async (accion) => {
-                if (accion === 'aceptar') {
-                  const codigo = 'DEL-' + Math.random().toString(36).slice(2, 6).toUpperCase();
-                  const uid = `motorizado_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-                  await setDoc(doc(db, 'usuarios', uid), {
-                    nombre: s.nombre,
-                    rol: 'motorizado',
-                    celular: s.celular || null,
-                    ubicacion: s.ubicacion || null,
-                    codigoEntrega: codigo,
-                    userId: s.userId,
-                    creadoPor: 'admin',
-                    createdAt: new Date().toISOString(),
-                  });
-                  await setDoc(doc(db, 'solicitudes', s.id), { estado: 'aceptada', codigoEntrega: codigo }, { merge: true });
-                } else {
-                  await setDoc(doc(db, 'solicitudes', s.id), { estado: 'rechazada' }, { merge: true });
+                try {
+                  if (accion === 'aceptar') {
+                    const codigo = 'DEL-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+                    await setDoc(doc(db, 'usuarios', s.userId), {
+                      codigoEntrega: codigo,
+                      motorizadoAutorizado: true,
+                    }, { merge: true });
+                    await setDoc(doc(db, 'solicitudes', s.id), { estado: 'aceptada', codigoEntrega: codigo }, { merge: true });
+                  } else {
+                    await setDoc(doc(db, 'solicitudes', s.id), { estado: 'rechazada' }, { merge: true });
+                  }
+                } catch (e) {
+                  alert('Error al procesar solicitud: ' + e.message);
                 }
               }} />
             ))}
