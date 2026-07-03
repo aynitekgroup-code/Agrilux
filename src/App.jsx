@@ -7,6 +7,7 @@ import Registro from './pages/Registro';
 import Diagnostico from './pages/Diagnostico';
 import Mercado from './pages/Mercado';
 import Admin from './pages/Admin';
+import MotorizadoPanel from './pages/MotorizadoPanel';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -15,7 +16,6 @@ function AppRoutes() {
     if (loading) return (
     <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-green-50 to-green-200">
       <div className="text-center">
-        {/* Futurista + Agricultura: Hoja + circuito */}
         <div className="w-20 h-20 flex items-center justify-center mx-auto mb-4 bg-white rounded-full shadow-xl border-[3px] border-green-300 animate-pulse relative">
           <span className="text-4xl">🌱</span>
           <svg 
@@ -34,13 +34,14 @@ function AppRoutes() {
     </div>
   );
 
-  if (user && !user.ubicacion) {
+  if (user && !user.ubicacion && user.rol !== 'motorizado') {
     return <SelectorUbicacion esPrimeraVez={true} />;
   }
 
   return (
     <Routes>
       <Route path="/admin" element={<Admin />} />
+      <Route path="/motorizado" element={user?.rol === 'motorizado' ? <MotorizadoPanel /> : <Navigate to="/" />} />
 
       <Route path="*" element={
         !user ? <Registro /> : (

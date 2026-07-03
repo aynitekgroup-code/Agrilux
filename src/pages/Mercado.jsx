@@ -8,9 +8,10 @@ import { useAuth } from '../lib/AuthContext';
 import { CULTIVOS } from '../lib/constants';
 import {
   X, Plus, Loader2, Camera, CheckCircle,
-  Package, Truck, ChevronRight, Store, LogIn
+  Package, Truck, ChevronRight, Store, LogIn, Phone
 } from 'lucide-react';
 import { invokeGemini } from '../lib/gemini';
+import L from 'leaflet';
 
 const WHATSAPP_SOPORTE = '51935211605';
 const COMISION = 0.05;
@@ -23,7 +24,60 @@ const ESTADOS = {
   cancelado:  { label: 'Cancelado',  color: 'bg-red-100 text-red-600',      icon: '❌' },
 };
 
-// ─── SETUP TIENDA (proveedor sin tienda aún) ──────────────────────────────────
+// ─── MAPA LEAFLET ─────────────────────────────────────────────────────────────
+function MapaTracking({ ubicacion }) {
+  const mapRef = useRef(null);
+  const mapInstance = useRef(null);
+  const markerRef = useRef(null);
+
+  useEffect(() => {
+    if (!mapRef.current || !ubicacion?.lat || !ubicacion?.lng) return;
+
+    if (!mapInstance.current) {
+      const map = L.map(mapRef.current, {
+        zoomControl: false,
+        attributionControl: false,
+      }).setView([ubicacion.lat, ubicacion.lng], 15);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+      }).addTo(map);
+
+      const icon = L.divIcon({
+        className: 'custom-marker',
+        html: `<div style="width:24px;height:24px;background:#7c3aed;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);"></div>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+
+      const marker = L.marker([ubicacion.lat, ubicacion.lng], { icon }).addTo(map);
+      mapInstance.current = map;
+      markerRef.current = { marker, icon };
+    } else {
+      if (markerRef.current) {
+        markerRef.current.marker.setLatLng([ubicacion.lat, ubicacion.lng]);
+      }
+      mapInstance.current.setView([ubicacion.lat, ubicacion.lng], 15);
+    }
+  }, [ubicacion?.lat, ubicacion?.lng]);
+
+  useEffect(() => {
+    return () => {
+      if (mapInstance.current) {
+        mapInstance.current.remove();
+        mapInstance.current = null;
+      }
+    };
+  }, []);
+
+  if (!ubicacion?.lat) return null;
+
+  return (
+    <div ref={mapRef} className="w-full h-48 rounded-2xl overflow-hidden" />
+  );
+}
+
+// ─── SETUP TIENDA ─────────────────────────────────────────────────────────────
 function SetupTienda({ user, onCreada }) {
   const [form, setForm] = useState({ empresa: '', ubicacion: '', celular: '' });
   const [loading, setLoading] = useState(false);
@@ -37,6 +91,7 @@ function SetupTienda({ user, onCreada }) {
         userId: user.uid,
         userEmail: user.email,
         nombre: user.nombre,
+        celular: form.celular || user.celular || '',
         createdAt: new Date().toISOString(),
       });
       onCreada({ id: user.uid, ...form, userId: user.uid });
@@ -56,7 +111,7 @@ function SetupTienda({ user, onCreada }) {
           {[
             { key: 'empresa',   label: 'Nombre de empresa *', ph: 'Ej: Agroservicios SAC' },
             { key: 'ubicacion', label: 'Ciudad / Distrito *',  ph: 'Ej: Lima' },
-            { key: 'celular',   label: 'Celular de contacto',  ph: '935211605', type: 'tel' },
+            { key: 'celular',   label: 'Celular de contacto *',  ph: '935211605', type: 'tel' },
           ].map(({ key, label, ph, type }) => (
             <div key={key}>
               <label className="text-xs font-semibold text-gray-600 block mb-1">{label}</label>
@@ -110,7 +165,6 @@ function ModalProducto({ tiendaId, onClose, onSuccess }) {
     img.src = dataUrl;
   });
 
-  // Cuando el proveedor escribe el nombre, la IA infiere el resto
   const inferirConIA = async (nombre) => {
     if (nombre.length < 4) return;
     setAnalizando(true);
@@ -174,7 +228,6 @@ Responde en español simple para agricultores.`,
           <button onClick={onClose}><X size={20} className="text-gray-400" /></button>
         </div>
 
-        {/* Fotos opcionales */}
         <div className="mb-4">
           <div onClick={() => fileRef.current?.click()}
             className="border-2 border-dashed border-gray-200 rounded-3xl p-6 text-center cursor-pointer hover:border-primary transition-colors min-h-[220px] flex flex-col items-center justify-center gap-3">
@@ -204,7 +257,6 @@ Responde en español simple para agricultores.`,
         </div>
 
         <div className="space-y-3">
-          {/* Nombre — dispara IA */}
           <div>
             <label className="text-xs font-semibold text-gray-600 block mb-1">Nombre del producto *</label>
             <div className="relative">
@@ -215,12 +267,8 @@ Responde en español simple para agricultores.`,
                 className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary pr-10" />
               {analizando && <Loader2 size={16} className="animate-spin text-primary absolute right-3 top-1/2 -translate-y-1/2" />}
             </div>
-            {!analizando && form.nombre.length >= 4 && !form.descripcion && (
-              <p className="text-xs text-primary mt-1">💡 Escribe el nombre completo y la IA completará los detalles</p>
-            )}
           </div>
 
-          {/* Precio */}
           <div>
             <label className="text-xs font-semibold text-gray-600 block mb-1">Precio (S/) *</label>
             <input type="number" step="0.50" value={form.precio}
@@ -229,7 +277,6 @@ Responde en español simple para agricultores.`,
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary" />
           </div>
 
-          {/* Campos completados por IA (editables) */}
           {[
             { key: 'descripcion',       label: 'Descripción',         ph: 'La IA lo completará automáticamente', area: true },
             { key: 'plagasQueControla', label: 'Plagas que controla', ph: 'Ej: Rancha, Mildiu, Botrytis' },
@@ -248,7 +295,6 @@ Responde en español simple para agricultores.`,
             </div>
           ))}
 
-          {/* Cultivos */}
           <div>
             <label className="text-xs font-semibold text-gray-600 block mb-2">Cultivos compatibles</label>
             <div className="flex gap-2">
@@ -292,6 +338,8 @@ function PanelProveedor({ tienda, onVolver }) {
   const [pedidos, setPedidos] = useState([]);
   const [loadingP, setLoadingP] = useState(true);
   const [modalProducto, setModalProducto] = useState(false);
+  const [motorizados, setMotorizados] = useState([]);
+  const [modalAsignar, setModalAsignar] = useState(null);
 
   useEffect(() => { cargarProductos(); }, []);
 
@@ -304,6 +352,14 @@ function PanelProveedor({ tienda, onVolver }) {
     return () => unsub();
   }, [tienda.id]);
 
+  useEffect(() => {
+    const q = query(collection(db, 'usuarios'), where('rol', '==', 'motorizado'));
+    const unsub = onSnapshot(q, snap => {
+      setMotorizados(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {});
+    return () => unsub();
+  }, []);
+
   const cargarProductos = async () => {
     const snap = await getDocs(query(collection(db, 'productos'), where('tiendaId', '==', tienda.id)));
     setProductos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -312,22 +368,34 @@ function PanelProveedor({ tienda, onVolver }) {
   const totalVentas = pedidos.filter(p => p.estado === 'entregado').reduce((s, p) => s + (p.total || 0), 0);
   const deudaTotal  = pedidos.filter(p => p.estado === 'entregado').reduce((s, p) => s + (p.comision || 0), 0);
 
-  const cambiarEstado = (id, estado) => updateDoc(doc(db, 'pedidos', id), { estado });
-
-  const asignarMotorizado = async (pedido) => {
-    const nombre = prompt('Nombre del motorizado:');
-    const cel    = prompt('Celular del motorizado:');
-    if (!nombre || !cel) return;
-    await updateDoc(doc(db, 'pedidos', pedido.id), {
-      estado: 'en_camino', motorizadoNombre: nombre, motorizadoCelular: cel,
-    });
-    const msg = encodeURIComponent(
-      `🏍️ *DELIVERY AGRILUX*\n📦 ${pedido.productoNombre}\n🔢 Cant: ${pedido.cantidad}\n` +
-      `📍 ${pedido.direccionEntrega}\n📌 ${pedido.referencia || ''}\n` +
-      `👤 ${pedido.agricultorNombre}\n📱 ${pedido.agricultorCelular}`
-    );
-    window.open(`https://wa.me/51${cel.replace(/\D/g,'')}?text=${msg}`, '_blank');
+  const aceptarPedido = async (pedido) => {
+    try {
+      await updateDoc(doc(db, 'pedidos', pedido.id), { estado: 'confirmado' });
+      const msg = encodeURIComponent(
+        `📦 *NUEVO PEDIDO AGRILUX*\n` +
+        `Producto: ${pedido.productoNombre}\n` +
+        `Cantidad: ${pedido.cantidad}\n` +
+        `Total: S/ ${pedido.total?.toFixed(2)}\n` +
+        `📍 ${pedido.direccionEntrega}\n` +
+        `👤 ${pedido.agricultorNombre}\n` +
+        `📱 ${pedido.agricultorCelular}`
+      );
+      window.open(`https://wa.me/${tienda.celular?.replace(/\D/g, '')}?text=${msg}`, '_blank');
+    } catch (e) { alert('Error al aceptar'); }
   };
+
+  const asignarMotorizado = async (pedido, motorizado) => {
+    try {
+      await updateDoc(doc(db, 'pedidos', pedido.id), {
+        motorizadoId: motorizado.id,
+        motorizadoNombre: motorizado.nombre,
+        motorizadoCelular: motorizado.celular,
+      });
+      setModalAsignar(null);
+    } catch (e) { alert('Error al asignar'); }
+  };
+
+  const cambiarEstado = (id, estado) => updateDoc(doc(db, 'pedidos', id), { estado });
 
   return (
     <div className="min-h-screen pb-24">
@@ -338,7 +406,6 @@ function PanelProveedor({ tienda, onVolver }) {
       </div>
 
       <div className="px-4 py-4 space-y-4">
-        {/* Resumen */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-white rounded-2xl p-4 shadow-sm">
             <p className="text-xs text-gray-500">Ventas totales</p>
@@ -350,7 +417,6 @@ function PanelProveedor({ tienda, onVolver }) {
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="flex gap-2">
           {[['productos','🛡️ Productos'],['pedidos','📦 Pedidos']].map(([id,label]) => (
             <button key={id} onClick={() => setTab(id)}
@@ -360,7 +426,6 @@ function PanelProveedor({ tienda, onVolver }) {
           ))}
         </div>
 
-        {/* Productos */}
         {tab === 'productos' && (
           <div className="space-y-3">
             <button onClick={() => setModalProducto(true)}
@@ -392,7 +457,6 @@ function PanelProveedor({ tienda, onVolver }) {
           </div>
         )}
 
-        {/* Pedidos */}
         {tab === 'pedidos' && (
           <div className="space-y-3">
             {loadingP
@@ -401,6 +465,7 @@ function PanelProveedor({ tienda, onVolver }) {
                 ? <div className="bg-white rounded-2xl p-8 text-center"><Package size={36} className="mx-auto text-gray-200 mb-2" /><p className="text-gray-400 text-sm">Sin pedidos aún</p></div>
                 : pedidos.map(p => {
                   const est = ESTADOS[p.estado] || ESTADOS.pendiente;
+                  const puedeAsignar = p.estado === 'confirmado' && !p.motorizadoId;
                   return (
                     <div key={p.id} className="bg-white rounded-2xl p-4 shadow-sm">
                       <div className="flex justify-between items-start mb-2">
@@ -419,21 +484,30 @@ function PanelProveedor({ tienda, onVolver }) {
                         </div>
                         <p className="text-xs text-gray-400">{new Date(p.createdAt).toLocaleDateString('es-PE')}</p>
                       </div>
+
                       {p.estado === 'pendiente' && (
                         <div className="flex gap-2">
-                          <button onClick={() => cambiarEstado(p.id, 'confirmado')} className="flex-1 bg-blue-500 text-white text-xs font-bold py-2 rounded-xl">✅ Confirmar</button>
+                          <button onClick={() => aceptarPedido(p)} className="flex-1 bg-blue-500 text-white text-xs font-bold py-2.5 rounded-xl">✅ Aceptar pedido</button>
                           <button onClick={() => cambiarEstado(p.id, 'cancelado')} className="flex-1 bg-red-100 text-red-600 text-xs font-bold py-2 rounded-xl">❌ Cancelar</button>
                         </div>
                       )}
-                      {p.estado === 'confirmado' && (
-                        <button onClick={() => asignarMotorizado(p)} className="w-full bg-purple-500 text-white text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-2">
+
+                      {puedeAsignar && (
+                        <button onClick={() => setModalAsignar(p)}
+                          className="w-full bg-purple-500 text-white text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 mt-2">
                           <Truck size={14} /> Asignar motorizado
                         </button>
                       )}
-                      {p.estado === 'en_camino' && (
-                        <div className="space-y-2">
-                          <p className="text-xs text-purple-600">🏍️ {p.motorizadoNombre} · {p.motorizadoCelular}</p>
-                          <button onClick={() => cambiarEstado(p.id, 'entregado')} className="w-full bg-green-500 text-white text-xs font-bold py-2.5 rounded-xl">📦 Marcar entregado</button>
+
+                      {p.motorizadoId && (
+                        <div className="bg-gray-50 rounded-xl p-2.5 mt-2">
+                          <p className="text-xs text-gray-600">🏍️ {p.motorizadoNombre} · {p.motorizadoCelular}</p>
+                        </div>
+                      )}
+
+                      {p.estado === 'entregado' && (
+                        <div className="bg-green-50 rounded-xl p-2.5 mt-2 text-center">
+                          <p className="text-xs font-bold text-green-700">📦 Entregado</p>
                         </div>
                       )}
                     </div>
@@ -443,6 +517,34 @@ function PanelProveedor({ tienda, onVolver }) {
           </div>
         )}
       </div>
+
+      {modalAsignar && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center">
+          <div className="bg-white rounded-t-3xl w-full max-w-[430px] p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display font-bold text-lg">Asignar motorizado</h3>
+              <button onClick={() => setModalAsignar(null)}><X size={20} className="text-gray-400" /></button>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">Pedido: {modalAsignar.productoNombre}</p>
+            {motorizados.length === 0
+              ? <p className="text-sm text-gray-400 text-center py-4">No hay motorizados registrados. Pídele al admin que agregue uno.</p>
+              : motorizados.map(m => (
+                <button key={m.id} onClick={() => asignarMotorizado(modalAsignar, m)}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-primary/5 transition-colors mb-2">
+                  <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center font-bold text-purple-700">
+                    {m.nombre?.[0]?.toUpperCase()}
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="text-sm font-semibold text-gray-800">{m.nombre}</p>
+                    <p className="text-xs text-gray-500">{m.celular}</p>
+                  </div>
+                  <Truck size={16} className="text-gray-300" />
+                </button>
+              ))
+            }
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -459,6 +561,7 @@ function ModalPedido({ producto, tienda, user, onClose, onSuccess }) {
 
   const confirmar = async () => {
     if (!direccion) { alert('Ingresa la dirección exacta de entrega'); return; }
+    if (!user.celular) { alert('Tu perfil no tiene celular registrado. Actualiza tu perfil primero.'); return; }
     setLoading(true);
     try {
       await addDoc(collection(db, 'pedidos'), {
@@ -494,7 +597,7 @@ function ModalPedido({ producto, tienda, user, onClose, onSuccess }) {
         </div>
         <div className="bg-gray-50 rounded-2xl p-3 mb-4">
           <p className="font-bold text-gray-800">{producto.nombre}</p>
-          <p className="text-xs text-gray-500">{tienda.empresa}</p>
+          <p className="text-xs text-gray-500">{tienda.empresa} · 📱 {tienda.celular || 'Sin celular'}</p>
           {precioUnit > 0 && <p className="text-sm font-bold text-primary mt-1">S/ {precioUnit.toFixed(2)} c/u</p>}
         </div>
         <div className="space-y-3">
@@ -514,6 +617,10 @@ function ModalPedido({ producto, tienda, user, onClose, onSuccess }) {
             <input value={referencia} onChange={e => setReferencia(e.target.value)}
               placeholder="Ej: Casa azul al lado del río"
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary" />
+          </div>
+          <div className="bg-gray-50 rounded-xl p-3">
+            <p className="text-xs text-gray-500">Tu celular: <strong>{user.celular || 'No registrado'}</strong></p>
+            <p className="text-xs text-gray-400 mt-1">El motorizado y la tienda podrán contactarte</p>
           </div>
           {precioUnit > 0 && total > 0 && (
             <div className="bg-primary/5 rounded-xl p-3 flex justify-between">
@@ -535,6 +642,8 @@ function ModalPedido({ producto, tienda, user, onClose, onSuccess }) {
 function MisPedidos({ userId, onVolver }) {
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [pedidoTracking, setPedidoTracking] = useState(null);
+  const [trackingData, setTrackingData] = useState(null);
 
   useEffect(() => {
     const q = query(collection(db, 'pedidos'), where('agricultorId', '==', userId), orderBy('createdAt', 'desc'));
@@ -544,6 +653,32 @@ function MisPedidos({ userId, onVolver }) {
     });
     return () => unsub();
   }, [userId]);
+
+  useEffect(() => {
+    if (!pedidoTracking?.id) return;
+    const unsub = onSnapshot(doc(db, 'pedidos', pedidoTracking.id), snap => {
+      if (snap.exists()) setTrackingData({ id: snap.id, ...snap.data() });
+    });
+    return () => unsub();
+  }, [pedidoTracking?.id]);
+
+  const puedeCancelar = (p) => {
+    if (p.estado !== 'pendiente' && p.estado !== 'confirmado') return false;
+    if (p.estado === 'pendiente') return true;
+    if (p.horaEstimada) {
+      const horaEntrega = new Date(p.horaEstimada);
+      const unaHoraAntes = new Date(horaEntrega.getTime() - 60 * 60 * 1000);
+      return new Date() < unaHoraAntes;
+    }
+    return true;
+  };
+
+  const cancelarPedido = async (p) => {
+    if (!confirm('¿Cancelar este pedido?')) return;
+    try {
+      await updateDoc(doc(db, 'pedidos', p.id), { estado: 'cancelado' });
+    } catch (e) { alert('Error al cancelar'); }
+  };
 
   return (
     <div className="min-h-screen pb-24">
@@ -558,6 +693,7 @@ function MisPedidos({ userId, onVolver }) {
             ? <div className="bg-white rounded-2xl p-8 text-center"><Package size={36} className="mx-auto text-gray-200 mb-2" /><p className="text-gray-400 text-sm">Aún no tienes pedidos</p></div>
             : pedidos.map(p => {
               const est = ESTADOS[p.estado] || ESTADOS.pendiente;
+              const showTracking = pedidoTracking?.id === p.id;
               return (
                 <div key={p.id} className="bg-white rounded-2xl p-4 shadow-sm">
                   <div className="flex justify-between items-start mb-2">
@@ -568,21 +704,53 @@ function MisPedidos({ userId, onVolver }) {
                     <span className={`text-xs font-bold px-2 py-1 rounded-full ${est.color}`}>{est.icon} {est.label}</span>
                   </div>
                   <p className="text-xs text-gray-500 mb-1">📍 {p.direccionEntrega}</p>
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center mb-2">
                     <p className="text-sm font-bold text-primary">S/ {p.total?.toFixed(2)}</p>
                     <p className="text-xs text-gray-400">{new Date(p.createdAt).toLocaleDateString('es-PE')}</p>
                   </div>
+
+                  {p.costoDelivery > 0 && (
+                    <p className="text-xs text-gray-500 mb-1">🏍️ Delivery: S/ {p.costoDelivery}</p>
+                  )}
+                  {p.horaEstimada && (
+                    <p className="text-xs text-gray-500 mb-2">🕐 Est. {new Date(p.horaEstimada).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}</p>
+                  )}
+
                   {p.estado === 'en_camino' && p.motorizadoNombre && (
-                    <div className="mt-2 bg-purple-50 rounded-xl p-2.5 flex items-center gap-2">
-                      <Truck size={14} className="text-purple-600" />
-                      <div>
-                        <p className="text-xs font-bold text-purple-700">🏍️ {p.motorizadoNombre} en camino</p>
-                        {p.motorizadoCelular && (
-                          <a href={`https://wa.me/51${p.motorizadoCelular.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"
-                            className="text-xs text-purple-600 underline">Contactar</a>
-                        )}
+                    <div className="mt-2 bg-purple-50 rounded-xl p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Truck size={14} className="text-purple-600" />
+                        <div>
+                          <p className="text-xs font-bold text-purple-700">🏍️ {p.motorizadoNombre} en camino</p>
+                          {p.motorizadoCelular && (
+                            <a href={`https://wa.me/51${p.motorizadoCelular.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"
+                              className="text-xs text-purple-600 underline">Contactar motorizado</a>
+                          )}
+                        </div>
                       </div>
+
+                      {!showTracking ? (
+                        <button onClick={() => { setPedidoTracking(p); setTrackingData(p); }}
+                          className="w-full bg-purple-500 text-white text-xs font-bold py-2 rounded-xl flex items-center justify-center gap-1 mt-2">
+                          <Truck size={14} /> Ver ubicación en tiempo real
+                        </button>
+                      ) : (
+                        <div className="mt-2">
+                          <MapaTracking ubicacion={trackingData?.ubicacionMotorizado} />
+                          <button onClick={() => { setPedidoTracking(null); setTrackingData(null); }}
+                            className="w-full bg-gray-100 text-gray-600 text-xs font-bold py-2 rounded-xl mt-2">
+                            Cerrar mapa
+                          </button>
+                        </div>
+                      )}
                     </div>
+                  )}
+
+                  {puedeCancelar(p) && (
+                    <button onClick={() => cancelarPedido(p)}
+                      className="w-full mt-2 bg-red-50 text-red-600 text-xs font-bold py-2 rounded-xl">
+                      ❌ Cancelar pedido
+                    </button>
                   )}
                 </div>
               );
@@ -615,7 +783,7 @@ function VistaTienda({ tienda, plagaBuscada, user, onVolver }) {
       <div className="bg-primary text-white px-6 pt-12 pb-6">
         <button onClick={onVolver} className="text-white/70 text-sm mb-3">← Volver</button>
         <h1 className="text-2xl font-display font-bold">{tienda.empresa}</h1>
-        <p className="text-white/70 text-sm">📍 {tienda.ubicacion}</p>
+        <p className="text-white/70 text-sm">📍 {tienda.ubicacion} · 📱 {tienda.celular || 'Sin celular'}</p>
       </div>
 
       {pedidoOk && (
@@ -692,8 +860,7 @@ export default function Mercado({ plagaBuscada = '' }) {
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const [filtroUbicacion, setFiltroUbicacion] = useState('');
-  // todos los estados antes de returns condicionales
-  const [vista, setVista] = useState('lista'); // lista | panel | pedidos | tienda
+  const [vista, setVista] = useState('lista');
   const [tiendaActiva, setTiendaActiva] = useState(null);
 
   useEffect(() => { cargar(); }, [user]);
@@ -702,11 +869,9 @@ export default function Mercado({ plagaBuscada = '' }) {
     if (!user?.uid) return;
     setLoading(true);
     try {
-      // Cargar tienda propia si es proveedor
       const miTiendaSnap = await getDoc(doc(db, 'tiendas', user.uid));
       if (miTiendaSnap.exists()) setMiTienda({ id: miTiendaSnap.id, ...miTiendaSnap.data() });
 
-      // Cargar todas las tiendas
       const snap = await getDocs(collection(db, 'tiendas'));
       setTiendas(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) { setTiendas([]); }
@@ -718,7 +883,6 @@ export default function Mercado({ plagaBuscada = '' }) {
     (!filtroUbicacion || t.ubicacion?.toLowerCase().includes(filtroUbicacion.toLowerCase()))
   );
 
-  // Views condicionales DESPUÉS de todos los hooks
   if (vista === 'setup') {
     return <SetupTienda user={user} onCreada={(t) => { setMiTienda(t); setVista('panel'); }} />;
   }
@@ -747,7 +911,6 @@ export default function Mercado({ plagaBuscada = '' }) {
           </div>
         )}
 
-        {/* Panel usuario */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center font-bold text-primary text-lg">
@@ -755,11 +918,10 @@ export default function Mercado({ plagaBuscada = '' }) {
             </div>
             <div>
               <p className="font-bold text-sm text-gray-800">{user?.nombre}</p>
-              <p className="text-xs text-gray-500">{user?.email}</p>
+              <p className="text-xs text-gray-500">📱 {user?.celular || 'Sin celular'}</p>
             </div>
           </div>
           <div className="flex gap-2">
-            {/* Botón según rol */}
             {miTienda ? (
               <button onClick={() => setVista('panel')}
                 className="flex-1 bg-primary text-white text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-1">
@@ -778,7 +940,6 @@ export default function Mercado({ plagaBuscada = '' }) {
           </div>
         </div>
 
-        {/* Soporte */}
         <a href={`https://wa.me/${WHATSAPP_SOPORTE}`} target="_blank" rel="noreferrer"
           className="block bg-amber-50 border border-amber-200 rounded-2xl p-3">
           <div className="flex items-center gap-3">
@@ -790,7 +951,6 @@ export default function Mercado({ plagaBuscada = '' }) {
           </div>
         </a>
 
-        {/* Buscadores */}
         <div className="bg-white rounded-2xl px-4 py-3 shadow-sm flex items-center gap-2">
           <span className="text-gray-400">🔍</span>
           <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar tienda..."
@@ -802,7 +962,6 @@ export default function Mercado({ plagaBuscada = '' }) {
             className="flex-1 text-sm focus:outline-none text-gray-700" />
         </div>
 
-        {/* Lista de tiendas */}
         <div>
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">
             Tiendas registradas ({tiendasFiltradas.length})
@@ -826,7 +985,7 @@ export default function Mercado({ plagaBuscada = '' }) {
                     <div className="flex-1">
                       <p className="font-bold text-gray-800">{tienda.empresa}</p>
                       <p className="text-xs text-gray-500">{tienda.nombre}</p>
-                      <p className="text-xs text-gray-400">📍 {tienda.ubicacion}</p>
+                      <p className="text-xs text-gray-400">📍 {tienda.ubicacion} · 📱 {tienda.celular || ''}</p>
                     </div>
                     <ChevronRight size={16} className="text-gray-300" />
                   </div>

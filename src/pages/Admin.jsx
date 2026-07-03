@@ -20,7 +20,7 @@ import {
   Users, Camera, Download, RefreshCw, ChevronDown, ChevronUp,
   Search, X, MapPin, Phone, Calendar, TrendingUp, CloudUpload,
   CheckCircle, AlertCircle, Loader2, FolderOpen, ExternalLink,
-  Plus, Eye, EyeOff, Lock, UserPlus, LogOut,
+  Plus, Eye, EyeOff, Lock, UserPlus, LogOut, Truck,
 } from 'lucide-react';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
@@ -254,6 +254,7 @@ function ModalAgregarUsuario({ onCerrar, onAgregado }) {
             <option value="agricultor">🌾 Agricultor</option>
             <option value="agronomo">👨‍🔬 Agrónomo</option>
             <option value="tienda">🏪 Agroveterinaria</option>
+            <option value="motorizado">🏍️ Motorizado</option>
           </select>
         </div>
 
@@ -470,6 +471,7 @@ export default function Admin() {
         <div className="flex gap-1 bg-white/10 rounded-xl p-1">
           {[
             { id: 'usuarios', label: 'Usuarios', icon: Users },
+            { id: 'motorizados', label: 'Motorizados', icon: Truck },
             { id: 'diagnosticos', label: 'Diagnósticos', icon: Camera },
             { id: 'exportar', label: 'Exportar', icon: Download },
           ].map(({ id, label, icon: Icon }) => (
@@ -580,6 +582,89 @@ export default function Admin() {
                 </div>
               ))}
             </div>
+          </>
+        )}
+
+        {/* ── MOTORIZADOS ──────────────────────────────────────────────────── */}
+        {tab === 'motorizados' && (
+          <>
+            <div className="flex gap-2">
+              <div className="flex-1 flex items-center bg-white rounded-xl px-3 gap-2 shadow-sm border border-gray-100">
+                <Search size={14} className="text-gray-400" />
+                <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
+                  placeholder="Buscar motorizado..."
+                  className="flex-1 py-2.5 text-sm outline-none" />
+                {busqueda && <button onClick={() => setBusqueda('')}><X size={14} className="text-gray-400" /></button>}
+              </div>
+              <button
+                onClick={() => setModalAgregar(true)}
+                className="bg-primary text-white rounded-xl px-4 flex items-center gap-1.5 text-sm font-bold shadow-sm">
+                <Plus size={16} /> Agregar
+              </button>
+            </div>
+
+            {(() => {
+              const motorizados = usuariosFiltrados.filter(u => u.rol === 'motorizado');
+              return (
+                <>
+                  <p className="text-xs text-gray-400">{motorizados.length} motorizados registrados</p>
+                  <div className="space-y-2">
+                    {motorizados.length === 0 && (
+                      <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
+                        <p className="text-4xl mb-3">🏍️</p>
+                        <p className="text-gray-500 text-sm">No hay motorizados registrados.</p>
+                        <p className="text-xs text-gray-400 mt-1">Agrega uno con el botón "Agregar" y selecciona rol "Motorizado"</p>
+                      </div>
+                    )}
+                    {motorizados.map(m => (
+                      <div key={m.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                        <button onClick={() => setExpandido(expandido === m.id ? null : m.id)}
+                          className="w-full flex items-center gap-3 p-4 text-left">
+                          <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center text-base font-bold text-purple-700 flex-shrink-0">
+                            {m.nombre?.[0]?.toUpperCase() || '?'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-sm text-gray-800 truncate">{m.nombre || 'Sin nombre'}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-600">
+                                🏍️ Motorizado
+                              </span>
+                              {m.celular && <span className="text-xs text-gray-400">📱 {m.celular}</span>}
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <p className="text-xs text-gray-300">{formatFecha(m.createdAt)}</p>
+                            {expandido === m.id ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
+                          </div>
+                        </button>
+                        {expandido === m.id && (
+                          <div className="px-4 pb-4 border-t border-gray-50 pt-3 space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              {[
+                                { icon: Phone, label: 'Celular', val: m.celular || '—' },
+                                { icon: MapPin, label: 'Ubicación', val: m.ubicacion || '—' },
+                                { icon: Calendar, label: 'Registro', val: formatFecha(m.createdAt) },
+                              ].map(({ icon: Icon, label, val }) => (
+                                <div key={label} className="bg-gray-50 rounded-xl p-3">
+                                  <div className="flex items-center gap-1 mb-1"><Icon size={11} className="text-gray-400" /><p className="text-xs text-gray-400">{label}</p></div>
+                                  <p className="text-sm font-semibold text-gray-700 truncate">{val}</p>
+                                </div>
+                              ))}
+                            </div>
+                            {m.celular && (
+                              <a href={`https://wa.me/51${m.celular.replace(/\D/g, '')}`} target="_blank" rel="noreferrer"
+                                className="flex items-center justify-center gap-2 bg-green-500 text-white rounded-xl py-2.5 text-sm font-semibold">
+                                💬 Contactar por WhatsApp
+                              </a>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
           </>
         )}
 
