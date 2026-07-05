@@ -5,16 +5,18 @@
  * Login:    solo número de celular
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
 import { Loader2, Eye, EyeOff, User, Mail, Phone, Truck } from 'lucide-react';
+import DOMPurify from 'dompurify';
 
+// Unificamos mensajes de error para evitar enumeración de usuarios y códigos.
 const ERRORES = {
-  'agrilux/celular-en-uso':        'Este número ya tiene una cuenta. Inicia sesión.',
-  'agrilux/celular-no-encontrado': 'No encontramos ese número. ¿Ya tienes cuenta?',
-  'agrilux/sin-email':             'Error en la cuenta. Contacta soporte.',
-  'agrilux/codigo-no-encontrado':  'Código no válido. Verifica con tu administrador.',
+  'agrilux/celular-en-uso':        'Credenciales no válidas.',
+  'agrilux/celular-no-encontrado': 'Credenciales no válidas.',
+  'agrilux/sin-email':             'Credenciales no válidas.',
+  'agrilux/codigo-no-encontrado':  'Credenciales no válidas.',
   'auth/email-already-in-use':     'Este correo ya está registrado.',
   'auth/invalid-email':            'El correo no es válido.',
   'auth/weak-password':            'Número de celular inválido.',
@@ -40,6 +42,9 @@ export default function Registro() {
   const [modoDelivery, setModoDelivery] = useState(false);
   const [codigoDelivery, setCodigoDelivery] = useState('');
 
+  // Ref para evitar race conditions: si ya hay una petición en vuelo, no lanzar otra.
+  const submittingRef = useRef(false);
+
   const cambiarModo = (m) => {
     setModo(m); setError('');
     setNombre(''); setEmail(''); setCelular('');
@@ -54,38 +59,49 @@ export default function Registro() {
   const handleSubmit = async () => {
     setError('');
 
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+
     if (modo === 'registro') {
-      if (!nombre.trim())       { setError('Ingresa tu nombre completo.'); return; }
-      if (!email.trim())        { setError('Ingresa tu correo electrónico.'); return; }
-      if (celular.length !== 9) { setError('El número de celular debe tener 9 dígitos.'); return; }
+      if (!nombre.trim())       { setError('Ingresa tu nombre completo.'); submittingRef.current = false; return; }
+      if (!email.trim())        { setError('Ingresa tu correo electrónico.'); submittingRef.current = false; return; }
+      if (celular.length !== 9) { setError('El número de celular debe tener 9 dígitos.'); submittingRef.current = false; return; }
     } else {
-      if (celular.length !== 9) { setError('Ingresa tu número de celular (9 dígitos).'); return; }
+      if (celular.length !== 9) { setError('Ingresa tu número de celular (9 dígitos).'); submittingRef.current = false; return; }
     }
 
     setLoading(true);
     try {
       if (modo === 'registro') {
-        await register({ nombre: nombre.trim(), email, celular });
+        // Sanitizar el nombre para prevenir XSS almacenado
+        const nombreSanitizado = DOMPurify.sanitize(nombre).trim();
+        await register({ nombre: nombreSanitizado, email, celular });
       } else {
         await login({ celular });
       }
     } catch (e) {
       setError(msgError(e.code));
+    } finally {
+      setLoading(false);
+      submittingRef.current = false;
     }
-    setLoading(false);
   };
 
   const handleDelivery = async () => {
     setError('');
-    if (!codigoDelivery.trim()) { setError('Ingresa tu código de delivery.'); return; }
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    if (!codigoDelivery.trim()) { setError('Ingresa tu código de delivery.'); submittingRef.current = false; return; }
 
     setLoading(true);
     try {
       await loginMotorizado({ codigo: codigoDelivery.trim() });
     } catch (e) {
       setError(msgError(e.code));
+    } finally {
+      setLoading(false);
+      submittingRef.current = false;
     }
-    setLoading(false);
   };
 
   return (
