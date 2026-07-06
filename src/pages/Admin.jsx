@@ -21,7 +21,9 @@ import {
   Search, X, MapPin, Phone, Calendar, TrendingUp, CloudUpload,
   CheckCircle, AlertCircle, Loader2, FolderOpen, ExternalLink,
   Plus, Eye, EyeOff, Lock, UserPlus, LogOut, Truck, XCircle,
+  Megaphone
 } from 'lucide-react';
+import Marketing from '../components/Marketing';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 const GOOGLE_CLIENT_ID   = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -575,6 +577,7 @@ export default function Admin() {
             { id: 'usuarios', label: 'Usuarios', icon: Users },
             { id: 'solicitudes', label: 'Solicitudes', icon: UserPlus },
             { id: 'motorizados', label: 'Motorizados', icon: Truck },
+            { id: 'marketing', label: 'Marketing', icon: Megaphone },
             { id: 'diagnosticos', label: 'Diagnósticos', icon: Camera },
             { id: 'exportar', label: 'Exportar', icon: Download },
           ].map(({ id, label, icon: Icon }) => (
@@ -848,6 +851,9 @@ export default function Admin() {
             })()}
           </>
         )}
+
+        {/* ── MARKETING ──────────────────────────────────────────────────── */}
+        {tab === 'marketing' && <Marketing />}
 
         {/* ── DIAGNÓSTICOS ──────────────────────────────────────────────────── */}
         {tab === 'diagnosticos' && (
