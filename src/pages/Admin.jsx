@@ -572,7 +572,7 @@ export default function Admin() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-white/10 rounded-xl p-1">
+        <div className="flex gap-1 bg-white/10 rounded-xl p-1 overflow-x-auto scrollbar-hide">
           {[
             { id: 'usuarios', label: 'Usuarios', icon: Users },
             { id: 'solicitudes', label: 'Solicitudes', icon: UserPlus },
@@ -582,7 +582,7 @@ export default function Admin() {
             { id: 'exportar', label: 'Exportar', icon: Download },
           ].map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => { setTab(id); setBusqueda(''); setExpandido(null); }}
-              className={`flex-1 flex flex-col items-center py-2 rounded-lg text-xs font-semibold gap-0.5 transition-all ${tab === id ? 'bg-white text-gray-900' : 'text-white/60'}`}>
+              className={`flex-shrink-0 flex flex-col items-center py-2 px-3 rounded-lg text-xs font-semibold gap-0.5 transition-all ${tab === id ? 'bg-white text-gray-900' : 'text-white/60'}`}>
               <Icon size={14} />
               {label}
             </button>

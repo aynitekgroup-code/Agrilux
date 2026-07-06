@@ -4,8 +4,9 @@ import { collection, getDocs, addDoc, deleteDoc, doc, query, orderBy, onSnapshot
 import {
   Megaphone, Hash, MessageSquare, Users, Download, Copy, Check,
   Loader2, Plus, Trash2, ExternalLink, Search, X, FileText,
-  Send, BarChart3, Target, Zap
+  Send, BarChart3, Target, Zap, Facebook
 } from 'lucide-react';
+import FacebookBot from './FacebookBot';
 
 const HASHTAGS_DEFAULT = [
   { tag: '#agriculturaPeru', activo: true },
@@ -178,17 +179,17 @@ export default function Marketing() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 overflow-x-auto scrollbar-hide">
         {[
           { id: 'hashtags', label: 'Hashtags', icon: Hash },
           { id: 'plantillas', label: 'Plantillas', icon: MessageSquare },
+          { id: 'facebook', label: 'Facebook', icon: Facebook },
           { id: 'contactos', label: 'Contactos', icon: Users },
           { id: 'guia', label: 'Guía Setup', icon: FileText },
         ].map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => setTab(id)}
-            className={`flex-1 flex flex-col items-center py-2 rounded-lg text-xs font-semibold gap-0.5 transition-all ${tab === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
-            <Icon size={14} />
-            {label}
+            className={`flex-shrink-0 flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${tab === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+            <Icon size={12} /> {label}
           </button>
         ))}
       </div>
@@ -305,6 +306,9 @@ export default function Marketing() {
           )}
         </div>
       )}
+
+      {/* ── FACEBOOK BOT ────────────────────────────────────── */}
+      {tab === 'facebook' && <FacebookBot />}
 
       {/* ── GUÍA SETUP ─────────────────────────────────────── */}
       {tab === 'guia' && (
