@@ -571,22 +571,27 @@ export default function Admin() {
           ))}
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 bg-white/10 rounded-xl p-1 overflow-x-auto scrollbar-hide">
-          {[
-            { id: 'usuarios', label: 'Usuarios', icon: Users },
-            { id: 'solicitudes', label: 'Solicitudes', icon: UserPlus },
-            { id: 'motorizados', label: 'Motorizados', icon: Truck },
-            { id: 'marketing', label: 'Marketing', icon: Megaphone },
-            { id: 'diagnosticos', label: 'Diagnósticos', icon: Camera },
-            { id: 'exportar', label: 'Exportar', icon: Download },
-          ].map(({ id, label, icon: Icon }) => (
-            <button key={id} onClick={() => { setTab(id); setBusqueda(''); setExpandido(null); }}
-              className={`flex-shrink-0 flex flex-col items-center py-2 px-3 rounded-lg text-xs font-semibold gap-0.5 transition-all ${tab === id ? 'bg-white text-gray-900' : 'text-white/60'}`}>
-              <Icon size={14} />
-              {label}
-            </button>
-          ))}
+        {/* Tabs - scroll horizontal */}
+        <div className="relative">
+          <div id="admin-tabs" className="flex gap-1 bg-white/10 rounded-xl p-1 overflow-x-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.3) transparent' }}>
+            {[
+              { id: 'usuarios', label: 'Usuarios', icon: Users },
+              { id: 'solicitudes', label: 'Solicitudes', icon: UserPlus },
+              { id: 'motorizados', label: 'Motorizados', icon: Truck },
+              { id: 'marketing', label: 'Marketing', icon: Megaphone },
+              { id: 'diagnosticos', label: 'Diagnósticos', icon: Camera },
+              { id: 'exportar', label: 'Exportar', icon: Download },
+            ].map(({ id, label, icon: Icon }) => (
+              <button key={id} onClick={() => { setTab(id); setBusqueda(''); setExpandido(null); }}
+                className={`flex-shrink-0 flex flex-col items-center py-2 px-3 rounded-lg text-xs font-semibold gap-0.5 transition-all min-w-[70px] ${tab === id ? 'bg-white text-gray-900' : 'text-white/60'}`}>
+                <Icon size={14} />
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-gray-900 to-transparent pointer-events-none rounded-r-xl flex items-center justify-end pr-1">
+            <span className="text-white/50 text-xs">›</span>
+          </div>
         </div>
       </div>
 

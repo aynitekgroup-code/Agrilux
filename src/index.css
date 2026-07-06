@@ -16,6 +16,14 @@
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
+#admin-tabs {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.4) transparent;
+}
+#admin-tabs::-webkit-scrollbar { height: 4px; }
+#admin-tabs::-webkit-scrollbar-track { background: transparent; }
+#admin-tabs::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.4); border-radius: 4px; }
+
 body {
   font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
   background: var(--bg);
