@@ -1,11 +1,10 @@
 export const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
-export const GEMINI_URL =
-  'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+export const GITHUB_URL = 'https://models.inference.ai.azure.com/chat/completions';
 
 export const MODELS = {
   DEEPSEEK_FAST: 'deepseek-v4-flash',
   DEEPSEEK_QUALITY: 'deepseek-v4-pro',
-  GEMINI_VISION: 'gemini-2.0-flash',
+  GITHUB_VISION: 'Phi-4-multimodal-instruct',
 };
 
 export function resolveDeepSeekKey(env) {
@@ -18,8 +17,8 @@ export function resolveDeepSeekKey(env) {
   );
 }
 
-export function resolveGeminiKey(env) {
-  return env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY || '';
+export function resolveGitHubKey(env) {
+  return env.GITHUB_TOKEN || '';
 }
 
 function schemaHint(schema) {
@@ -90,50 +89,51 @@ function buildBody({ messages, useJson, model, provider }) {
   return body;
 }
 
-/** DeepSeek API es solo texto; imágenes van por Gemini (multimodal). */
+/**
+ * Resuelve qué proveedor LLM usar.
+ * DeepSeek V4 soporta imágenes + texto. GitHub Models es fallback gratis.
+ */
 export function resolveLlmRequest(env, options) {
   const { imageUrls, useJson, messages } = buildMessages(options);
   const hasImages = imageUrls.length > 0;
 
-  if (hasImages) {
-    const apiKey = resolveGeminiKey(env);
-    if (!apiKey) {
-      throw new Error(
-        'GEMINI_API_KEY requerida para analizar imágenes. Obtén una gratis en https://aistudio.google.com/apikey'
-      );
-    }
+  // ── DeepSeek V4 soporta imágenes y texto ──
+  const deepseekKey = resolveDeepSeekKey(env);
+  if (deepseekKey) {
+    const model = hasImages
+      ? MODELS.DEEPSEEK_FAST      // deepseek-v4-flash (soporta imágenes)
+      : useJson
+        ? MODELS.DEEPSEEK_QUALITY
+        : MODELS.DEEPSEEK_FAST;
 
     return {
-      provider: 'gemini',
-      url: GEMINI_URL,
-      apiKey,
+      provider: 'deepseek',
+      url: DEEPSEEK_URL,
+      apiKey: deepseekKey,
+      body: buildBody({ messages, useJson, model, provider: 'deepseek' }),
+    };
+  }
+
+  // ── GitHub Models como fallback (gratis, soporta imágenes) ──
+  const githubKey = resolveGitHubKey(env);
+  if (githubKey) {
+    return {
+      provider: 'github',
+      url: GITHUB_URL,
+      apiKey: githubKey,
       body: buildBody({
         messages,
         useJson,
-        model: MODELS.GEMINI_VISION,
-        provider: 'gemini',
+        model: MODELS.GITHUB_VISION,
+        provider: 'github',
       }),
     };
   }
 
-  const apiKey = resolveDeepSeekKey(env);
-  if (!apiKey) {
-    throw new Error('DEEPSEEK_API_KEY no configurada');
-  }
-
-  const model = useJson ? MODELS.DEEPSEEK_QUALITY : MODELS.DEEPSEEK_FAST;
-
-  return {
-    provider: 'deepseek',
-    url: DEEPSEEK_URL,
-    apiKey,
-    body: buildBody({
-      messages,
-      useJson,
-      model,
-      provider: 'deepseek',
-    }),
-  };
+  throw new Error(
+    'Configura DEEPSEEK_API_KEY o GITHUB_TOKEN en Vercel. ' +
+    'DeepSeek: $0.14/M tokens. GitHub: gratis.'
+  );
 }
 
 export async function callChatCompletions({ url, apiKey, body }) {

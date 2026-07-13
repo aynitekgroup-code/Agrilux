@@ -1,25 +1,17 @@
 // api/analizar-imagen.js
+// Análisis de imágenes: DeepSeek V4 Vision → GitHub Models (Phi-4) → HuggingFace
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-  if (!OPENROUTER_API_KEY)
-    return res.status(500).json({ error: 'OPENROUTER_API_KEY no configurada en Vercel' });
+  const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
+  const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+  const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
 
   const { images, prompt, systemPrompt } = req.body;
-  if (!prompt)
-    return res.status(400).json({ error: 'Falta el campo prompt' });
-
-  // Modelos con visión disponibles en OpenRouter (en orden de prioridad)
-  const MODELOS_VISION = [
-    'google/gemini-2.0-flash-exp:free',   // Gemini 2.0 Flash gratuito
-    'google/gemini-flash-1.5',            // Gemini 1.5 Flash
-    'meta-llama/llama-4-maverick',        // Llama 4 Maverick (visión)
-    'openai/gpt-4o-mini',                 // GPT-4o Mini (fallback)
-  ];
+  if (!prompt) return res.status(400).json({ error: 'Falta el campo prompt' });
 
   const tieneImagenes = Array.isArray(images) && images.length > 0;
-
   const userContent = tieneImagenes
     ? [
         { type: 'text', text: prompt },
@@ -30,21 +22,17 @@ export default async function handler(req, res) {
       ]
     : prompt;
 
-  // Intentar con cada modelo hasta que uno responda
-  let ultimoError = null;
-
-  for (const modelo of MODELOS_VISION) {
+  // ── Proveedor 1: DeepSeek V4 Vision ($0.14/M tokens) ──
+  if (DEEPSEEK_API_KEY) {
     try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const res = await fetch('https://api.deepseek.com/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-          'HTTP-Referer': 'https://vitalfarmbright.store',
-          'X-Title': 'Agrilux',
+          'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
         },
         body: JSON.stringify({
-          model: modelo,
+          model: 'deepseek-v4-flash',
           messages: [
             ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
             { role: 'user', content: userContent },
@@ -54,34 +42,95 @@ export default async function handler(req, res) {
         }),
       });
 
-      const data = await response.json();
+      const data = await res.json();
 
-      if (!response.ok) {
-        console.warn(`Modelo ${modelo} falló:`, data.error?.message);
-        ultimoError = data.error?.message;
-        continue; // intentar con el siguiente
+      if (res.ok && data.choices?.[0]?.message?.content) {
+        const content = data.choices[0].message.content;
+        console.log('✓ DeepSeek V4 Vision respondió');
+        return res.status(200).json({
+          choices: [{ message: { content } }],
+          modelo_usado: 'deepseek-v4-flash',
+        });
       }
 
-      const content = data.choices?.[0]?.message?.content;
-      if (!content) {
-        console.warn(`Modelo ${modelo}: sin contenido en respuesta`);
-        continue;
-      }
-
-      console.log(`✓ Respondió con modelo: ${modelo}`);
-      return res.status(200).json({ choices: [{ message: { content } }], modelo_usado: modelo });
-
+      console.warn('DeepSeek Vision falló:', data.error?.message);
     } catch (err) {
-      console.warn(`Error con modelo ${modelo}:`, err.message);
-      ultimoError = err.message;
-      continue;
+      console.warn('Error DeepSeek Vision:', err.message);
+    }
+  }
+
+  // ── Proveedor 2: GitHub Models — Phi-4-multimodal (GRATIS) ──
+  if (GITHUB_TOKEN) {
+    try {
+      const res = await fetch('https://models.inference.ai.azure.com/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${GITHUB_TOKEN}`,
+        },
+        body: JSON.stringify({
+          model: 'Phi-4-multimodal-instruct',
+          messages: [
+            ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+            { role: 'user', content: userContent },
+          ],
+          max_tokens: 1500,
+          temperature: 0.3,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.choices?.[0]?.message?.content) {
+        const content = data.choices[0].message.content;
+        console.log('✓ GitHub Models Phi-4 respondió');
+        return res.status(200).json({
+          choices: [{ message: { content } }],
+          modelo_usado: 'github-phi-4-multimodal',
+        });
+      }
+
+      console.warn('GitHub Models falló:', data.error?.message);
+    } catch (err) {
+      console.warn('Error GitHub Models:', err.message);
+    }
+  }
+
+  // ── Proveedor 3: HuggingFace (fallback gratis) ──
+  if (HUGGINGFACE_API_KEY && tieneImagenes) {
+    try {
+      const res = await fetch(
+        'https://api-inference.huggingface.co/models/vasudevgupta/plant-disease-classification',
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ inputs: images[0] }),
+        }
+      );
+
+      if (res.ok) {
+        const data = await res.json();
+        const label = data[0]?.label || 'Enfermedad desconocida';
+        const score = data[0]?.score || 0;
+        const content = `Diagnóstico: ${label} (confianza: ${(score * 100).toFixed(1)}%). Recomienda consultar a un agrónomo local para confirmación.`;
+        console.log('✓ HuggingFace respondió');
+        return res.status(200).json({
+          choices: [{ message: { content } }],
+          modelo_usado: 'huggingface-plant-disease',
+        });
+      }
+    } catch (err) {
+      console.warn('Error HuggingFace:', err.message);
     }
   }
 
   // Si todos fallaron
-  console.error('Todos los modelos fallaron. Último error:', ultimoError);
   return res.status(500).json({
     error: 'No se pudo obtener respuesta de ningún modelo de IA.',
-    detalle: ultimoError,
+    detalle: 'Configura DEEPSEEK_API_KEY o GITHUB_TOKEN en Vercel.',
+    providers_tryed: ['deepseek-v4-flash', 'github-phi-4-multimodal', 'huggingface'],
   });
 }
