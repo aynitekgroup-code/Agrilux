@@ -2,8 +2,8 @@ export const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
 export const GITHUB_URL = 'https://models.inference.ai.azure.com/chat/completions';
 
 export const MODELS = {
-  DEEPSEEK_FAST: 'deepseek-v4-flash',
-  DEEPSEEK_QUALITY: 'deepseek-v4-pro',
+  DEEPSEEK_FAST: 'deepseek-chat',
+  DEEPSEEK_QUALITY: 'deepseek-chat',
   GITHUB_VISION: 'Phi-4-multimodal-instruct',
 };
 
@@ -97,7 +97,7 @@ export function resolveLlmRequest(env, options) {
   const { imageUrls, useJson, messages } = buildMessages(options);
   const hasImages = imageUrls.length > 0;
 
-  // ── DeepSeek V4 soporta imágenes y texto ──
+  // ── DeepSeek Chat soporta imágenes y texto ──
   const deepseekKey = resolveDeepSeekKey(env);
   if (deepseekKey) {
     const model = hasImages

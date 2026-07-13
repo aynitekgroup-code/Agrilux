@@ -1,5 +1,5 @@
 // api/analizar-imagen.js
-// Análisis de imágenes: DeepSeek V4 Vision → GitHub Models (Phi-4) → HuggingFace
+// Análisis de imágenes: DeepSeek Chat → GitHub Models (Phi-4) → HuggingFace
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
@@ -22,7 +22,7 @@ export default async function handler(req, res) {
       ]
     : prompt;
 
-  // ── Proveedor 1: DeepSeek V4 Vision ($0.14/M tokens) ──
+  // ── Proveedor 1: DeepSeek Chat ($0.14/M tokens) ──
   if (DEEPSEEK_API_KEY) {
     try {
       const res = await fetch('https://api.deepseek.com/chat/completions', {
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
           'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
         },
         body: JSON.stringify({
-          model: 'deepseek-v4-flash',
+          model: 'deepseek-chat',
           messages: [
             ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
             { role: 'user', content: userContent },
@@ -46,16 +46,16 @@ export default async function handler(req, res) {
 
       if (res.ok && data.choices?.[0]?.message?.content) {
         const content = data.choices[0].message.content;
-        console.log('✓ DeepSeek V4 Vision respondió');
+        console.log('✓ DeepSeek Chat respondió');
         return res.status(200).json({
           choices: [{ message: { content } }],
           modelo_usado: 'deepseek-v4-flash',
         });
       }
 
-      console.warn('DeepSeek Vision falló:', data.error?.message);
+      console.warn('DeepSeek Chat falló:', data.error?.message);
     } catch (err) {
-      console.warn('Error DeepSeek Vision:', err.message);
+      console.warn('Error DeepSeek Chat:', err.message);
     }
   }
 
@@ -131,6 +131,6 @@ export default async function handler(req, res) {
   return res.status(500).json({
     error: 'No se pudo obtener respuesta de ningún modelo de IA.',
     detalle: 'Configura DEEPSEEK_API_KEY o GITHUB_TOKEN en Vercel.',
-    providers_tryed: ['deepseek-v4-flash', 'github-phi-4-multimodal', 'huggingface'],
+    providers_tryed: ['deepseek-chat', 'github-phi-4-multimodal', 'huggingface'],
   });
 }
