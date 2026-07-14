@@ -91,20 +91,19 @@ function buildBody({ messages, useJson, model, provider }) {
 
 /**
  * Resuelve qué proveedor LLM usar.
- * DeepSeek V4 soporta imágenes + texto. GitHub Models es fallback gratis.
+ * Imágenes → GitHub Models Phi-4 (gratis, soporta vision)
+ * Texto    → DeepSeek Chat (barato, $0.14/M tokens)
  */
 export function resolveLlmRequest(env, options) {
   const { imageUrls, useJson, messages } = buildMessages(options);
   const hasImages = imageUrls.length > 0;
 
-  // ── DeepSeek Chat soporta imágenes y texto ──
+  // ── DeepSeek Chat: barato para texto ──
   const deepseekKey = resolveDeepSeekKey(env);
-  if (deepseekKey) {
-    const model = hasImages
-      ? MODELS.DEEPSEEK_FAST      // deepseek-v4-flash (soporta imágenes)
-      : useJson
-        ? MODELS.DEEPSEEK_QUALITY
-        : MODELS.DEEPSEEK_FAST;
+  if (deepseekKey && !hasImages) {
+    const model = useJson
+      ? MODELS.DEEPSEEK_QUALITY
+      : MODELS.DEEPSEEK_FAST;
 
     return {
       provider: 'deepseek',
@@ -114,7 +113,7 @@ export function resolveLlmRequest(env, options) {
     };
   }
 
-  // ── GitHub Models como fallback (gratis, soporta imágenes) ──
+  // ── GitHub Models: gratis, soporta imágenes y texto ──
   const githubKey = resolveGitHubKey(env);
   if (githubKey) {
     return {
