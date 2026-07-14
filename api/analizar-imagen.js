@@ -8,10 +8,25 @@ export default async function handler(req, res) {
   const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
   const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
 
+  console.log('API Keys:', {
+    deepseek: DEEPSEEK_API_KEY ? 'CONFIGURADA' : 'NO CONFIGURADA',
+    github: GITHUB_TOKEN ? 'CONFIGURADA' : 'NO CONFIGURADA',
+    huggingface: HUGGINGFACE_API_KEY ? 'CONFIGURADA' : 'NO CONFIGURADA',
+  });
+
   const { images, prompt, systemPrompt } = req.body;
   if (!prompt) return res.status(400).json({ error: 'Falta el campo prompt' });
 
   const tieneImagenes = Array.isArray(images) && images.length > 0;
+  const imageSizes = tieneImagenes ? images.map(img => img?.length || 0) : [];
+  console.log('Request:', {
+    promptLength: prompt?.length,
+    tieneImagenes,
+    imageCount: images?.length || 0,
+    imageSizes: imageSizes.slice(0, 3),
+  });
+
+  // Para DeepSeek, enviamos solo texto primero (sin imágenes para debug)
   const userContent = tieneImagenes
     ? [
         { type: 'text', text: prompt },
@@ -25,31 +40,66 @@ export default async function handler(req, res) {
   // ── Proveedor 1: DeepSeek Chat ($0.14/M tokens) ──
   if (DEEPSEEK_API_KEY) {
     try {
-      const res = await fetch('https://api.deepseek.com/chat/completions', {
+      // DeepSeek Chat: intentamos con imágenes, si falla, solo texto
+      const bodyWithImages = {
+        model: 'deepseek-chat',
+        messages: [
+          ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+          { role: 'user', content: userContent },
+        ],
+        max_tokens: 1500,
+        temperature: 0.3,
+      };
+
+      const bodyTextOnly = {
+        model: 'deepseek-chat',
+        messages: [
+          ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: 1500,
+        temperature: 0.3,
+      };
+
+      // Intentar primero con imágenes
+      let res = await fetch('https://api.deepseek.com/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
         },
-        body: JSON.stringify({
-          model: 'deepseek-chat',
-          messages: [
-            ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-            { role: 'user', content: userContent },
-          ],
-          max_tokens: 1500,
-          temperature: 0.3,
-        }),
+        body: JSON.stringify(tieneImagenes ? bodyWithImages : bodyTextOnly),
       });
 
-      const data = await res.json();
+      let data = await res.json();
+
+      // Si falla con imágenes, intentar solo texto
+      if (tieneImagenes && !res.ok) {
+        console.log('DeepSeek falló con imágenes, intentando solo texto...');
+        res = await fetch('https://api.deepseek.com/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+          },
+          body: JSON.stringify(bodyTextOnly),
+        });
+        data = await res.json();
+      }
+
+      console.log('DeepSeek response:', {
+        status: res.status,
+        ok: res.ok,
+        hasChoices: !!data.choices,
+        errorMessage: data.error?.message,
+      });
 
       if (res.ok && data.choices?.[0]?.message?.content) {
         const content = data.choices[0].message.content;
         console.log('✓ DeepSeek Chat respondió');
         return res.status(200).json({
           choices: [{ message: { content } }],
-          modelo_usado: 'deepseek-v4-flash',
+          modelo_usado: 'deepseek-chat',
         });
       }
 
@@ -80,6 +130,13 @@ export default async function handler(req, res) {
       });
 
       const data = await res.json();
+
+      console.log('GitHub response:', {
+        status: res.status,
+        ok: res.ok,
+        hasChoices: !!data.choices,
+        errorMessage: data.error?.message,
+      });
 
       if (res.ok && data.choices?.[0]?.message?.content) {
         const content = data.choices[0].message.content;
@@ -128,6 +185,12 @@ export default async function handler(req, res) {
   }
 
   // Si todos fallaron
+  console.error('Todos los providers fallaron:', {
+    deepseek: DEEPSEEK_API_KEY ? 'intentado' : 'no configurado',
+    github: GITHUB_TOKEN ? 'intentado' : 'no configurado',
+    huggingface: HUGGINGFACE_API_KEY ? 'intentado' : 'no configurado',
+  });
+
   return res.status(500).json({
     error: 'No se pudo obtener respuesta de ningún modelo de IA.',
     detalle: 'Configura DEEPSEEK_API_KEY o GITHUB_TOKEN en Vercel.',
