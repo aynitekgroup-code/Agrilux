@@ -1,10 +1,12 @@
 export const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
 export const GITHUB_URL = 'https://models.inference.ai.azure.com/chat/completions';
+export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 export const MODELS = {
   DEEPSEEK_FAST: 'deepseek-chat',
   DEEPSEEK_QUALITY: 'deepseek-chat',
   GITHUB_VISION: 'Phi-4-multimodal-instruct',
+  OPENROUTER_VISION: 'google/gemini-2.5-flash-preview',
 };
 
 export function resolveDeepSeekKey(env) {
@@ -19,6 +21,10 @@ export function resolveDeepSeekKey(env) {
 
 export function resolveGitHubKey(env) {
   return env.GITHUB_TOKEN || '';
+}
+
+export function resolveOpenRouterKey(env) {
+  return env.OPENROUTER_API_KEY || env.VITE_OPENROUTER_API_KEY || '';
 }
 
 function schemaHint(schema) {
@@ -91,29 +97,45 @@ function buildBody({ messages, useJson, model, provider }) {
 
 /**
  * Resuelve qué proveedor LLM usar.
- * Imágenes → GitHub Models Phi-4 (gratis, soporta vision)
- * Texto    → DeepSeek Chat (barato, $0.14/M tokens)
+ * Texto    → DeepSeek (barato) → OpenRouter (refuerzo) → GitHub (gratis)
+ * Imágenes → OpenRouter Gemini (vision) → GitHub Phi-4 (gratis)
  */
 export function resolveLlmRequest(env, options) {
   const { imageUrls, useJson, messages } = buildMessages(options);
   const hasImages = imageUrls.length > 0;
 
-  // ── DeepSeek Chat: barato para texto ──
+  // ── DeepSeek: barato para texto ──
   const deepseekKey = resolveDeepSeekKey(env);
   if (deepseekKey && !hasImages) {
-    const model = useJson
-      ? MODELS.DEEPSEEK_QUALITY
-      : MODELS.DEEPSEEK_FAST;
-
     return {
       provider: 'deepseek',
       url: DEEPSEEK_URL,
       apiKey: deepseekKey,
-      body: buildBody({ messages, useJson, model, provider: 'deepseek' }),
+      body: buildBody({ messages, useJson, model: MODELS.DEEPSEEK_FAST, provider: 'deepseek' }),
     };
   }
 
-  // ── GitHub Models: gratis, soporta imágenes y texto ──
+  // ── OpenRouter: soporta imágenes y texto ──
+  const openrouterKey = resolveOpenRouterKey(env);
+  if (openrouterKey) {
+    return {
+      provider: 'openrouter',
+      url: OPENROUTER_URL,
+      apiKey: openrouterKey,
+      body: buildBody({
+        messages,
+        useJson,
+        model: MODELS.OPENROUTER_VISION,
+        provider: 'openrouter',
+      }),
+      headers: {
+        'HTTP-Referer': 'https://www.vitalfarmbright.store',
+        'X-Title': 'Agrilux',
+      },
+    };
+  }
+
+  // ── GitHub: gratis, fallback ──
   const githubKey = resolveGitHubKey(env);
   if (githubKey) {
     return {
@@ -130,17 +152,17 @@ export function resolveLlmRequest(env, options) {
   }
 
   throw new Error(
-    'Configura DEEPSEEK_API_KEY o GITHUB_TOKEN en Vercel. ' +
-    'DeepSeek: $0.14/M tokens. GitHub: gratis.'
+    'Configura OPENROUTER_API_KEY, DEEPSEEK_API_KEY o GITHUB_TOKEN en Vercel.'
   );
 }
 
-export async function callChatCompletions({ url, apiKey, body }) {
+export async function callChatCompletions({ url, apiKey, body, headers = {} }) {
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
+      ...headers,
     },
     body: JSON.stringify(body),
   });

@@ -1,19 +1,20 @@
 // api/analizar-imagen.js
-// Estrategia combinada:
-//   Con imágenes → GitHub Models Phi-4 (gratis, soporta imágenes)
-//   Solo texto   → DeepSeek Chat (barato, $0.14/M tokens)
-//   Fallback     → HuggingFace plant-disease
+// Cadena de proveedores:
+//   CON IMÁGENES: GitHub Phi-4 (gratis) → OpenRouter Gemini (barato, vision) → DeepSeek (solo texto) → HuggingFace
+//   SOLO TEXTO:  DeepSeek (barato) → OpenRouter Gemini → GitHub (gratis)
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
   const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+  const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
   const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
 
   console.log('API Keys:', {
     deepseek: DEEPSEEK_API_KEY ? 'OK' : 'MISSING',
     github: GITHUB_TOKEN ? 'OK' : 'MISSING',
+    openrouter: OPENROUTER_API_KEY ? 'OK' : 'MISSING',
     huggingface: HUGGINGFACE_API_KEY ? 'OK' : 'MISSING',
   });
 
@@ -36,11 +37,15 @@ export default async function handler(req, res) {
     : null;
 
   // ══════════════════════════════════════════════════════════════
-  //  CASO A: CON IMÁGENES → GitHub primero (gratis, soporta vision)
+  //  CASO A: CON IMÁGENES
+  //  A1: GitHub Phi-4 (gratis)
+  //  A2: OpenRouter Gemini 2.5 Flash (barato, vision excelente)
+  //  A3: DeepSeek solo texto (fallback)
+  //  A4: HuggingFace (último recurso)
   // ══════════════════════════════════════════════════════════════
   if (tieneImagenes) {
 
-    // A1: GitHub Models Phi-4-multimodal (GRATIS, soporta imágenes)
+    // A1: GitHub Models Phi-4-multimodal (GRATIS)
     if (GITHUB_TOKEN) {
       try {
         const res2 = await fetch('https://models.inference.ai.azure.com/chat/completions', {
@@ -72,7 +77,41 @@ export default async function handler(req, res) {
       }
     }
 
-    // A2: DeepSeek solo texto (sin análisis visual, pero responde al prompt)
+    // A2: OpenRouter — Gemini 2.5 Flash (barato, vision excelente)
+    if (OPENROUTER_API_KEY) {
+      try {
+        const res2 = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+            'HTTP-Referer': 'https://www.vitalfarmbright.store',
+            'X-Title': 'Agrilux',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-flash-preview',
+            messages: [...systemMsg, { role: 'user', content: imageContent }],
+            max_tokens: 1500,
+            temperature: 0.3,
+          }),
+        });
+
+        const data = await res2.json();
+        console.log('OpenRouter vision:', { status: res2.status, ok: res2.ok, err: data.error?.message });
+
+        if (res2.ok && data.choices?.[0]?.message?.content) {
+          console.log('✓ OpenRouter Gemini respondió (imágenes)');
+          return res.status(200).json({
+            choices: [{ message: { content: data.choices[0].message.content } }],
+            modelo_usado: 'openrouter-gemini-2.5-flash',
+          });
+        }
+      } catch (err) {
+        console.warn('Error OpenRouter vision:', err.message);
+      }
+    }
+
+    // A3: DeepSeek solo texto (sin análisis visual)
     if (DEEPSEEK_API_KEY) {
       try {
         const res2 = await fetch('https://api.deepseek.com/chat/completions', {
@@ -102,7 +141,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // A3: HuggingFace plant-disease (último recurso, gratis)
+    // A4: HuggingFace plant-disease (último recurso)
     if (HUGGINGFACE_API_KEY) {
       try {
         const cleanBase64 = images[0].replace(/^data:image\/[^;]+;base64,/, '');
@@ -135,7 +174,10 @@ export default async function handler(req, res) {
     }
 
   // ══════════════════════════════════════════════════════════════
-  //  CASO B: SOLO TEXTO → DeepSeek primero (barato)
+  //  CASO B: SOLO TEXTO
+  //  B1: DeepSeek (barato)
+  //  B2: OpenRouter Gemini (refuerzo)
+  //  B3: GitHub (gratis)
   // ══════════════════════════════════════════════════════════════
   } else {
 
@@ -171,7 +213,39 @@ export default async function handler(req, res) {
       }
     }
 
-    // B2: GitHub Models fallback (GRATIS)
+    // B2: OpenRouter Gemini (refuerzo texto)
+    if (OPENROUTER_API_KEY) {
+      try {
+        const res2 = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+            'HTTP-Referer': 'https://www.vitalfarmbright.store',
+            'X-Title': 'Agrilux',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-flash-preview',
+            messages: [...systemMsg, { role: 'user', content: prompt }],
+            max_tokens: 1500,
+            temperature: 0.3,
+          }),
+        });
+
+        const data = await res2.json();
+        if (res2.ok && data.choices?.[0]?.message?.content) {
+          console.log('✓ OpenRouter Gemini respondió (texto)');
+          return res.status(200).json({
+            choices: [{ message: { content: data.choices[0].message.content } }],
+            modelo_usado: 'openrouter-gemini-2.5-flash-text',
+          });
+        }
+      } catch (err) {
+        console.warn('Error OpenRouter text:', err.message);
+      }
+    }
+
+    // B3: GitHub Models fallback (GRATIS)
     if (GITHUB_TOKEN) {
       try {
         const res2 = await fetch('https://models.inference.ai.azure.com/chat/completions', {
@@ -206,9 +280,9 @@ export default async function handler(req, res) {
   console.error('Todos los providers fallaron');
   return res.status(500).json({
     error: 'No se pudo obtener respuesta de ningún modelo de IA.',
-    detalle: 'Configura GITHUB_TOKEN (imágenes) o DEEPSEEK_API_KEY (texto) en Vercel.',
+    detalle: 'Configura OPENROUTER_API_KEY, GITHUB_TOKEN o DEEPSEEK_API_KEY en Vercel.',
     providers_tryed: tieneImagenes
-      ? ['github-phi-4-multimodal', 'deepseek-chat-text-only', 'huggingface']
-      : ['deepseek-chat', 'github-phi-4-text'],
+      ? ['github-phi-4', 'openrouter-gemini-flash', 'deepseek-chat', 'huggingface']
+      : ['deepseek-chat', 'openrouter-gemini-flash', 'github-phi-4'],
   });
 }
