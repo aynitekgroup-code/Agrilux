@@ -3,11 +3,14 @@ export const GITHUB_URL = 'https://models.inference.ai.azure.com/chat/completion
 export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 export const MODELS = {
-  DEEPSEEK_FAST: 'deepseek-chat',
-  DEEPSEEK_QUALITY: 'deepseek-chat',
-  GITHUB_VISION: 'Phi-4-multimodal-instruct',
   OPENROUTER_VISION: 'google/gemini-2.5-flash-preview',
+  DEEPSEEK_FAST: 'deepseek-chat',
+  GITHUB_VISION: 'Phi-4-multimodal-instruct',
 };
+
+export function resolveOpenRouterKey(env) {
+  return env.OPENROUTER_API_KEY || env.VITE_OPENROUTER_API_KEY || '';
+}
 
 export function resolveDeepSeekKey(env) {
   return (
@@ -21,10 +24,6 @@ export function resolveDeepSeekKey(env) {
 
 export function resolveGitHubKey(env) {
   return env.GITHUB_TOKEN || '';
-}
-
-export function resolveOpenRouterKey(env) {
-  return env.OPENROUTER_API_KEY || env.VITE_OPENROUTER_API_KEY || '';
 }
 
 function schemaHint(schema) {
@@ -76,7 +75,7 @@ function buildMessages({
   ] };
 }
 
-function buildBody({ messages, useJson, model, provider }) {
+function buildBody({ messages, useJson, model }) {
   const body = {
     model,
     messages,
@@ -88,46 +87,24 @@ function buildBody({ messages, useJson, model, provider }) {
     body.response_format = { type: 'json_object' };
   }
 
-  if (provider === 'deepseek') {
-    body.thinking = { type: 'disabled' };
-  }
-
   return body;
 }
 
 /**
  * Resuelve qué proveedor LLM usar.
- * Texto    → DeepSeek (barato) → OpenRouter (refuerzo) → GitHub (gratis)
- * Imágenes → OpenRouter Gemini (vision) → GitHub Phi-4 (gratis)
+ * OpenRouter (Gemini 2.5 Flash) → DeepSeek (barato) → GitHub (gratis)
  */
 export function resolveLlmRequest(env, options) {
   const { imageUrls, useJson, messages } = buildMessages(options);
-  const hasImages = imageUrls.length > 0;
 
-  // ── DeepSeek: barato para texto ──
-  const deepseekKey = resolveDeepSeekKey(env);
-  if (deepseekKey && !hasImages) {
-    return {
-      provider: 'deepseek',
-      url: DEEPSEEK_URL,
-      apiKey: deepseekKey,
-      body: buildBody({ messages, useJson, model: MODELS.DEEPSEEK_FAST, provider: 'deepseek' }),
-    };
-  }
-
-  // ── OpenRouter: soporta imágenes y texto ──
+  // ── OpenRouter: primer opción (mejor calidad, soporta imágenes + texto) ──
   const openrouterKey = resolveOpenRouterKey(env);
   if (openrouterKey) {
     return {
       provider: 'openrouter',
       url: OPENROUTER_URL,
       apiKey: openrouterKey,
-      body: buildBody({
-        messages,
-        useJson,
-        model: MODELS.OPENROUTER_VISION,
-        provider: 'openrouter',
-      }),
+      body: buildBody({ messages, useJson, model: MODELS.OPENROUTER_VISION }),
       headers: {
         'HTTP-Referer': 'https://www.vitalfarmbright.store',
         'X-Title': 'Agrilux',
@@ -135,25 +112,29 @@ export function resolveLlmRequest(env, options) {
     };
   }
 
-  // ── GitHub: gratis, fallback ──
+  // ── DeepSeek: fallback barato (solo texto) ──
+  const deepseekKey = resolveDeepSeekKey(env);
+  if (deepseekKey) {
+    return {
+      provider: 'deepseek',
+      url: DEEPSEEK_URL,
+      apiKey: deepseekKey,
+      body: buildBody({ messages, useJson, model: MODELS.DEEPSEEK_FAST }),
+    };
+  }
+
+  // ── GitHub: último recurso (gratis) ──
   const githubKey = resolveGitHubKey(env);
   if (githubKey) {
     return {
       provider: 'github',
       url: GITHUB_URL,
       apiKey: githubKey,
-      body: buildBody({
-        messages,
-        useJson,
-        model: MODELS.GITHUB_VISION,
-        provider: 'github',
-      }),
+      body: buildBody({ messages, useJson, model: MODELS.GITHUB_VISION }),
     };
   }
 
-  throw new Error(
-    'Configura OPENROUTER_API_KEY, DEEPSEEK_API_KEY o GITHUB_TOKEN en Vercel.'
-  );
+  throw new Error('Configura OPENROUTER_API_KEY en Vercel.');
 }
 
 export async function callChatCompletions({ url, apiKey, body, headers = {} }) {
