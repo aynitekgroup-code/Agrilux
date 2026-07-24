@@ -29,7 +29,7 @@ export default function MiParcela() {
 
   const cargarParcelas = async () => {
     try {
-      const q = query(collection(db, 'parcelas'), where('userId', '==', user?.id));
+      const q = query(collection(db, 'parcelas'), where('userId', '==', user?.uid));
       const snap = await getDocs(q);
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setParcelas(data);
@@ -55,7 +55,7 @@ export default function MiParcela() {
     try {
       const cultObj = CULTIVOS.find(c => c.id === form.cultivo);
       const doc = await addDoc(collection(db, 'parcelas'), {
-        userId: user?.id, userName: user?.nombre,
+        userId: user?.uid, userName: user?.nombre,
         nombre: form.nombre, cultivo: form.cultivo, cultivoNombre: cultObj?.nombre,
         cultivoEmoji: cultObj?.emoji, variedad: form.variedad, area: form.area,
         fechaSiembra: form.fechaSiembra, gps: form.gps,
@@ -113,7 +113,7 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
         setRecomendacion(resp);
 
         await addDoc(collection(db, 'registrosParcela'), {
-          parcelaId: parcelaActiva.id, userId: user?.id,
+          parcelaId: parcelaActiva.id, userId: user?.uid,
           foto: compressed, recomendacion: resp,
           diasDesdeSiembra,
           fecha: new Date().toISOString(),

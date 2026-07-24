@@ -45,7 +45,7 @@ export default function Comunidad() {
     setPublicando(true);
     try {
       const docRef = await addDoc(collection(db, 'comunidad'), {
-        ...form, autor: user?.nombre, autorId: user?.id,
+        ...form, autor: user?.nombre, autorId: user?.uid,
         fecha: new Date().toISOString(), likes: 0,
       });
       setMensajes(prev => [{ id: docRef.id, ...form, autor: user?.nombre, fecha: new Date().toISOString(), likes: 0 }, ...prev]);
