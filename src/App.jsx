@@ -6,6 +6,7 @@ import SelectorUbicacion from './components/SelectorUbicacion';
 import Registro from './pages/Registro';
 import Diagnostico from './pages/Diagnostico';
 import MiParcela from './pages/MiParcela';
+import CicloCultivo from './pages/CicloCultivo';
 import Admin from './pages/Admin';
 
 function AppRoutes() {
@@ -47,6 +48,7 @@ function AppRoutes() {
           <Routes>
             <Route path="/" element={<Diagnostico onPlagaDetectada={setPlagaDetectada} />} />
             <Route path="/parcela" element={user ? <MiParcela /> : <Navigate to="/registro" />} />
+            <Route path="/ciclo" element={<CicloCultivo />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </Layout>

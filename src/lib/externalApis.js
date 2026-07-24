@@ -122,3 +122,17 @@ export function getMapboxStaticMap(lat, lon, zoom = 13, size = '400x250') {
 export function getMapboxExploreUrl(lat, lon, zoom = 13) {
   return `https://www.mapbox.com/maps/satellite?latlng=${lat},${lon}&zoom=${zoom}`;
 }
+
+// ─── Recomendaciones del ciclo del cultivo (IA) ──────────────────────────────
+export async function getCicloRecomendaciones(data) {
+  const res = await fetch('/api/ciclo-recomendaciones', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error obteniendo recomendaciones del ciclo');
+  }
+  return res.json();
+}

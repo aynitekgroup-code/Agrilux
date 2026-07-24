@@ -209,6 +209,19 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                   </div>
                 </div>
 
+                {/* Botón ver ciclo */}
+                <button onClick={() => navigate(`/ciclo?parcelaId=${parcelaActiva.id}`)}
+                  className="w-full bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3 hover:bg-amber-100 transition-colors">
+                  <div className="bg-amber-500 w-10 h-10 rounded-xl flex items-center justify-center text-white text-xl">
+                    📅
+                  </div>
+                  <div className="text-left flex-1">
+                    <p className="font-bold text-amber-800 text-sm">Ver ciclo del cultivo</p>
+                    <p className="text-xs text-amber-600">Calendario, etapas y recomendaciones personalizadas</p>
+                  </div>
+                  <span className="text-amber-400">›</span>
+                </button>
+
                 {/* Monitoreo */}
                 <div className="bg-white rounded-2xl p-4 shadow-sm">
                   <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">📸 Monitoreo con IA (cada 10 días)</p>
