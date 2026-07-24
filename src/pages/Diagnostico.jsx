@@ -20,6 +20,7 @@ import { collection, addDoc } from 'firebase/firestore';
 
 import { SISTEMA_PROMPT, CHAT_SYSTEM, ANALISIS_SCHEMA } from './diagnostico/diagnosticoPrompts';
 import SelectorUbicacion  from '../components/SelectorUbicacion';
+import VoiceAssistant     from '../components/VoiceAssistant';
 
 const COLOR_HEADER = {
   critica:  'bg-red-700',
@@ -1001,6 +1002,18 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
           </div>
         </div>
       )}
+
+      {/* Voice Assistant — flotante */}
+      <VoiceAssistant
+        onPregunta={(texto) => {
+          setPregunta(texto);
+          // Si hay foto, analizar foto + consulta; si no, solo consulta
+          if (fotos.length > 0) {
+            setAnalizando(true);
+            // El análisis se dispara con el useEffect
+          }
+        }}
+      />
     </div>
   );
 }
