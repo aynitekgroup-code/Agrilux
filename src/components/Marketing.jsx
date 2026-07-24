@@ -45,25 +45,11 @@ const PLANTILLAS_MENSAJE = [
     hashtags: ['#enfermedadesPlanta', '#cultivos']
   },
   {
-    id: 'precios',
-    titulo: 'Precios de insumos',
-    emoji: '💰',
-    mensaje: 'Hola {nombre}, ¿buscas precios de insumos agrícolas? Compara precios en la tienda de Agrilux. ¡Ahorra en tu inversión! 💰 {link}',
-    hashtags: ['#fertilizantes', '#agroquimicos']
-  },
-  {
     id: 'diagnostico',
     titulo: 'Diagnóstico IA',
     emoji: '🤖',
     mensaje: 'Hola {nombre}, ¿necesitas diagnosticar tu cultivo? Agrilux detecta plagas, enfermedades y malezas con inteligencia artificial. ¡Prueba gratis! 🤖 {link}',
     hashtags: ['#agricultura', '#campo']
-  },
-  {
-    id: 'delivery',
-    titulo: 'Delivery de insumos',
-    emoji: '🏍️',
-    mensaje: 'Hola {nombre}, ¿necesitas insumos agrícolas? En Agrilux tenemos delivery rápido a tu zona. ¡Pide ahora! 🏍️ {link}',
-    hashtags: ['#agriculturaPeru', '#campesinos']
   }
 ];
 

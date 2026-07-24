@@ -1,12 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
-import { Camera, CreditCard, TrendingUp, ShieldCheck } from 'lucide-react';
+import { Camera, Leaf } from 'lucide-react';
 
 const modules = [
   { path: '/diagnostico', icon: Camera, label: 'Diagnóstico IA', desc: 'Identifica plagas y enfermedades', color: 'bg-blue-500', emoji: '🔬' },
-  { path: '/mercado', icon: ShieldCheck, label: 'Fungicidas', desc: 'Recomendaciones y productos', color: 'bg-emerald-500', emoji: '🛡️' },
-  { path: '/financiera', icon: CreditCard, label: 'Salud Financiera', desc: 'Próximamente', color: 'bg-amber-500', emoji: '💰', disabled: true },
+  { path: '/parcela', icon: Leaf, label: 'Mi Parcela', desc: 'Clima, suelo y más', color: 'bg-emerald-500', emoji: '🌱' },
 ];
 
 export default function Home() {
@@ -23,28 +22,6 @@ export default function Home() {
           <p className="text-white/70 text-sm">Bienvenido,</p>
           <h1 className="text-2xl font-display font-bold">{user?.nombre?.split(' ')[0]} 👋</h1>
           <p className="text-white/60 text-xs mt-1">{user?.ubicacion}</p>
-        </div>
-      </div>
-
-      {/* Precios rápidos */}
-      <div className="mx-4 -mt-4 bg-white rounded-2xl shadow-md p-4 mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <TrendingUp size={16} className="text-primary" />
-          <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Precios del día - Lima</p>
-        </div>
-        <div className="flex gap-3 overflow-x-auto scrollbar-hide">
-          {[
-            { n: 'Papa Yungay', p: 'S/ 1.20', t: '↑' },
-            { n: 'Maíz', p: 'S/ 0.90', t: '→' },
-            { n: 'Arroz', p: 'S/ 2.40', t: '↑' },
-            { n: 'Palta Hass', p: 'S/ 3.80', t: '↓' },
-          ].map(({ n, p, t }) => (
-            <div key={n} className="flex-shrink-0 bg-gray-50 rounded-xl p-3 min-w-[110px]">
-              <p className="text-xs text-gray-500 mb-1">{n}</p>
-              <p className="font-bold text-primary text-sm">{p}/kg</p>
-              <p className={`text-xs ${t === '↑' ? 'text-green-500' : t === '↓' ? 'text-red-500' : 'text-gray-400'}`}>{t} tendencia</p>
-            </div>
-          ))}
         </div>
       </div>
 

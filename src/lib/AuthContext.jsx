@@ -96,44 +96,6 @@ export const AuthProvider = ({ children }) => {
     return cred.user;
   };
 
-  // ── Login motorizado: código de entrega → inicia sesión ───────────────────
-  const loginMotorizado = async ({ codigo }) => {
-    const codigoLimpio = codigo.trim().toUpperCase();
-    const q = query(collection(db, 'usuarios'), where('codigoEntrega', '==', codigoLimpio));
-    const snap = await getDocs(q);
-
-    if (snap.empty) throw { code: 'agrilux/codigo-no-encontrado' };
-
-    const perfilDoc = snap.docs[0];
-    const perfil = perfilDoc.data();
-
-    // Si ya tiene email y password en Firestore, intentar sign in
-    if (perfil.email && perfil._passwordReady) {
-      try {
-        const cred = await signInWithEmailAndPassword(auth, perfil.email, codigoLimpio);
-        return cred.user;
-      } catch (e) {
-        // Si falla, crear cuenta nueva más abajo
-      }
-    }
-
-    // Crear cuenta Firebase Auth con uid propio
-    const emailFirebase = `moto-${codigoLimpio}@agrilux.app`;
-    const cred = await createUserWithEmailAndPassword(auth, emailFirebase, codigoLimpio);
-    await updateProfile(cred.user, { displayName: perfil.nombre });
-
-    // Copiar datos al documento con el uid de Firebase Auth
-    const { passwordDefault, ...datos } = perfil;
-    await setDoc(doc(db, 'usuarios', cred.user.uid), {
-      ...datos,
-      email: emailFirebase,
-      _passwordReady: true,
-      createdAt: new Date().toISOString(),
-    });
-
-    return cred.user;
-  };
-
   const updateUbicacion = async (ubicacion) => {
     if (!user?.uid) throw new Error('No hay sesión');
     await setDoc(doc(db, 'usuarios', user.uid), { ubicacion }, { merge: true });
@@ -146,7 +108,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, register, login, loginMotorizado, logout, updateUbicacion }}>
+    <AuthContext.Provider value={{ user, loading, register, login, logout, updateUbicacion }}>
       {children}
     </AuthContext.Provider>
   );

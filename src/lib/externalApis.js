@@ -92,25 +92,6 @@ export async function getSentinelNDVI(lat, lon, radiusKm = 2) {
   return res.json();
 }
 
-// ─── WhatsApp (Twilio) — notificaciones al agricultor ────────────────────────
-/**
- * @param {string} telefono   - 9 dígitos peruanos (ej: "987654321")
- * @param {string} tipo       - 'diagnostico' | 'alerta_zona' | 'pedido_confirmado'
- * @param {object} datos      - payload específico del tipo
- */
-export async function sendWhatsApp(telefono, tipo, datos) {
-  const res = await fetch('/api/whatsapp', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ telefono, tipo, datos }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Error enviando WhatsApp');
-  }
-  return res.json();
-}
-
 // ─── Mapbox — mapa estático centrado en parcela ───────────────────────────────
 /**
  * Genera URL de imagen estática de Mapbox (sin backend, solo token público)

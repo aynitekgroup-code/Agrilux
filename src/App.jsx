@@ -1,33 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/AuthContext';
-import { db } from './lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
 import Layout from './components/Layout';
 import SelectorUbicacion from './components/SelectorUbicacion';
 import Registro from './pages/Registro';
 import Diagnostico from './pages/Diagnostico';
-import Mercado from './pages/Mercado';
 import Admin from './pages/Admin';
-import MotorizadoPanel from './pages/MotorizadoPanel';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
   const [plagaDetectada, setPlagaDetectada] = useState('');
-  const [esMotorizado, setEsMotorizado] = useState(false);
-
-  useEffect(() => {
-    if (!user?.uid || user?.rol === 'motorizado') return;
-    const check = async () => {
-      try {
-        const snap = await getDoc(doc(db, 'solicitudes', user.uid));
-        if (snap.exists() && snap.data().estado === 'aceptada') {
-          setEsMotorizado(true);
-        }
-      } catch (e) { /* silencioso */ }
-    };
-    check();
-  }, [user?.uid, user?.rol]);
 
     if (loading) return (
     <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-green-50 to-green-200">
@@ -50,21 +32,19 @@ function AppRoutes() {
     </div>
   );
 
-  if (user && !user.ubicacion && user.rol !== 'motorizado' && !esMotorizado) {
+  if (user && !user.ubicacion) {
     return <SelectorUbicacion esPrimeraVez={true} />;
   }
 
   return (
     <Routes>
       <Route path="/admin" element={<Admin />} />
-      <Route path="/motorizado" element={(user?.rol === 'motorizado' || esMotorizado) ? <MotorizadoPanel /> : <Navigate to="/" />} />
 
       <Route path="*" element={
         !user ? <Registro /> : (
           <Layout>
             <Routes>
               <Route path="/" element={<Diagnostico onPlagaDetectada={setPlagaDetectada} />} />
-              <Route path="/mercado" element={<Mercado plagaBuscada={plagaDetectada} />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </Layout>

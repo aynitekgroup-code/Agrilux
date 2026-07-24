@@ -250,18 +250,12 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                 )}
 
                 {/* Acciones rápidas */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3">
                   <button onClick={() => navigate('/diagnostico')}
                     className="bg-white rounded-2xl p-4 shadow-sm text-center border border-gray-100 hover:border-primary transition-all">
                     <Camera size={24} className="mx-auto text-primary mb-2" />
                     <p className="text-sm font-bold text-gray-700">Diagnóstico IA</p>
                     <p className="text-xs text-gray-400">Identificar plaga</p>
-                  </button>
-                  <button onClick={() => navigate('/mercado')}
-                    className="bg-white rounded-2xl p-4 shadow-sm text-center border border-gray-100 hover:border-primary transition-all">
-                    <Leaf size={24} className="mx-auto text-primary mb-2" />
-                    <p className="text-sm font-bold text-gray-700">Ver Insumos</p>
-                    <p className="text-xs text-gray-400">Semillas y más</p>
                   </button>
                 </div>
               </>

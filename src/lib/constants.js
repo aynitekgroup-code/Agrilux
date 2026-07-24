@@ -52,12 +52,3 @@ export const CULTIVOS = [
   },
 ];
 
-export const PRECIOS_BASE = {
-  papa:     { min: 0.80, max: 1.50, unidad: 'kg' },
-  maiz:     { min: 1.20, max: 2.80, unidad: 'kg' },
-  palta:    { min: 2.00, max: 5.00, unidad: 'kg' },
-  arandano: { min: 8.00, max: 18.00, unidad: 'kg' },
-  cana:     { min: 0.12, max: 0.22, unidad: 'kg' },
-  platano:  { min: 1.00, max: 2.50, unidad: 'kg' },
-  papaya:   { min: 1.50, max: 4.00, unidad: 'kg' },
-};

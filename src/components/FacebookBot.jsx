@@ -34,13 +34,6 @@ const PLANTILLAS_FACEBOOK = [
     imagen: null
   },
   {
-    id: 'delivery',
-    titulo: 'Delivery de insumos',
-    emoji: '🏍️',
-    mensaje: '🏍️ ¡Novedad! Ahora puedes pedir insumos agrícolas con delivery directo a tu zona.\n\nFertilizantes, fungicidas, semillas y más. 🌾\n\nHaz tu pedido en Agrilux: vitalfarmbright.store',
-    imagen: null
-  },
-  {
     id: 'pregunta',
     titulo: 'Pregunta interactiva',
     emoji: '❓',

@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Camera, Loader2, AlertTriangle, CheckCircle, Send,
-  Mic, MicOff, Volume2, VolumeX, ShoppingBag,
-  ChevronRight, Bot, Sparkles, ImagePlus, X, MapPin,
+  Mic, MicOff, Volume2, VolumeX,
+  Sparkles, ImagePlus, X, MapPin,
 } from 'lucide-react';
 import { useAuth }       from '../lib/AuthContext';
 import { invokeGemini }  from '../lib/gemini';
@@ -13,16 +13,12 @@ import {
   getSoilData,
   getNasaAlerts,
   getSentinelNDVI,
-  sendWhatsApp,
 } from '../lib/externalApis';
 import { CULTIVOS }      from '../lib/constants';
 import { db }            from '../lib/firebase';
 import { collection, addDoc } from 'firebase/firestore';
-import { useNavigate }   from 'react-router-dom';
 
 import { SISTEMA_PROMPT, CHAT_SYSTEM, ANALISIS_SCHEMA } from './diagnostico/diagnosticoPrompts';
-import TiendasConProducto from './diagnostico/TiendasConProducto';
-import AgenteCompra       from './diagnostico/AgenteCompra';
 import SelectorUbicacion  from '../components/SelectorUbicacion';
 
 const COLOR_HEADER = {
@@ -35,7 +31,6 @@ const COLOR_HEADER = {
 
 export default function Diagnostico({ onPlagaDetectada }) {
   const { user }   = useAuth();
-  const navigate   = useNavigate();
 
   const [cultivo, setCultivo]           = useState(CULTIVOS[0]);
   const [fotos, setFotos]               = useState([]);
@@ -55,15 +50,11 @@ export default function Diagnostico({ onPlagaDetectada }) {
   const [plantDiagnosis, setPlantDiagnosis]     = useState(null);
   const [plantIdentificando, setPlantIdentificando] = useState(false);
   const [leyendo, setLeyendo]                   = useState(false);
-  const [productoBuscando, setProductoBuscando] = useState(null);
-  const [mostrarAgente, setMostrarAgente]       = useState(false);
 
   // APIs enriquecidas
   const [soilData, setSoilData]               = useState(null);
   const [nasaAlerts, setNasaAlerts]           = useState(null);
   const [sentinelNDVI, setSentinelNDVI]       = useState(null);
-  const [enviandoWhatsApp, setEnviandoWhatsApp] = useState(false);
-  const [whatsAppEnviado, setWhatsAppEnviado]   = useState(false);
 
   const fileRef    = useRef(null);
   const chatEndRef = useRef(null);
@@ -411,35 +402,11 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
     setEnviando(false);
   };
 
-  const enviarDiagnosticoPorWhatsApp = async () => {
-    if (!user?.celular && !user?.phone) {
-      alert('Agrega tu número de celular en tu perfil para recibir el diagnóstico por WhatsApp.');
-      return;
-    }
-    const telefono = (user.celular || user.phone || '').replace(/\D/g, '');
-    if (telefono.length < 9) { alert('Número de celular inválido en tu perfil.'); return; }
-    setEnviandoWhatsApp(true);
-    try {
-      await sendWhatsApp(telefono, 'diagnostico', {
-        cultivo: cultivo.nombre,
-        problema: resultado.nombre_problema,
-        gravedad: resultado.gravedad,
-        accion: resultado.aplicacion_inmediata || resultado.que_hacer,
-        productos: resultado.productos || [],
-      });
-      setWhatsAppEnviado(true);
-      setTimeout(() => setWhatsAppEnviado(false), 5000);
-    } catch (e) {
-      alert('No se pudo enviar el WhatsApp. Verifica tu número en el perfil.');
-    }
-    setEnviandoWhatsApp(false);
-  };
-
   const resetear = () => {
     setResultado(null); setFotos([]); setChat([]);
-    setMostrarAgente(false); setSoilData(null);
+    setSoilData(null);
     setNasaAlerts(null); setSentinelNDVI(null);
-    setWhatsAppEnviado(false); setPregunta('');
+    setPregunta('');
   };
 
   /* ═══════════════════════════════════════════════
@@ -447,17 +414,6 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
   ═══════════════════════════════════════════════ */
   if (resultado && !resultado.error) return (
     <div className="min-h-screen pb-32">
-
-      {mostrarAgente && (
-        <AgenteCompra resultado={resultado} cultivo={cultivo} user={user} onCerrar={() => setMostrarAgente(false)} />
-      )}
-      {productoBuscando && (
-        <TiendasConProducto
-          productoBuscado={productoBuscando}
-          ubicacionUsuario={ubicacionEfectiva}
-          onCerrar={() => setProductoBuscando(null)}
-        />
-      )}
 
       {/* Header */}
         <div className={`px-6 pt-12 pb-6 text-white ${COLOR_HEADER[resultado.gravedad] || 'bg-primary'}`}>
@@ -620,14 +576,6 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
                 <span className="text-xl">💬</span>
                 <span className="text-xs">Seguir consultando</span>
               </button>
-              <button
-                onClick={() => setMostrarAgente(true)}
-                className="flex-1 bg-primary text-white font-bold py-3.5 rounded-2xl text-sm flex flex-col items-center gap-1 shadow-lg relative overflow-hidden">
-                <div className="absolute inset-0 bg-white/10 animate-pulse rounded-2xl" />
-                <span className="text-xl relative">🤖</span>
-                <span className="text-xs relative">Completar proceso</span>
-                <span className="text-[10px] relative text-white/80">Agente compra por ti</span>
-              </button>
             </div>
           </div>
         </div>
@@ -746,18 +694,6 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
                       <p className="font-bold text-sm text-gray-800">{p.nombre}</p>
                       {p.ingrediente_activo && <p className="text-xs text-gray-400 italic truncate">{p.ingrediente_activo}</p>}
                     </div>
-                    <button
-                      onClick={() => {
-                        if (!ubicacionEfectiva) {
-                          setPedirUbicacion(true);
-                          setTimeout(() => ubicacionInputRef.current?.focus(), 50);
-                          return;
-                        }
-                        setProductoBuscando(p.nombre);
-                      }}
-                      className="ml-2 flex-shrink-0 flex items-center gap-1 bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-lg">
-                      <ShoppingBag size={12} /> Ver precio
-                    </button>
                   </div>
                   <div className="grid grid-cols-2 gap-1.5">
                     {p.dosis && <div className="bg-white rounded-lg p-2"><p className="text-xs text-gray-400">Dosis</p><p className="text-xs font-semibold text-gray-700">{p.dosis}</p></div>}
@@ -767,29 +703,6 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
                 </div>
               ))}
             </div>
-
-            {resultado.tiene_problema && (
-              <button onClick={() => setMostrarAgente(true)}
-                className="w-full mt-3 flex items-center justify-between bg-primary text-white rounded-2xl px-4 py-3.5 shadow">
-                <div className="flex items-center gap-2">
-                  <Bot size={18} />
-                  <div className="text-left">
-                    <p className="text-sm font-bold">Que el agente lo compre por ti</p>
-                    <p className="text-xs text-white/80">Mejor precio + delivery coordinado</p>
-                  </div>
-                </div>
-                <ChevronRight size={18} className="text-white/70" />
-              </button>
-            )}
-
-            <button onClick={() => navigate('/mercado')}
-              className="w-full mt-2 flex items-center justify-between bg-primary/5 border border-primary/20 rounded-xl px-4 py-3">
-              <div className="flex items-center gap-2">
-                <ShoppingBag size={16} className="text-primary" />
-                <p className="text-sm font-bold text-primary">Ver todas las tiendas</p>
-              </div>
-              <ChevronRight size={16} className="text-primary" />
-            </button>
           </div>
         )}
 
@@ -804,23 +717,6 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
           <div className="bg-green-50 border border-green-200 rounded-2xl p-4">
             <p className="text-xs font-bold text-green-700 mb-1">🛡️ Prevención Futura</p>
             <p className="text-green-800 text-sm">{resultado.prevencion}</p>
-          </div>
-        )}
-
-        {/* WhatsApp */}
-        {resultado.tiene_problema && (
-          <div>
-            <button
-              onClick={enviarDiagnosticoPorWhatsApp}
-              disabled={enviandoWhatsApp || whatsAppEnviado}
-              className={`w-full flex items-center justify-center gap-2 font-bold py-3.5 rounded-2xl text-sm transition-all ${
-                whatsAppEnviado ? 'bg-green-100 text-green-700' : 'bg-green-500 text-white shadow-lg hover:bg-green-600'
-              } disabled:opacity-60`}>
-              {enviandoWhatsApp ? <><Loader2 size={16} className="animate-spin" /> Enviando...</>
-                : whatsAppEnviado ? <>✅ ¡Diagnóstico enviado a tu WhatsApp!</>
-                : <>📲 Enviar diagnóstico a mi WhatsApp</>}
-            </button>
-            <p className="text-xs text-gray-400 text-center mt-1">Recibirás el resumen en tu celular registrado</p>
           </div>
         )}
 
@@ -1065,7 +961,6 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
               { e: '🦠', t: 'Enfermedades fúngicas y bacterianas' },
               { e: '🐛', t: 'Plagas e insectos dañinos' },
               { e: '🌿', t: 'Malezas y plantas invasoras' },
-              { e: '🤖', t: 'Agente compra el fungicida por ti' },
             ].map(({ e, t }) => (
               <div key={t} className="bg-white rounded-xl p-2.5 flex items-center gap-2">
                 <span className="text-lg">{e}</span>

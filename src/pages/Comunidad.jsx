@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, AlertTriangle, DollarSign, Lightbulb, ShoppingBag, MessageSquare, X } from 'lucide-react';
+import { Plus, AlertTriangle, Lightbulb, MessageSquare, X } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, addDoc, getDocs, orderBy, query, updateDoc, doc, increment } from 'firebase/firestore';
@@ -8,9 +8,7 @@ const CATEGORIAS = [
   { id: 'todas', label: 'Todas', emoji: '📋' },
   { id: 'plagas', label: 'Plagas', emoji: '🐛' },
   { id: 'enfermedades', label: 'Enfermedades', emoji: '🍂' },
-  { id: 'precios', label: 'Precios', emoji: '💰' },
   { id: 'consejos', label: 'Consejos', emoji: '💡' },
-  { id: 'venta', label: 'Venta', emoji: '🛒' },
   { id: 'general', label: 'General', emoji: '💬' },
 ];
 
@@ -66,7 +64,7 @@ export default function Comunidad() {
 
   const filtrados = categoria === 'todas' ? mensajes : mensajes.filter(m => m.categoria === categoria);
 
-  const catColors = { plagas: 'bg-red-100 text-red-700', enfermedades: 'bg-orange-100 text-orange-700', precios: 'bg-yellow-100 text-yellow-700', consejos: 'bg-blue-100 text-blue-700', venta: 'bg-purple-100 text-purple-700', general: 'bg-gray-100 text-gray-700' };
+  const catColors = { plagas: 'bg-red-100 text-red-700', enfermedades: 'bg-orange-100 text-orange-700', consejos: 'bg-blue-100 text-blue-700', general: 'bg-gray-100 text-gray-700' };
 
   return (
     <div className="min-h-screen pb-24">

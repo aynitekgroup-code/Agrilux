@@ -236,34 +236,19 @@ function ModalAgregarUsuario({ onCerrar, onAgregado }) {
     setLoading(true);
     setError('');
     try {
-      if (form.rol === 'motorizado') {
-        const codigo = 'DEL-' + Math.random().toString(36).slice(2, 6).toUpperCase();
-        const uid = `motorizado_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-        await setDoc(doc(db, 'usuarios', uid), {
-          nombre:         form.nombre.trim(),
-          rol:            'motorizado',
-          celular:        form.celular || null,
-          ubicacion:      form.ubicacion || null,
-          codigoEntrega:  codigo,
-          creadoPor:      'admin',
-          createdAt:      new Date().toISOString(),
-        });
-        onAgregado({ id: uid, ...form, codigoEntrega: codigo, creadoPor: 'admin' });
-      } else {
-        const emailSintetico = nombreToEmail(form.nombre.trim());
-        const uid = `manual_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-        await setDoc(doc(db, 'usuarios', uid), {
-          nombre:         form.nombre.trim(),
-          emailSintetico,
-          rol:            form.rol,
-          celular:        form.celular || null,
-          ubicacion:      form.ubicacion || null,
-          passwordDefault: pass,
-          creadoPor:      'admin',
-          createdAt:      new Date().toISOString(),
-        });
-        onAgregado({ id: uid, ...form, emailSintetico, creadoPor: 'admin' });
-      }
+      const emailSintetico = nombreToEmail(form.nombre.trim());
+      const uid = `manual_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      await setDoc(doc(db, 'usuarios', uid), {
+        nombre:         form.nombre.trim(),
+        emailSintetico,
+        rol:            form.rol,
+        celular:        form.celular || null,
+        ubicacion:      form.ubicacion || null,
+        passwordDefault: pass,
+        creadoPor:      'admin',
+        createdAt:      new Date().toISOString(),
+      });
+      onAgregado({ id: uid, ...form, emailSintetico, creadoPor: 'admin' });
       onCerrar();
     } catch (e) {
       setError('Error al guardar: ' + e.message);
@@ -308,49 +293,30 @@ function ModalAgregarUsuario({ onCerrar, onAgregado }) {
           >
             <option value="agricultor">🌾 Agricultor</option>
             <option value="agronomo">👨‍🔬 Agrónomo</option>
-            <option value="tienda">🏪 Agroveterinaria</option>
-            <option value="motorizado">🏍️ Motorizado</option>
           </select>
         </div>
 
-        {form.rol === 'motorizado' ? (
-          <div className="bg-purple-50 rounded-xl p-3">
-            <p className="text-xs text-purple-700 font-semibold">Código de acceso</p>
-            <p className="text-xs text-purple-600 mt-1">Se generará un código automático (ej: <strong>DEL-ABCD</strong>)</p>
-            <p className="text-xs text-purple-500 mt-1">El motorizado ingresará este código para acceder. No necesita correo ni contraseña.</p>
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Contraseña para el usuario</label>
+          <div className="relative">
+            <input
+              type={verPass ? 'text' : 'password'}
+              value={pass}
+              onChange={e => setPass(e.target.value)}
+              className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary pr-10"
+            />
+            <button onClick={() => setVer(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+              {verPass ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
           </div>
-        ) : (
-          <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-1">Contraseña para el usuario</label>
-            <div className="relative">
-              <input
-                type={verPass ? 'text' : 'password'}
-                value={pass}
-                onChange={e => setPass(e.target.value)}
-                className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary pr-10"
-              />
-              <button onClick={() => setVer(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                {verPass ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-            <p className="text-xs text-gray-400 mt-1">Dile esta clave al agricultor. Podrá ingresar con su nombre completo.</p>
-          </div>
-        )}
+          <p className="text-xs text-gray-400 mt-1">Dile esta clave al agricultor. Podrá ingresar con su nombre completo.</p>
+        </div>
 
-        {form.rol !== 'motorizado' && form.nombre.trim() && (
+        {form.nombre.trim() && (
           <div className="bg-green-50 rounded-xl p-3">
             <p className="text-xs text-green-700 font-semibold">Vista previa de acceso:</p>
             <p className="text-xs text-green-600 mt-1">Nombre: <strong>{form.nombre}</strong></p>
             <p className="text-xs text-green-600">Contraseña: <strong>{pass}</strong></p>
-          </div>
-        )}
-
-        {form.rol === 'motorizado' && (
-          <div className="bg-blue-50 rounded-xl p-3">
-            <p className="text-xs text-blue-700 font-semibold">Instrucciones:</p>
-            <p className="text-xs text-blue-600 mt-1">1. El motorizado abre Agrilux</p>
-            <p className="text-xs text-blue-600">2. Toca "Soy delivery"</p>
-            <p className="text-xs text-blue-600">3. Ingresa el código que le des</p>
           </div>
         )}
 
@@ -359,37 +325,7 @@ function ModalAgregarUsuario({ onCerrar, onAgregado }) {
           disabled={loading || !form.nombre.trim()}
           className="w-full bg-primary text-white font-bold py-3.5 rounded-2xl text-sm disabled:opacity-40 flex items-center justify-center gap-2"
         >
-          {loading ? <><Loader2 size={16} className="animate-spin" /> Guardando...</> : <><UserPlus size={16} /> {form.rol === 'motorizado' ? 'Crear motorizado' : 'Agregar agricultor'}</>}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SOLICITUD CARD
-// ═══════════════════════════════════════════════════════════════════════════════
-function SolicitudCard({ solicitud, onAccion }) {
-  return (
-    <div className="bg-white rounded-2xl p-4 shadow-sm border-l-4 border-yellow-500">
-      <div className="flex justify-between items-start mb-2">
-        <div>
-          <p className="font-bold text-sm text-gray-800">{solicitud.nombre}</p>
-          <p className="text-xs text-gray-500">📱 {solicitud.celular}</p>
-        </div>
-        <span className="text-xs font-bold px-2 py-1 rounded-full bg-yellow-100 text-yellow-700">⏳ Pendiente</span>
-      </div>
-      <p className="text-xs text-gray-600 mb-1">📍 {solicitud.ubicacion}</p>
-      {solicitud.motivo && <p className="text-xs text-gray-400 mb-2 italic">"{solicitud.motivo}"</p>}
-      <p className="text-xs text-gray-400 mb-3">{formatFecha(solicitud.createdAt)}</p>
-      <div className="flex gap-2">
-        <button onClick={() => onAccion('aceptar')}
-          className="flex-1 bg-green-500 text-white text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-1">
-          <CheckCircle size={14} /> Aceptar
-        </button>
-        <button onClick={() => onAccion('rechazar')}
-          className="flex-1 bg-red-100 text-red-600 text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-1">
-          <XCircle size={14} /> Rechazar
+          {loading ? <><Loader2 size={16} className="animate-spin" /> Guardando...</> : <><UserPlus size={16} /> Agregar agricultor</>}
         </button>
       </div>
     </div>
@@ -404,7 +340,6 @@ export default function Admin() {
   const [tab, setTab]               = useState('usuarios');
   const [usuarios, setUsuarios]     = useState([]);
   const [diagnosticos, setDiagnosticos] = useState([]);
-  const [solicitudes, setSolicitudes] = useState([]);
   const [loading, setLoading]       = useState(true);
   const [busqueda, setBusqueda]     = useState('');
   const [expandido, setExpandido]   = useState(null);
@@ -454,7 +389,6 @@ export default function Admin() {
 
     cargar('usuarios', setUsuarios);
     cargar('diagnosticos', setDiagnosticos);
-    cargar('solicitudes', setSolicitudes);
     return () => unsubs.forEach(u => u());
   }, [autorizado]);
 
@@ -576,8 +510,6 @@ export default function Admin() {
           <div id="admin-tabs" className="flex gap-1 bg-white/10 rounded-xl p-1 overflow-x-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.3) transparent' }}>
             {[
               { id: 'usuarios', label: 'Usuarios', icon: Users },
-              { id: 'solicitudes', label: 'Solicitudes', icon: UserPlus },
-              { id: 'motorizados', label: 'Motorizados', icon: Truck },
               { id: 'marketing', label: 'Marketing', icon: Megaphone },
               { id: 'diagnosticos', label: 'Diagnósticos', icon: Camera },
               { id: 'exportar', label: 'Exportar', icon: Download },
@@ -641,10 +573,9 @@ export default function Admin() {
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                           u.rol === 'agronomo' ? 'bg-blue-100 text-blue-600'
-                          : u.rol === 'tienda' ? 'bg-purple-100 text-purple-600'
                           : 'bg-green-100 text-green-600'
                         }`}>
-                          {u.rol === 'agronomo' ? '👨‍🔬 Agrónomo' : u.rol === 'tienda' ? '🏪 Tienda' : '🌾 Agricultor'}
+                          {u.rol === 'agronomo' ? '👨‍🔬 Agrónomo' : '🌾 Agricultor'}
                         </span>
                         {u.creadoPor === 'admin' && (
                           <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Admin</span>
@@ -693,167 +624,6 @@ export default function Admin() {
                 </div>
               ))}
             </div>
-          </>
-        )}
-
-        {/* ── SOLICITUDES ──────────────────────────────────────────────────── */}
-        {tab === 'solicitudes' && (
-          <>
-            <p className="text-xs text-gray-400">
-              {solicitudes.filter(s => s.estado === 'pendiente').length} pendientes · {solicitudes.filter(s => s.estado === 'aceptada').length} aceptadas · {solicitudes.filter(s => s.estado === 'rechazada').length} rechazadas
-            </p>
-
-            {solicitudes.length === 0 && (
-              <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
-                <p className="text-4xl mb-3">📋</p>
-                <p className="text-gray-500 text-sm">No hay solicitudes aún</p>
-              </div>
-            )}
-
-            {solicitudes.filter(s => s.estado === 'pendiente').length > 0 && (
-              <p className="text-xs font-bold text-yellow-600 uppercase tracking-wide mt-2">⏳ Pendientes</p>
-            )}
-            {solicitudes.filter(s => s.estado === 'pendiente').map(s => (
-              <SolicitudCard key={s.id} solicitud={s} onAccion={async (accion) => {
-                try {
-                  if (accion === 'aceptar') {
-                    const codigo = 'DEL-' + Math.random().toString(36).slice(2, 6).toUpperCase();
-                    await setDoc(doc(db, 'usuarios', s.userId), {
-                      codigoEntrega: codigo,
-                      motorizadoAutorizado: true,
-                    }, { merge: true });
-                    await setDoc(doc(db, 'solicitudes', s.id), { estado: 'aceptada', codigoEntrega: codigo }, { merge: true });
-                  } else {
-                    await setDoc(doc(db, 'solicitudes', s.id), { estado: 'rechazada' }, { merge: true });
-                  }
-                } catch (e) {
-                  alert('Error al procesar solicitud: ' + e.message);
-                }
-              }} />
-            ))}
-
-            {solicitudes.filter(s => s.estado === 'aceptada').length > 0 && (
-              <p className="text-xs font-bold text-green-600 uppercase tracking-wide mt-2">✅ Aceptadas</p>
-            )}
-            {solicitudes.filter(s => s.estado === 'aceptada').map(s => (
-              <div key={s.id} className="bg-white rounded-2xl p-4 shadow-sm border-l-4 border-green-500">
-                <p className="font-bold text-sm text-gray-800">{s.nombre}</p>
-                <p className="text-xs text-gray-500">📱 {s.celular} · 📍 {s.ubicacion}</p>
-                {s.codigoEntrega && <p className="text-xs text-green-600 font-semibold mt-1">Código: {s.codigoEntrega}</p>}
-              </div>
-            ))}
-
-            {solicitudes.filter(s => s.estado === 'rechazada').length > 0 && (
-              <p className="text-xs font-bold text-red-500 uppercase tracking-wide mt-2">❌ Rechazadas</p>
-            )}
-            {solicitudes.filter(s => s.estado === 'rechazada').map(s => (
-              <div key={s.id} className="bg-white rounded-2xl p-4 shadow-sm opacity-60">
-                <p className="font-bold text-sm text-gray-800">{s.nombre}</p>
-                <p className="text-xs text-gray-500">📱 {s.celular}</p>
-              </div>
-            ))}
-          </>
-        )}
-
-        {/* ── MOTORIZADOS ──────────────────────────────────────────────────── */}
-        {tab === 'motorizados' && (
-          <>
-            <div className="flex gap-2">
-              <div className="flex-1 flex items-center bg-white rounded-xl px-3 gap-2 shadow-sm border border-gray-100">
-                <Search size={14} className="text-gray-400" />
-                <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
-                  placeholder="Buscar motorizado..."
-                  className="flex-1 py-2.5 text-sm outline-none" />
-                {busqueda && <button onClick={() => setBusqueda('')}><X size={14} className="text-gray-400" /></button>}
-              </div>
-              <button
-                onClick={() => setModalAgregar(true)}
-                className="bg-primary text-white rounded-xl px-4 flex items-center gap-1.5 text-sm font-bold shadow-sm">
-                <Plus size={16} /> Agregar
-              </button>
-            </div>
-
-            {(() => {
-              const motorizados = usuariosFiltrados.filter(u => u.rol === 'motorizado');
-              return (
-                <>
-                  <p className="text-xs text-gray-400">{motorizados.length} motorizados registrados</p>
-                  <div className="space-y-2">
-                    {motorizados.length === 0 && (
-                      <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
-                        <p className="text-4xl mb-3">🏍️</p>
-                        <p className="text-gray-500 text-sm">No hay motorizados registrados.</p>
-                        <p className="text-xs text-gray-400 mt-1">Agrega uno con el botón "Agregar" y selecciona rol "Motorizado"</p>
-                      </div>
-                    )}
-                    {motorizados.map(m => (
-                      <div key={m.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
-                        <button onClick={() => setExpandido(expandido === m.id ? null : m.id)}
-                          className="w-full flex items-center gap-3 p-4 text-left">
-                          <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center text-base font-bold text-purple-700 flex-shrink-0">
-                            {m.nombre?.[0]?.toUpperCase() || '?'}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-sm text-gray-800 truncate">{m.nombre || 'Sin nombre'}</p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-600">
-                                🏍️ Motorizado
-                              </span>
-                              {m.celular && <span className="text-xs text-gray-400">📱 {m.celular}</span>}
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end gap-1">
-                            <p className="text-xs text-gray-300">{formatFecha(m.createdAt)}</p>
-                            {expandido === m.id ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
-                          </div>
-                        </button>
-                        {expandido === m.id && (
-                          <div className="px-4 pb-4 border-t border-gray-50 pt-3 space-y-2">
-                            {m.codigoEntrega && (
-                              <div className="bg-purple-50 rounded-xl p-3 flex items-center justify-between">
-                                <div>
-                                  <p className="text-xs text-purple-600 font-semibold">Código de acceso</p>
-                                  <p className="text-lg font-mono font-bold text-purple-700 tracking-wider">{m.codigoEntrega}</p>
-                                </div>
-                                <button onClick={() => { navigator.clipboard.writeText(m.codigoEntrega); }}
-                                  className="text-xs bg-purple-100 text-purple-600 px-3 py-1.5 rounded-lg font-semibold">
-                                  Copiar
-                                </button>
-                              </div>
-                            )}
-                            <div className="grid grid-cols-2 gap-2">
-                              {[
-                                { icon: Phone, label: 'Celular', val: m.celular || '—' },
-                                { icon: MapPin, label: 'Ubicación', val: m.ubicacion || '—' },
-                                { icon: Calendar, label: 'Registro', val: formatFecha(m.createdAt) },
-                              ].map(({ icon: Icon, label, val }) => (
-                                <div key={label} className="bg-gray-50 rounded-xl p-3">
-                                  <div className="flex items-center gap-1 mb-1"><Icon size={11} className="text-gray-400" /><p className="text-xs text-gray-400">{label}</p></div>
-                                  <p className="text-sm font-semibold text-gray-700 truncate">{val}</p>
-                                </div>
-                              ))}
-                            </div>
-                            {m.celular && (
-                              <a href={`https://wa.me/51${m.celular.replace(/\D/g, '')}`} target="_blank" rel="noreferrer"
-                                className="flex items-center justify-center gap-2 bg-green-500 text-white rounded-xl py-2.5 text-sm font-semibold">
-                                💬 Contactar por WhatsApp
-                              </a>
-                            )}
-                            <button onClick={async () => {
-                              if (!confirm(`¿Eliminar motorizado "${m.nombre}"?`)) return;
-                              await deleteDoc(doc(db, 'usuarios', m.id));
-                            }}
-                              className="w-full bg-red-50 text-red-600 text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-1 mt-1">
-                              🗑️ Eliminar motorizado
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              );
-            })()}
           </>
         )}
 

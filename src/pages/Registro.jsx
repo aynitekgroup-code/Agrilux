@@ -8,7 +8,7 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
-import { Loader2, Eye, EyeOff, User, Mail, Phone, Truck } from 'lucide-react';
+import { Loader2, Eye, EyeOff, User, Mail, Phone } from 'lucide-react';
 import DOMPurify from 'dompurify';
 
 // Unificamos mensajes de error para evitar enumeración de usuarios y códigos.
@@ -29,7 +29,7 @@ function msgError(code) {
 }
 
 export default function Registro() {
-  const { register, login, loginMotorizado } = useAuth();
+  const { register, login } = useAuth();
   const navigate = useNavigate();
 
   const [modo, setModo]       = useState('login');
@@ -38,9 +38,6 @@ export default function Registro() {
   const [celular, setCelular] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
-
-  const [modoDelivery, setModoDelivery] = useState(false);
-  const [codigoDelivery, setCodigoDelivery] = useState('');
 
   // Ref para evitar race conditions: si ya hay una petición en vuelo, no lanzar otra.
   const submittingRef = useRef(false);
@@ -79,23 +76,6 @@ export default function Registro() {
       } else {
         await login({ celular });
       }
-    } catch (e) {
-      setError(msgError(e.code));
-    } finally {
-      setLoading(false);
-      submittingRef.current = false;
-    }
-  };
-
-  const handleDelivery = async () => {
-    setError('');
-    if (submittingRef.current) return;
-    submittingRef.current = true;
-    if (!codigoDelivery.trim()) { setError('Ingresa tu código de delivery.'); submittingRef.current = false; return; }
-
-    setLoading(true);
-    try {
-      await loginMotorizado({ codigo: codigoDelivery.trim() });
     } catch (e) {
       setError(msgError(e.code));
     } finally {
@@ -279,66 +259,6 @@ export default function Registro() {
             · · ·
           </button>
         </div>
-
-        {/* Botón Soy Delivery */}
-        {!modoDelivery && (
-          <button
-            onClick={() => { setModoDelivery(true); setError(''); }}
-            className="mt-4 w-full flex items-center justify-center gap-2 bg-purple-50 border-2 border-purple-200 text-purple-700 font-bold py-3.5 rounded-2xl text-sm hover:bg-purple-100 transition-colors"
-          >
-            <Truck size={18} /> Soy delivery
-          </button>
-        )}
-
-        {/* Panel Delivery */}
-        {modoDelivery && (
-          <div className="mt-4 bg-white rounded-3xl shadow-xl p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Truck size={18} className="text-purple-600" />
-                <h3 className="font-bold text-purple-700">Delivery</h3>
-              </div>
-              <button onClick={() => { setModoDelivery(false); setCodigoDelivery(''); setError(''); }}
-                className="text-xs text-gray-400 underline">Cancelar</button>
-            </div>
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-3">
-                <p className="text-red-600 text-sm">{error}</p>
-              </div>
-            )}
-
-            <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1.5">
-                Tu código de delivery
-              </label>
-              <input
-                value={codigoDelivery}
-                onChange={e => setCodigoDelivery(e.target.value.toUpperCase())}
-                onKeyDown={e => e.key === 'Enter' && handleDelivery()}
-                placeholder="Ej: DEL-ABCD"
-                className="w-full border-2 border-purple-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-colors tracking-widest font-mono text-center text-lg"
-                autoComplete="off"
-              />
-              <p className="text-xs text-gray-400 mt-2 text-center">
-                Solicita tu código al administrador de tu zona
-              </p>
-            </div>
-
-            <button
-              onClick={handleDelivery}
-              disabled={loading || !codigoDelivery.trim()}
-              className="w-full bg-purple-600 text-white font-bold py-4 rounded-2xl text-base hover:bg-purple-700 transition-colors disabled:opacity-50 shadow-lg"
-            >
-              {loading
-                ? <span className="flex items-center justify-center gap-2">
-                    <Loader2 size={20} className="animate-spin" /> Verificando...
-                  </span>
-                : 'Entrar como delivery →'
-              }
-            </button>
-          </div>
-        )}
 
       </div>
     </div>
