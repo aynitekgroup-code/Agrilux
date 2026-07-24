@@ -5,6 +5,7 @@ import Layout from './components/Layout';
 import SelectorUbicacion from './components/SelectorUbicacion';
 import Registro from './pages/Registro';
 import Diagnostico from './pages/Diagnostico';
+import MiParcela from './pages/MiParcela';
 import Admin from './pages/Admin';
 
 function AppRoutes() {
@@ -39,16 +40,16 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/admin" element={<Admin />} />
+      <Route path="/registro" element={<Registro />} />
 
       <Route path="*" element={
-        !user ? <Registro /> : (
-          <Layout>
-            <Routes>
-              <Route path="/" element={<Diagnostico onPlagaDetectada={setPlagaDetectada} />} />
-              <Route path="*" element={<Navigate to="/" />} />
-            </Routes>
-          </Layout>
-        )
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Diagnostico onPlagaDetectada={setPlagaDetectada} />} />
+            <Route path="/parcela" element={user ? <MiParcela /> : <Navigate to="/registro" />} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </Layout>
       } />
     </Routes>
   );

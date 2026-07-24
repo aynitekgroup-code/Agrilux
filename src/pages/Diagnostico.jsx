@@ -30,7 +30,7 @@ const COLOR_HEADER = {
 };
 
 export default function Diagnostico({ onPlagaDetectada }) {
-  const { user }   = useAuth();
+  const { user } = useAuth();
 
   const [cultivo, setCultivo]           = useState(CULTIVOS[0]);
   const [fotos, setFotos]               = useState([]);
@@ -65,7 +65,7 @@ export default function Diagnostico({ onPlagaDetectada }) {
   const [mostrarSelectorUbicacion, setMostrarSelectorUbicacion] = useState(false);
   const [leyendoSeccion, setLeyendoSeccion] = useState(null);
 
-  const ubicacionEfectiva = (ubicacion || user?.ubicacion || '').trim();
+  const ubicacionEfectiva = (ubicacion || user?.ubicacion || localStorage.getItem('agrilux_ubicacion') || '').trim();
 
   // ── Geolocalización silenciosa al montar ─────────────────────────────────────
   // Intenta obtener ubicación del navegador en background, sin mostrar nada al usuario
@@ -974,7 +974,7 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
       {mostrarSelectorUbicacion && (
         <div className="fixed inset-0 z-50 bg-white/95 flex items-center justify-center" style={{ backdropFilter: 'blur(4px)' }}>
           <div className="w-full max-w-[430px] mx-auto relative">
-            <SelectorUbicacion esPrimeraVez={false} onClose={() => setMostrarSelectorUbicacion(false)} />
+            <SelectorUbicacion esPrimeraVez={false} onClose={() => setMostrarSelectorUbicacion(false)} onGuardar={(ubi) => setUbicacion(ubi)} />
           </div>
         </div>
       )}

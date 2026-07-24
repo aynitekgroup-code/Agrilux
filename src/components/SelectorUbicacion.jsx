@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader2, MapPin, Mic, Navigation, Check, X } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 
-export default function SelectorUbicacion({ esPrimeraVez, onClose }) {
+export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) {
   const { user, updateUbicacion } = useAuth();
   const [ubicacion, setUbicacion] = useState(user?.ubicacion || '');
   const [detectando, setDetectando] = useState(false);
@@ -91,7 +91,12 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose }) {
     setConfirmando(true);
     setError('');
     try {
-      await updateUbicacion(ubicacion.trim());
+      if (user) {
+        await updateUbicacion(ubicacion.trim());
+      } else {
+        localStorage.setItem('agrilux_ubicacion', ubicacion.trim());
+      }
+      onGuardar?.(ubicacion.trim());
       if (!esPrimeraVez) onClose?.();
     } catch {
       setError('Error al guardar. Intenta de nuevo.');

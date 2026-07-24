@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, ShieldCheck, LogOut, Menu, X, MapPin, Shield } from 'lucide-react';
+import { Camera, Leaf, LogOut, Menu, X, MapPin, Shield, User } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import SelectorUbicacion from './SelectorUbicacion';
 
 const navItemsAgricultor = [
-  { path: '/',        icon: Camera,      label: 'Diagnóstico' },
-  { path: '/parcela', icon: ShieldCheck, label: 'Mi Parcela'  },
+  { path: '/',        icon: Camera, label: 'Diagnóstico' },
+  { path: '/parcela', icon: Leaf,   label: 'Mi Parcela'  },
 ];
 
 export default function Layout({ children }) {
@@ -70,28 +70,37 @@ export default function Layout({ children }) {
           </button>
           {menuOpen && (
             <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-100 z-50">
-              {user?.rol !== 'motorizado' && (
-                <button
-                  onClick={() => { setMenuOpen(false); setMostrarUbicacion(true); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg">
-                  <MapPin size={18} />
-                  Cambiar ubicación
-                </button>
-              )}
-              {esAdmin && (
-                <button
-                  onClick={handleActuarAdmin}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors text-sm font-medium rounded-lg">
-                  <Shield size={18} />
-                  Actuar como administrador
-                </button>
-              )}
               <button
-                onClick={handleLogout}
-                className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors text-sm font-medium rounded-lg">
-                <LogOut size={18} />
-                Cerrar sesión
+                onClick={() => { setMenuOpen(false); setMostrarUbicacion(true); }}
+                className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg">
+                <MapPin size={18} />
+                Cambiar ubicación
               </button>
+              {user ? (
+                <>
+                  {esAdmin && (
+                    <button
+                      onClick={handleActuarAdmin}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors text-sm font-medium rounded-lg">
+                      <Shield size={18} />
+                      Actuar como administrador
+                    </button>
+                  )}
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors text-sm font-medium rounded-lg">
+                    <LogOut size={18} />
+                    Cerrar sesión
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => { setMenuOpen(false); navigate('/registro'); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-primary/5 transition-colors text-sm font-medium rounded-lg">
+                  <User size={18} />
+                  Iniciar sesión
+                </button>
+              )}
             </div>
           )}
         </div>
