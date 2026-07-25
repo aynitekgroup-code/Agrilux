@@ -1,17 +1,16 @@
 /**
  * src/pages/Registro.jsx
  *
- * Registro: nombre completo + correo + celular
- * Login:    solo número de celular
+ * Registro: nombre completo + correo + celular + contraseña
+ * Login:    correo + contraseña
  */
 
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
-import { Loader2, Eye, EyeOff, User, Mail, Phone } from 'lucide-react';
+import { Loader2, Eye, EyeOff, User, Mail, Phone, Lock } from 'lucide-react';
 import DOMPurify from 'dompurify';
 
-// Unificamos mensajes de error para evitar enumeración de usuarios y códigos.
 const ERRORES = {
   'agrilux/celular-en-uso':        'Credenciales no válidas.',
   'agrilux/celular-no-encontrado': 'Credenciales no válidas.',
@@ -19,8 +18,8 @@ const ERRORES = {
   'agrilux/codigo-no-encontrado':  'Credenciales no válidas.',
   'auth/email-already-in-use':     'Este correo ya está registrado.',
   'auth/invalid-email':            'El correo no es válido.',
-  'auth/weak-password':            'Número de celular inválido.',
-  'auth/invalid-credential':       'Credenciales incorrectas.',
+  'auth/weak-password':            'La contraseña debe tener al menos 6 caracteres.',
+  'auth/invalid-credential':       'Correo o contraseña incorrectos.',
   'auth/too-many-requests':        'Demasiados intentos. Espera unos minutos.',
 };
 
@@ -32,22 +31,22 @@ export default function Registro() {
   const { register, login } = useAuth();
   const navigate = useNavigate();
 
-  const [modo, setModo]       = useState('login');
-  const [nombre, setNombre]   = useState('');
-  const [email, setEmail]     = useState('');
-  const [celular, setCelular] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState('');
+  const [modo, setModo]         = useState('login');
+  const [nombre, setNombre]     = useState('');
+  const [email, setEmail]       = useState('');
+  const [celular, setCelular]   = useState('');
+  const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState('');
 
-  // Ref para evitar race conditions: si ya hay una petición en vuelo, no lanzar otra.
   const submittingRef = useRef(false);
 
   const cambiarModo = (m) => {
     setModo(m); setError('');
-    setNombre(''); setEmail(''); setCelular('');
+    setNombre(''); setEmail(''); setCelular(''); setPassword('');
   };
 
-  // Solo dígitos, máximo 9
   const handleCelular = (val) => {
     const solo = val.replace(/\D/g, '').slice(0, 9);
     setCelular(solo);
@@ -63,18 +62,19 @@ export default function Registro() {
       if (!nombre.trim())       { setError('Ingresa tu nombre completo.'); submittingRef.current = false; return; }
       if (!email.trim())        { setError('Ingresa tu correo electrónico.'); submittingRef.current = false; return; }
       if (celular.length !== 9) { setError('El número de celular debe tener 9 dígitos.'); submittingRef.current = false; return; }
+      if (password.length < 6)  { setError('La contraseña debe tener al menos 6 caracteres.'); submittingRef.current = false; return; }
     } else {
-      if (celular.length !== 9) { setError('Ingresa tu número de celular (9 dígitos).'); submittingRef.current = false; return; }
+      if (!email.trim())        { setError('Ingresa tu correo electrónico.'); submittingRef.current = false; return; }
+      if (!password)            { setError('Ingresa tu contraseña.'); submittingRef.current = false; return; }
     }
 
     setLoading(true);
     try {
       if (modo === 'registro') {
-        // Sanitizar el nombre para prevenir XSS almacenado
         const nombreSanitizado = DOMPurify.sanitize(nombre).trim();
-        await register({ nombre: nombreSanitizado, email, celular });
+        await register({ nombre: nombreSanitizado, email, celular, password });
       } else {
-        await login({ celular });
+        await login({ email, password });
       }
     } catch (e) {
       setError(msgError(e.code));
@@ -128,9 +128,7 @@ export default function Registro() {
             <>
               {/* Nombre */}
               <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1.5">
-                  Nombre completo
-                </label>
+                <label className="text-xs font-semibold text-gray-600 block mb-1.5">Nombre completo</label>
                 <div className="relative">
                   <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
                   <input
@@ -143,78 +141,85 @@ export default function Registro() {
                   />
                 </div>
               </div>
-
-              {/* Correo */}
-              <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1.5">
-                  Correo electrónico
-                </label>
-                <div className="relative">
-                  <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                    placeholder="tucorreo@gmail.com"
-                    className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
-                    autoComplete="email"
-                    inputMode="email"
-                  />
-                </div>
-              </div>
             </>
           )}
 
-          {/* ── CELULAR (login y registro) ── */}
+          {/* ── CORREO (siempre visible) ── */}
           <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-1.5">
-              {modo === 'login' ? 'Número de celular' : 'Número de celular (tu clave de acceso)'}
-            </label>
+            <label className="text-xs font-semibold text-gray-600 block mb-1.5">Correo electrónico</label>
             <div className="relative">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                <span className="text-xs text-gray-400 font-semibold">🇵🇪 +51</span>
-              </div>
+              <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
               <input
-                type="tel"
-                value={celular}
-                onChange={e => handleCelular(e.target.value)}
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                placeholder="9XX XXX XXX"
-                maxLength={9}
-                inputMode="numeric"
-                pattern="[0-9]*"
-                className="w-full border-2 border-gray-100 rounded-2xl pl-16 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors tracking-widest font-mono"
-                autoComplete="tel"
+                placeholder="tucorreo@gmail.com"
+                className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                autoComplete="email"
+                inputMode="email"
               />
             </div>
+          </div>
 
-            {/* Indicador de progreso */}
-            <div className="flex gap-1 mt-2 px-1">
-              {Array.from({ length: 9 }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`flex-1 h-1 rounded-full transition-all duration-150 ${
-                    i < celular.length ? 'bg-primary' : 'bg-gray-100'
-                  }`}
+          {/* ── CELULAR (solo registro) ── */}
+          {modo === 'registro' && (
+            <div>
+              <label className="text-xs font-semibold text-gray-600 block mb-1.5">Número de celular</label>
+              <div className="relative">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                  <span className="text-xs text-gray-400 font-semibold">🇵🇪 +51</span>
+                </div>
+                <input
+                  type="tel"
+                  value={celular}
+                  onChange={e => handleCelular(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                  placeholder="9XX XXX XXX"
+                  maxLength={9}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="w-full border-2 border-gray-100 rounded-2xl pl-16 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors tracking-widest font-mono"
+                  autoComplete="tel"
                 />
-              ))}
+              </div>
+              <div className="flex gap-1 mt-2 px-1">
+                {Array.from({ length: 9 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`flex-1 h-1 rounded-full transition-all duration-150 ${
+                      i < celular.length ? 'bg-primary' : 'bg-gray-100'
+                    }`}
+                  />
+                ))}
+              </div>
             </div>
+          )}
 
-            {celular.length > 0 && celular.length < 9 && (
-              <p className="text-xs text-gray-400 mt-1 ml-1">{celular.length}/9 dígitos</p>
-            )}
-            {celular.length === 9 && (
-              <p className="text-xs text-green-500 mt-1 ml-1 flex items-center gap-1">
-                ✓ Número completo
-              </p>
-            )}
-
-            {modo === 'login' && (
-              <p className="text-xs text-gray-400 mt-2 ml-1">
-                Ingresa el número con el que te registraste
-              </p>
-            )}
+          {/* ── CONTRASEÑA (siempre visible) ── */}
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1.5">
+              {modo === 'login' ? 'Contraseña' : 'Crear contraseña'}
+            </label>
+            <div className="relative">
+              <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
+              <input
+                type={showPass ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                placeholder={modo === 'login' ? 'Tu contraseña' : 'Mínimo 6 caracteres'}
+                className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-12 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                autoComplete={modo === 'login' ? 'current-password' : 'new-password'}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass(!showPass)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           {/* Botón */}
@@ -231,11 +236,6 @@ export default function Registro() {
             }
           </button>
 
-          {modo === 'registro' && (
-            <p className="text-xs text-gray-400 text-center">
-              Tu número de celular es tu clave de acceso. Guárdalo bien.
-            </p>
-          )}
         </div>
 
         {/* Pie */}
@@ -251,7 +251,6 @@ export default function Registro() {
               935 211 605
             </a>
           </p>
-          {/* Acceso admin discreto */}
           <button
             onClick={() => navigate('/admin')}
             className="text-xs text-gray-300 hover:text-gray-500 transition-colors"

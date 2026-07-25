@@ -1,11 +1,8 @@
 /**
  * src/lib/AuthContext.jsx
  *
- * Registro: nombre completo + correo + celular (9 dígitos)
- * Login:    solo celular → busca email en Firestore → inicia sesión
- *
- * El celular actúa como contraseña en Firebase Auth internamente.
- * El usuario solo necesita recordar su número de celular.
+ * Registro: nombre completo + correo + celular + contraseña
+ * Login:    correo + contraseña
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
@@ -47,18 +44,16 @@ export const AuthProvider = ({ children }) => {
     return () => unsub();
   }, []);
 
-  // ── Registro: nombre + email + celular ────────────────────────────────────
-  const register = async ({ nombre, email, celular }) => {
-    // Verificar que el celular no esté ya registrado
+  // ── Registro: nombre + email + celular + contraseña ────────────────────────
+  const register = async ({ nombre, email, celular, password }) => {
     const q = query(collection(db, 'usuarios'), where('celular', '==', celular));
     const existe = await getDocs(q);
     if (!existe.empty) throw { code: 'agrilux/celular-en-uso' };
 
-    // Celular como contraseña Firebase (9 dígitos = suficiente para Firebase min 6)
     const cred = await createUserWithEmailAndPassword(
       auth,
       email.trim().toLowerCase(),
-      celular
+      password
     );
     await updateProfile(cred.user, { displayName: nombre.trim() });
     await setDoc(doc(db, 'usuarios', cred.user.uid), {
@@ -79,20 +74,13 @@ export const AuthProvider = ({ children }) => {
     return cred.user;
   };
 
-  // ── Login: solo celular → encuentra email → inicia sesión ─────────────────
-  const login = async ({ celular }) => {
-    // Buscar usuario por celular en Firestore
-    const q = query(collection(db, 'usuarios'), where('celular', '==', celular));
-    const snap = await getDocs(q);
-
-    if (snap.empty) throw { code: 'agrilux/celular-no-encontrado' };
-
-    const perfil = snap.docs[0].data();
-    const email  = perfil.email;
-    if (!email) throw { code: 'agrilux/sin-email' };
-
-    // El celular ES la contraseña en Firebase
-    const cred = await signInWithEmailAndPassword(auth, email, celular);
+  // ── Login: correo + contraseña ─────────────────────────────────────────────
+  const login = async ({ email, password }) => {
+    const cred = await signInWithEmailAndPassword(
+      auth,
+      email.trim().toLowerCase(),
+      password
+    );
     return cred.user;
   };
 
