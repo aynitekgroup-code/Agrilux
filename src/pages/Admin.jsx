@@ -13,7 +13,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../lib/firebase';
-import { collection, getDocs, query, orderBy, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, updateDoc, where } from 'firebase/firestore';
 import { useAuth } from '../lib/AuthContext';
 import JSZip from 'jszip';
 import {
@@ -21,7 +21,7 @@ import {
   Search, X, MapPin, Phone, Calendar, TrendingUp, CloudUpload,
   CheckCircle, AlertCircle, Loader2, FolderOpen, ExternalLink,
   Plus, Eye, EyeOff, Lock, UserPlus, LogOut, Truck, XCircle,
-  Megaphone
+  Megaphone, UserCheck, UserX, Bell
 } from 'lucide-react';
 import Marketing from '../components/Marketing';
 
@@ -333,6 +333,148 @@ function ModalAgregarUsuario({ onCerrar, onAgregado }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// SOLICITUDES PENDIENTES
+// ═══════════════════════════════════════════════════════════════════════════════
+function SolicitudesPendientes({ usuarios, diagnosticos, onActualizar }) {
+  const [procesando, setProcesando] = useState(null);
+
+  const pendientes = usuarios.filter(u => u.status === 'pendiente');
+  const aprobados = usuarios.filter(u => u.status === 'aprobado' || (!u.status && u.creadoPor !== 'self'));
+  const rechazados = usuarios.filter(u => u.status === 'rechazado');
+
+  const aprobar = async (uid) => {
+    setProcesando(uid);
+    try {
+      await updateDoc(doc(db, 'usuarios', uid), { status: 'aprobado' });
+      onActualizar(uid, 'aprobado');
+    } catch (e) {
+      console.error('Error al aprobar:', e);
+    }
+    setProcesando(null);
+  };
+
+  const rechazar = async (uid) => {
+    setProcesando(uid);
+    try {
+      await updateDoc(doc(db, 'usuarios', uid), { status: 'rechazado' });
+      onActualizar(uid, 'rechazado');
+    } catch (e) {
+      console.error('Error al rechazar:', e);
+    }
+    setProcesando(null);
+  };
+
+  const restaurar = async (uid) => {
+    setProcesando(uid);
+    try {
+      await updateDoc(doc(db, 'usuarios', uid), { status: 'aprobado' });
+      onActualizar(uid, 'aprobado');
+    } catch (e) {
+      console.error('Error al restaurar:', e);
+    }
+    setProcesando(null);
+  };
+
+  return (
+    <>
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { label: 'Pendientes', val: pendientes.length, emoji: '⏳', color: 'bg-amber-50 text-amber-700' },
+          { label: 'Aprobados', val: aprobados.length, emoji: '✅', color: 'bg-green-50 text-green-700' },
+          { label: 'Rechazados', val: rechazados.length, emoji: '❌', color: 'bg-red-50 text-red-700' },
+        ].map(s => (
+          <div key={s.label} className={`${s.color} rounded-xl p-3 text-center`}>
+            <p className="text-lg">{s.emoji}</p>
+            <p className="text-lg font-bold">{s.val}</p>
+            <p className="text-xs opacity-70">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Pendientes */}
+      {pendientes.length > 0 && (
+        <div>
+          <p className="text-xs font-bold text-amber-600 uppercase tracking-wide mb-2">⏳ Esperando aprobación ({pendientes.length})</p>
+          <div className="space-y-2">
+            {pendientes.map(u => (
+              <div key={u.id} className="bg-white rounded-2xl shadow-sm p-4 border border-amber-200">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-lg font-bold text-amber-700">
+                    {u.nombre?.[0]?.toUpperCase() || '?'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-gray-800 truncate">{u.nombre}</p>
+                    <p className="text-xs text-gray-400">{u.email}</p>
+                    {u.celular && <p className="text-xs text-gray-400">📱 {u.celular}</p>}
+                    <p className="text-xs text-gray-300 mt-1">📅 {formatFecha(u.createdAt)}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => aprobar(u.id)}
+                    disabled={procesando === u.id}
+                    className="flex-1 bg-green-600 text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    {procesando === u.id ? <Loader2 size={14} className="animate-spin" /> : <UserCheck size={14} />}
+                    Aprobar
+                  </button>
+                  <button
+                    onClick={() => rechazar(u.id)}
+                    disabled={procesando === u.id}
+                    className="flex-1 bg-red-100 text-red-600 font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    {procesando === u.id ? <Loader2 size={14} className="animate-spin" /> : <UserX size={14} />}
+                    Rechazar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {pendientes.length === 0 && (
+        <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
+          <p className="text-4xl mb-3">✅</p>
+          <p className="text-gray-500 text-sm">No hay solicitudes pendientes.</p>
+          <p className="text-gray-400 text-xs mt-1">Cuando un usuario se registre, aparecerá aquí.</p>
+        </div>
+      )}
+
+      {/* Rechazados (opcional) */}
+      {rechazados.length > 0 && (
+        <div>
+          <p className="text-xs font-bold text-red-400 uppercase tracking-wide mb-2">❌ Rechazados ({rechazados.length})</p>
+          <div className="space-y-2">
+            {rechazados.map(u => (
+              <div key={u.id} className="bg-white rounded-2xl shadow-sm p-4 border border-red-100 opacity-60">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-red-50 rounded-full flex items-center justify-center text-sm font-bold text-red-400">
+                    {u.nombre?.[0]?.toUpperCase() || '?'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-gray-600 truncate">{u.nombre}</p>
+                    <p className="text-xs text-gray-400">{u.email}</p>
+                  </div>
+                  <button
+                    onClick={() => restaurar(u.id)}
+                    disabled={procesando === u.id}
+                    className="text-xs bg-green-100 text-green-600 px-3 py-1.5 rounded-lg font-semibold"
+                  >
+                    Restaurar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // PANEL ADMIN PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function Admin() {
@@ -459,6 +601,7 @@ export default function Admin() {
   );
 
   const enProceso = ['preparando', 'zipeando', 'subiendo_drive'].includes(exportState);
+  const pendientesCount = usuarios.filter(u => u.status === 'pendiente').length;
 
   if (!autorizado) return <LoginAdmin onAcceso={handleAcceso} />;
 
@@ -509,15 +652,21 @@ export default function Admin() {
         <div className="relative">
           <div id="admin-tabs" className="flex gap-1 bg-white/10 rounded-xl p-1 overflow-x-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.3) transparent' }}>
             {[
+              { id: 'solicitudes', label: 'Solicitudes', icon: Bell },
               { id: 'usuarios', label: 'Usuarios', icon: Users },
               { id: 'marketing', label: 'Marketing', icon: Megaphone },
               { id: 'diagnosticos', label: 'Diagnósticos', icon: Camera },
               { id: 'exportar', label: 'Exportar', icon: Download },
             ].map(({ id, label, icon: Icon }) => (
               <button key={id} onClick={() => { setTab(id); setBusqueda(''); setExpandido(null); }}
-                className={`flex-shrink-0 flex flex-col items-center py-2 px-3 rounded-lg text-xs font-semibold gap-0.5 transition-all min-w-[70px] ${tab === id ? 'bg-white text-gray-900' : 'text-white/60'}`}>
+                className={`flex-shrink-0 flex flex-col items-center py-2 px-3 rounded-lg text-xs font-semibold gap-0.5 transition-all min-w-[70px] relative ${tab === id ? 'bg-white text-gray-900' : 'text-white/60'}`}>
                 <Icon size={14} />
                 {label}
+                {id === 'solicitudes' && pendientesCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                    {pendientesCount}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -528,6 +677,17 @@ export default function Admin() {
       </div>
 
       <div className="px-4 py-4 space-y-3">
+
+        {/* ── SOLICITUDES PENDIENTES ───────────────────────────────────────── */}
+        {tab === 'solicitudes' && (
+          <SolicitudesPendientes
+            usuarios={usuarios}
+            diagnosticos={diagnosticos}
+            onActualizar={(uid, nuevoStatus) => {
+              setUsuarios(prev => prev.map(u => u.id === uid ? { ...u, status: nuevoStatus } : u));
+            }}
+          />
+        )}
 
         {/* ── USUARIOS ──────────────────────────────────────────────────────── */}
         {tab === 'usuarios' && (

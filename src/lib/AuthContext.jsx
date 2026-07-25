@@ -1,8 +1,8 @@
 /**
  * src/lib/AuthContext.jsx
  *
- * Registro: nombre completo + correo + celular + contraseña
- * Login:    correo + contraseña
+ * Registro: nombre completo + correo + celular + contraseña → status: 'pendiente'
+ * Login:    correo + contraseña → si status !== 'aprobado', bloqueado
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
@@ -34,6 +34,7 @@ export const AuthProvider = ({ children }) => {
           uid:    firebaseUser.uid,
           email:  firebaseUser.email,
           nombre: firebaseUser.displayName || perfil.nombre || '',
+          status: perfil.status || 'aprobado', // default aprobado para admins creados
           ...perfil,
         });
       } else {
@@ -44,7 +45,7 @@ export const AuthProvider = ({ children }) => {
     return () => unsub();
   }, []);
 
-  // ── Registro: nombre + email + celular + contraseña ────────────────────────
+  // ── Registro: status = 'pendiente' (requiere aprobación del admin) ──────
   const register = async ({ nombre, email, celular, password }) => {
     const q = query(collection(db, 'usuarios'), where('celular', '==', celular));
     const existe = await getDocs(q);
@@ -61,6 +62,7 @@ export const AuthProvider = ({ children }) => {
       email:     email.trim().toLowerCase(),
       celular,
       rol:       'agricultor',
+      status:    'pendiente',
       creadoPor: 'self',
       createdAt: new Date().toISOString(),
     });
@@ -70,6 +72,7 @@ export const AuthProvider = ({ children }) => {
       nombre: nombre.trim(),
       celular,
       rol:    'agricultor',
+      status: 'pendiente',
     });
     return cred.user;
   };
@@ -95,8 +98,11 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  // Helper: ¿el usuario está aprobado?
+  const isAprobado = user?.status === 'aprobado' || user?.rol === 'admin';
+
   return (
-    <AuthContext.Provider value={{ user, loading, register, login, logout, updateUbicacion }}>
+    <AuthContext.Provider value={{ user, loading, register, login, logout, updateUbicacion, isAprobado }}>
       {children}
     </AuthContext.Provider>
   );
