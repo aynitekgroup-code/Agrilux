@@ -14,18 +14,18 @@ PWA de gestión agrícola para agricultores de la sierra del Perú. Detecta plag
 |--------|--------------------------|-------------|
 | **Interfaz** | Chat de texto | **Voice-First** — el agricultor HABLA y escucha respuestas en español |
 | **Hardware** | App nativa pesada | **PWA ultra-liviana** — funciona en Moto E30, Android Go, 1GB RAM |
-| **Sin internet** | No funciona | **Offline-first** — diagnósticos cacheados, service worker avanzado |
-| **WhatsApp** | Solo empresas | **Chatbot WhatsApp** — manda foto, recibe diagnóstico sin abrir la app |
+| **Sin internet** | No funciona | **Offline-first + IVR** — PWA cacheada + llamadas telefónicas |
+| **WhatsApp** | Solo empresas | **Sin WhatsApp** — funciona por voz y offline |
 | **Mercado** | Global genérico | **Hiper-local** — cultivos peruanos, plagas locales, pisos altitudinales |
 | **Precio** | $20-200/mes | **Gratis** (básico) + **$5-15/mes** (premium) |
 
 ### Las 5 diferencias clave
 
 1. **Voice-First**: "Agrilux, mis hojas están amarillas, ¿qué hago?" → Responde por voz con recomendaciones concretas
-2. **WhatsApp Bot**: El agricultor manda foto por WhatsApp → recibe diagnóstico IA sin abrir la app
-3. **Offline**: En zonas sin señal, la app funciona con datos cacheados
-4. **Hiper-local**: Conoce la polilla guatemalteca, el tizón tardío de la papa, la altitud de Cusco
-5. **Low-end phones**: PWA que funciona en celulares de $50-100
+2. **Sin internet**: PWA offline-first + IVR (llamadas telefónicas) para zonas sin señal
+3. **Hiper-local**: Conoce la polilla guatemalteca, el tizón tardío de la papa, la altitud de Cusco
+4. **Low-end phones**: PWA que funciona en celulares de $50-100
+5. **Gratis**: Sin costo para agricultores
 
 ---
 
@@ -231,30 +231,6 @@ PWA de gestión agrícola para agricultores de la sierra del Perú. Detecta plag
 
 ---
 
-### 10. WhatsApp Bot — `api/whatsapp-webhook.js`
-
-**Qué hace:** Recibe mensajes de WhatsApp (texto + fotos) y responde con diagnóstico agronómico IA.
-
-**Proveedor:** Meta WhatsApp Cloud API (gratis para 1000 mensajes/mes)
-
-**Implementación:**
-- GET `/api/whatsapp-webhook` → Verificación del webhook (Meta lo solicita)
-- POST `/api/whatsapp-webhook` → Recibe mensajes y responde
-- Flujo: Agricultor manda foto por WhatsApp → Agrilux descarga la imagen → Analiza con OpenRouter/DeepSeek → Responde diagnóstico
-- Responde en español peruano, tono cercano
-- Incluye: qué tiene la planta, qué hacer, qué productos aplicar
-- Si no hay imagen: responde como agrónomo experto por texto
-
-**Configuración:**
-1. Crear app en https://developers.facebook.com
-2. Activar producto WhatsApp
-3. Configurar webhook URL: `https://tudominio.com/api/whatsapp-webhook`
-4. Subscribe a eventos: `messages`, `message_media`
-
-**Variables de entorno:** `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_VERIFY_TOKEN`
-
----
-
 ## Variables de entorno
 
 ### Requeridas (mínimo funcional)
@@ -282,13 +258,6 @@ PWA de gestión agrícola para agricultores de la sierra del Perú. Detecta plag
 | `AGROMONITORING_API_KEY` | AgroMonitoring | Gratis tier |
 | `VITE_MAPBOX_TOKEN` | Mapbox | Gratis (50K req/mes) | Sí (ya configurado) |
 
-### WhatsApp Bot (opcional)
-| Variable | Descripción | Costo |
-|----------|-------------|-------|
-| `WHATSAPP_TOKEN` | Token de Meta Business | Gratis (1000 msg/mes) |
-| `WHATSAPP_PHONE_ID` | ID del número Business | Gratis |
-| `WHATSAPP_VERIFY_TOKEN` | Token de verificación del webhook | Gratis |
-
 ---
 
 ## Estructura del proyecto
@@ -305,7 +274,6 @@ agrilux/
 │   ├── geocode.js                # Geocodificación (Nominatim)
 │   ├── crop-health.js            # Crop.health proxy dedicado
 │   ├── agromonitoring.js         # AgroMonitoring proxy
-│   ├── whatsapp-webhook.js       # WhatsApp Bot: diagnóstico por WhatsApp
 │   └── gemini.js                 # Legacy (redirige a analizar-imagen)
 ├── src/
 │   ├── components/

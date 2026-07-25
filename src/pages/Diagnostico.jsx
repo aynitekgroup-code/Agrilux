@@ -21,6 +21,7 @@ import { collection, addDoc } from 'firebase/firestore';
 import { SISTEMA_PROMPT, CHAT_SYSTEM, ANALISIS_SCHEMA } from './diagnostico/diagnosticoPrompts';
 import SelectorUbicacion  from '../components/SelectorUbicacion';
 import VoiceAssistant     from '../components/VoiceAssistant';
+import { isOnline, guardarDiagnosticoOffline, guardarClima, obtenerClimaCacheado } from '../lib/offlineStorage';
 
 const COLOR_HEADER = {
   critica:  'bg-red-700',
@@ -75,13 +76,24 @@ export default function Diagnostico({ onPlagaDetectada }) {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude: lat, longitude: lon } = pos.coords;
+
+        // Si offline, intentar usar datos cacheados
+        if (!isOnline()) {
+          const climaCache = await obtenerClimaCacheado(lat, lon).catch(() => null);
+          if (climaCache) setWeather(climaCache);
+          return;
+        }
+
         try {
           const [climaRes, soilRes, nasaRes] = await Promise.allSettled([
             getWeather(lat, lon, ''),
             getSoilData(lat, lon),
             getNasaAlerts(lat, lon),
           ]);
-          if (climaRes.status === 'fulfilled') setWeather(climaRes.value);
+          if (climaRes.status === 'fulfilled') {
+            setWeather(climaRes.value);
+            guardarClima(lat, lon, climaRes.value).catch(() => {});
+          }
           if (soilRes.status === 'fulfilled')  setSoilData(soilRes.value);
           if (nasaRes.status === 'fulfilled')  setNasaAlerts(nasaRes.value);
           // NDVI más tarde, no bloquea
@@ -236,7 +248,7 @@ Responde SOLO con este JSON (sin markdown):
       setPregunta('');
 
       try {
-        await addDoc(collection(db, 'diagnosticos'), {
+        const diagnosticoData = {
           userId:        user?.uid    ?? null,
           userName:      user?.nombre ?? null,
           userEmail:     user?.email  ?? null,
@@ -256,7 +268,13 @@ Responde SOLO con este JSON (sin markdown):
           confirmado_por_usuario: null,
           fecha: new Date().toISOString(),
           mes:   new Date().getMonth() + 1,
-        });
+        };
+
+        if (isOnline()) {
+          await addDoc(collection(db, 'diagnosticos'), diagnosticoData);
+        } else {
+          await guardarDiagnosticoOffline(diagnosticoData);
+        }
       } catch (e) { console.log('Dataset error:', e); }
 
       if (analisis.tiene_problema && onPlagaDetectada)

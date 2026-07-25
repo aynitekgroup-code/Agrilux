@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Camera, Leaf, Calendar, LogOut, Menu, X, MapPin, Shield, User } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import SelectorUbicacion from './SelectorUbicacion';
+import OnlineStatus from './OnlineStatus';
 
 const navItemsAgricultor = [
   { path: '/',        icon: Camera,  label: 'Diagnóstico' },
@@ -50,6 +51,7 @@ export default function Layout({ children }) {
 
   return (
     <div className="flex flex-col min-h-screen max-w-[430px] mx-auto">
+      <OnlineStatus />
       <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-100 sticky top-0 z-40">
         <div className="flex items-center gap-2 min-w-0">
           <div className="text-sm font-semibold text-gray-700 truncate">
