@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Camera, Loader2, AlertTriangle, CheckCircle, Send,
   Mic, MicOff, Volume2, VolumeX,
-  Sparkles, ImagePlus, X, MapPin,
+  Sparkles, ImagePlus, X, MapPin, Aperture, Upload,
 } from 'lucide-react';
 import { useAuth }       from '../lib/AuthContext';
 import { invokeGemini }  from '../lib/gemini';
@@ -59,6 +59,7 @@ export default function Diagnostico({ onPlagaDetectada }) {
   const [sentinelNDVI, setSentinelNDVI]       = useState(null);
 
   const fileRef    = useRef(null);
+  const cameraRef  = useRef(null);
   const chatEndRef = useRef(null);
   const reconRef   = useRef(null);
   const reconPregRef = useRef(null);
@@ -842,18 +843,27 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
         <div className="bg-white/10 border border-white/20 rounded-3xl overflow-hidden">
 
           {/* Área de foto — opcional */}
-          <div
-            onClick={() => fileRef.current?.click()}
-            className="border-b border-white/10 p-5 text-center cursor-pointer hover:bg-white/10 transition-all active:scale-[0.98]">
+          <div className="border-b border-white/10 p-5">
             {fotos.length === 0 ? (
-              <div className="flex items-center justify-center gap-3">
-                <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center">
-                  <ImagePlus size={20} className="text-white" />
+              <div className="flex flex-col items-center gap-3">
+                <p className="text-white font-bold text-sm text-center">Foto del cultivo (opcional)</p>
+                <div className="flex gap-3 w-full">
+                  <button
+                    onClick={() => cameraRef.current?.click()}
+                    className="flex-1 flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 text-white font-bold py-4 rounded-2xl transition-all active:scale-[0.97]"
+                  >
+                    <Aperture size={20} />
+                    <span className="text-sm">Tomar foto</span>
+                  </button>
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    className="flex-1 flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 text-white font-bold py-4 rounded-2xl transition-all active:scale-[0.97]"
+                  >
+                    <Upload size={20} />
+                    <span className="text-sm">Subir foto</span>
+                  </button>
                 </div>
-                <div className="text-left">
-                  <p className="text-white font-bold text-sm">Añadir foto del cultivo</p>
-                  <p className="text-white/60 text-xs">Opcional · hoja, tallo, raíz o fruto</p>
-                </div>
+                <p className="text-white/50 text-xs text-center">Hoja, tallo, raíz o fruto</p>
               </div>
             ) : (
               <div>
@@ -897,6 +907,7 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
             )}
           </div>
           <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFoto} className="hidden" />
+          <input ref={cameraRef} type="file" accept="image/*" multiple capture="environment" onChange={handleFoto} className="hidden" />
 
           {/* Área de texto + audio */}
           <div className="p-4">
