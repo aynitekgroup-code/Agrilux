@@ -84,7 +84,7 @@ UBICACIÓN: Lat ${lat || 'N/A'}, Lon ${lon || 'N/A'}`;
           'X-Title': 'Agrilux Ciclo',
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash-preview',
+          model: 'google/gemini-2.5-flash',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: prompt },

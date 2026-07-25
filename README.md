@@ -39,7 +39,7 @@ PWA de gestión agrícola para agricultores de la sierra del Perú. Detecta plag
 
 | Prioridad | Proveedor | Modelo | Tipo | Costo | Soporte imágenes |
 |-----------|-----------|--------|------|-------|-----------------|
-| 1 | OpenRouter | `google/gemini-2.5-flash-preview` | Texto + Vision | $0.15/M tokens | Sí |
+| 1 | OpenRouter | `google/gemini-2.5-flash` | Texto + Vision | $0.30/M tokens | Sí |
 | 2 | DeepSeek | `deepseek-chat` | Solo texto | $0.14/M tokens | No |
 | 3 | GitHub Models | `Phi-4-multimodal-instruct` | Texto + Vision | Gratis (1500 req/día) | Sí |
 

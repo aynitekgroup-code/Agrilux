@@ -3,7 +3,7 @@ export const GITHUB_URL = 'https://models.inference.ai.azure.com/chat/completion
 export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 export const MODELS = {
-  OPENROUTER_VISION: 'google/gemini-2.5-flash-preview',
+  OPENROUTER_VISION: 'google/gemini-2.5-flash',
   DEEPSEEK_FAST: 'deepseek-chat',
   GITHUB_VISION: 'Phi-4-multimodal-instruct',
 };

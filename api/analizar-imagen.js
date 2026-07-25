@@ -51,7 +51,7 @@ export default async function handler(req, res) {
             'X-Title': 'Agrilux',
           },
           body: JSON.stringify({
-            model: 'google/gemini-2.5-flash-preview',
+            model: 'google/gemini-2.5-flash',
             messages: [...systemMsg, { role: 'user', content: imageContent }],
             max_tokens: 1500,
             temperature: 0.3,
@@ -150,7 +150,7 @@ export default async function handler(req, res) {
             'X-Title': 'Agrilux',
           },
           body: JSON.stringify({
-            model: 'google/gemini-2.5-flash-preview',
+            model: 'google/gemini-2.5-flash',
             messages: [...systemMsg, { role: 'user', content: prompt }],
             max_tokens: 1500,
             temperature: 0.3,
