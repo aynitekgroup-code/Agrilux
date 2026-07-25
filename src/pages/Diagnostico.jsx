@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Camera, Loader2, AlertTriangle, CheckCircle, Send,
   Mic, MicOff, Volume2, VolumeX,
-  Sparkles, ImagePlus, X, MapPin, Aperture, Upload,
+  Sparkles, ImagePlus, X, MapPin, Upload,
 } from 'lucide-react';
 import { useAuth }       from '../lib/AuthContext';
 import { invokeGemini }  from '../lib/gemini';
@@ -852,7 +852,7 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
                     onClick={() => cameraRef.current?.click()}
                     className="flex-1 flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 text-white font-bold py-4 rounded-2xl transition-all active:scale-[0.97]"
                   >
-                    <Aperture size={20} />
+                    <Camera size={20} />
                     <span className="text-sm">Tomar foto</span>
                   </button>
                   <button
@@ -1032,17 +1032,8 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
         </div>
       )}
 
-      {/* Voice Assistant — flotante */}
-      <VoiceAssistant
-        onPregunta={(texto) => {
-          setPregunta(texto);
-          // Si hay foto, analizar foto + consulta; si no, solo consulta
-          if (fotos.length > 0) {
-            setAnalizando(true);
-            // El análisis se dispara con el useEffect
-          }
-        }}
-      />
+      {/* Voice Assistant — flotante (asistente agrícola independiente) */}
+      <VoiceAssistant />
     </div>
   );
 }
