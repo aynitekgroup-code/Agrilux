@@ -1,16 +1,16 @@
 // api/voice-assistant.js
-// Asistente de voz agrícola — usa la misma cadena de proveedores que analizar-imagen
-// OpenRouter → DeepSeek → GitHub (texto, sin imágenes)
+// Asistente de voz agrícola con datos climáticos en tiempo real
+// Cadena: OpenRouter → DeepSeek → GitHub (texto)
 
-const SYSTEM_PROMPT = `Eres PlaguIA, el asistente agrícola inteligente de Agrilux. Hablas como un agrónomo experto peruano, amigable y directo.
+const SYSTEM_PROMPT_BASE = `Eres PlaguIA, el asistente agrícola inteligente de Agrilux. Hablas como un agrónomo experto peruano, amigable y directo.
 
 REGLAS:
 - Responde SIEMPRE en español, tono cálido y campesino
-- Máximo 3 oraciones por respuesta (para que sea fácil de escuchar)
+- Máximo 3 oraciones por respuesta (fácil de escuchar por voz)
 - Sé práctico: nombre del producto, dosis, y cuándo aplicar
 - Si no sabes algo, di "No tengo esa información, consulta con un agrónomo local"
 - Si el agricultor menciona un cultivo, ajusta tu respuesta a ese cultivo
-- Puedes preguntar: ¿Qué cultivo tienes? ¿Dónde estás? ¿Qué ves en las hojas?
+- Usa datos climáticos REALES cuando los tengas para dar recomendaciones precisas
 - Usa emojis moderados para hacer la conversación amigable
 
 CULTIVOS QUE CONOCES BIEN: papa, maíz, palta, arándano, caña de azúcar, plátano, papaya.
@@ -18,7 +18,52 @@ CULTIVOS QUE CONOCES BIEN: papa, maíz, palta, arándano, caña de azúcar, plá
 EJEMPLOS DE BUENAS RESPUESTAS:
 - "¿Hojas amarillas? Puede ser deficiencia de nitrógeno. Aplica urea a 200 kg/ha. ¿En qué cultura lo tienes?"
 - "Las manchas en la papa pueden ser tizón tardío. Aplica clorotalonil cada 15 días."
-- "¿Cuánto tiempo lleva con el problema? Así puedo ayudarte mejor."`;
+- "Hoy en tu zona hay 22°C y 80% de humedad. Condiciones favorables para hongos, revisa tus hojas."`;
+
+// ── Obtener clima real de Open-Meteo (gratis, sin API key) ──
+async function obtenerClima(lat, lon) {
+  try {
+    const r = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max&timezone=auto&forecast_days=3`
+    );
+    const data = await r.json();
+    if (!data.current) return null;
+
+    const codigos = {
+      0: 'despejado', 1: 'mayormente despejado', 2: 'parcial nublado', 3: 'nublado',
+      45: 'neblina', 48: 'neblina con escarcha',
+      51: 'llovizna leve', 53: 'llovizna moderada', 55: 'llovizna intensa',
+      61: 'lluvia leve', 63: 'lluvia moderada', 65: 'lluvia intensa',
+      71: 'nieve leve', 73: 'nieve moderada', 75: 'nieve intensa',
+      80: 'aguacero leve', 81: 'aguacero moderado', 82: 'aguacero fuerte',
+      95: 'tormenta', 96: 'tormenta con granizo', 99: 'tormenta fuerte con granizo',
+    };
+
+    const desc = codigos[data.current.weather_code] || 'variable';
+    const temp = data.current.temperature_2m;
+    const hum = data.current.relative_humidity_2m;
+    const lluvia = data.current.precipitation;
+    const viento = data.current.wind_speed_10m;
+
+    let contexto = `CLIMA ACTUAL: ${temp}°C, ${desc}, humedad ${hum}%, viento ${viento} km/h`;
+
+    if (lluvia > 0) contexto += `, lluvia activa ${lluvia}mm`;
+    if (data.daily) {
+      const maxHoy = data.daily.temperature_2m_max?.[0];
+      const minHoy = data.daily.temperature_2m_min?.[0];
+      const lluviaHoy = data.daily.precipitation_sum?.[0];
+      const probLluvia = data.daily.precipitation_probability_max?.[0];
+      contexto += `. HOY: ${minHoy}°C-${maxHoy}°C`;
+      if (lluviaHoy > 0) contexto += `, ${lluviaHoy}mm de lluvia esperada`;
+      if (probLluvia > 0) contexto += `, probabilidad lluvia ${probLluvia}%`;
+    }
+
+    return contexto;
+  } catch (e) {
+    console.warn('Error clima:', e.message);
+    return null;
+  }
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
@@ -27,12 +72,23 @@ export default async function handler(req, res) {
   const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
   const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
-  const { mensaje, historial = [] } = req.body;
+  const { mensaje, historial = [], lat, lon } = req.body;
   if (!mensaje) return res.status(400).json({ error: 'Falta el campo mensaje' });
+
+  // Obtener clima si tenemos coordenadas
+  let climaContexto = '';
+  if (lat && lon) {
+    climaContexto = await obtenerClima(lat, lon) || '';
+  }
+
+  // Construir system prompt con contexto climático
+  const systemPrompt = climaContexto
+    ? `${SYSTEM_PROMPT_BASE}\n\nDATOS CLIMÁTICOS EN TIEMPO REAL DEL AGRICULTOR:\n${climaContexto}\n\nUsa estos datos para tus recomendaciones. Si hace frío, sugiere preventivos. Si hay lluvia, prioriza fungicidas. Si hay humedad alta, alerta sobre hongos.`
+    : SYSTEM_PROMPT_BASE;
 
   // Construir historial de conversación
   const messages = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: systemPrompt },
     ...historial.map(h => ({
       role: h.rol === 'usuario' ? 'user' : 'assistant',
       content: h.texto,
@@ -63,6 +119,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
           respuesta: data.choices[0].message.content,
           provider: 'openrouter',
+          clima: climaContexto || null,
         });
       }
     } catch (e) { console.warn('Voice OpenRouter error:', e.message); }
@@ -89,6 +146,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
           respuesta: data.choices[0].message.content,
           provider: 'deepseek',
+          clima: climaContexto || null,
         });
       }
     } catch (e) { console.warn('Voice DeepSeek error:', e.message); }
@@ -115,6 +173,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
           respuesta: data.choices[0].message.content,
           provider: 'github',
+          clima: climaContexto || null,
         });
       }
     } catch (e) { console.warn('Voice GitHub error:', e.message); }

@@ -23,9 +23,20 @@ export default function VoiceAssistant({ disabled = false }) {
   const [historial, setHistorial]         = useState([]);
   const [error, setError]                 = useState('');
   const [mostrarChat, setMostrarChat]     = useState(false);
+  const [coordenadas, setCoordenadas]     = useState(null);
 
   const recognitionRef = useRef(null);
   const chatEndRef     = useRef(null);
+
+  // Obtener ubicación del navegador al montar
+  React.useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setCoordenadas({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      () => {},
+      { timeout: 5000 }
+    );
+  }, []);
 
   // ── Enviar mensaje a la API y obtener respuesta ──
   const enviarAI = useCallback(async (mensaje, hist) => {
@@ -37,7 +48,9 @@ export default function VoiceAssistant({ disabled = false }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mensaje,
-          historial: hist.slice(-10), // últimos 10 mensajes para contexto
+          historial: hist.slice(-10),
+          lat: coordenadas?.lat || null,
+          lon: coordenadas?.lon || null,
         }),
       });
       const data = await r.json();
@@ -55,7 +68,7 @@ export default function VoiceAssistant({ disabled = false }) {
     } finally {
       setProcesando(false);
     }
-  }, []);
+  }, [coordenadas]);
 
   // ── Text-to-Speech en español peruano ──
   const leerTexto = useCallback((texto) => {
