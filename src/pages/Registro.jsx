@@ -8,14 +8,10 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
-import { Loader2, Eye, EyeOff, User, Mail, Phone, Lock } from 'lucide-react';
+import { Loader2, Eye, EyeOff, User, Mail, Lock } from 'lucide-react';
 import DOMPurify from 'dompurify';
 
 const ERRORES = {
-  'agrilux/celular-en-uso':        'Credenciales no válidas.',
-  'agrilux/celular-no-encontrado': 'Credenciales no válidas.',
-  'agrilux/sin-email':             'Credenciales no válidas.',
-  'agrilux/codigo-no-encontrado':  'Credenciales no válidas.',
   'auth/email-already-in-use':     'Este correo ya está registrado.',
   'auth/invalid-email':            'El correo no es válido.',
   'auth/weak-password':            'La contraseña debe tener al menos 6 caracteres.',
@@ -34,7 +30,6 @@ export default function Registro() {
   const [modo, setModo]         = useState('login');
   const [nombre, setNombre]     = useState('');
   const [email, setEmail]       = useState('');
-  const [celular, setCelular]   = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading]   = useState(false);
@@ -44,12 +39,7 @@ export default function Registro() {
 
   const cambiarModo = (m) => {
     setModo(m); setError('');
-    setNombre(''); setEmail(''); setCelular(''); setPassword('');
-  };
-
-  const handleCelular = (val) => {
-    const solo = val.replace(/\D/g, '').slice(0, 9);
-    setCelular(solo);
+    setNombre(''); setEmail(''); setPassword('');
   };
 
   const handleSubmit = async () => {
@@ -61,7 +51,6 @@ export default function Registro() {
     if (modo === 'registro') {
       if (!nombre.trim())       { setError('Ingresa tu nombre completo.'); submittingRef.current = false; return; }
       if (!email.trim())        { setError('Ingresa tu correo electrónico.'); submittingRef.current = false; return; }
-      if (celular.length !== 9) { setError('El número de celular debe tener 9 dígitos.'); submittingRef.current = false; return; }
       if (password.length < 6)  { setError('La contraseña debe tener al menos 6 caracteres.'); submittingRef.current = false; return; }
     } else {
       if (!email.trim())        { setError('Ingresa tu correo electrónico.'); submittingRef.current = false; return; }
@@ -72,7 +61,7 @@ export default function Registro() {
     try {
       if (modo === 'registro') {
         const nombreSanitizado = DOMPurify.sanitize(nombre).trim();
-        await register({ nombre: nombreSanitizado, email, celular, password });
+        await register({ nombre: nombreSanitizado, email, password });
       } else {
         await login({ email, password });
       }
@@ -161,40 +150,6 @@ export default function Registro() {
               />
             </div>
           </div>
-
-          {/* ── CELULAR (solo registro) ── */}
-          {modo === 'registro' && (
-            <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1.5">Número de celular</label>
-              <div className="relative">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                  <span className="text-xs text-gray-400 font-semibold">🇵🇪 +51</span>
-                </div>
-                <input
-                  type="tel"
-                  value={celular}
-                  onChange={e => handleCelular(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                  placeholder="9XX XXX XXX"
-                  maxLength={9}
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  className="w-full border-2 border-gray-100 rounded-2xl pl-16 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors tracking-widest font-mono"
-                  autoComplete="tel"
-                />
-              </div>
-              <div className="flex gap-1 mt-2 px-1">
-                {Array.from({ length: 9 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`flex-1 h-1 rounded-full transition-all duration-150 ${
-                      i < celular.length ? 'bg-primary' : 'bg-gray-100'
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* ── CONTRASEÑA (siempre visible) ── */}
           <div>

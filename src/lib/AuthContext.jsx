@@ -16,7 +16,6 @@ import {
 } from 'firebase/auth';
 import {
   doc, setDoc, getDoc,
-  collection, query, where, getDocs,
 } from 'firebase/firestore';
 
 const AuthContext = createContext();
@@ -46,11 +45,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // ── Registro: status = 'pendiente' (requiere aprobación del admin) ──────
-  const register = async ({ nombre, email, celular, password }) => {
-    const q = query(collection(db, 'usuarios'), where('celular', '==', celular));
-    const existe = await getDocs(q);
-    if (!existe.empty) throw { code: 'agrilux/celular-en-uso' };
-
+  const register = async ({ nombre, email, password }) => {
     const cred = await createUserWithEmailAndPassword(
       auth,
       email.trim().toLowerCase(),
@@ -60,7 +55,6 @@ export const AuthProvider = ({ children }) => {
     await setDoc(doc(db, 'usuarios', cred.user.uid), {
       nombre:    nombre.trim(),
       email:     email.trim().toLowerCase(),
-      celular,
       rol:       'agricultor',
       status:    'pendiente',
       creadoPor: 'self',
@@ -70,7 +64,6 @@ export const AuthProvider = ({ children }) => {
       uid:    cred.user.uid,
       email:  email.trim().toLowerCase(),
       nombre: nombre.trim(),
-      celular,
       rol:    'agricultor',
       status: 'pendiente',
     });
