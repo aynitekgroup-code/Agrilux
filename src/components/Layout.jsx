@@ -5,10 +5,14 @@ import { useAuth } from '../lib/AuthContext';
 import SelectorUbicacion from './SelectorUbicacion';
 import OnlineStatus from './OnlineStatus';
 
-const navItemsAgricultor = [
+const navTodos = [
   { path: '/',        icon: Camera,  label: 'Diagnóstico' },
   { path: '/ciclo',   icon: Calendar, label: 'Ciclo' },
   { path: '/parcela', icon: Leaf,    label: 'Parcela' },
+];
+
+const navSinLogin = [
+  { path: '/',        icon: Camera,  label: 'Diagnóstico' },
 ];
 
 export default function Layout({ children }) {
@@ -24,7 +28,7 @@ export default function Layout({ children }) {
   const ADMIN_EMAIL = 'jose.llanos.d@uni.pe';
   const esAdmin = user?.email === ADMIN_EMAIL;
 
-  const navItems = navItemsAgricultor;
+  const navItems = user ? navTodos : navSinLogin;
 
   const handleLogout = async () => {
     await logout();

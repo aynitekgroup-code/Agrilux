@@ -56,7 +56,7 @@ function AppRoutes() {
   const { user, loading, isAprobado } = useAuth();
   const [plagaDetectada, setPlagaDetectada] = useState('');
 
-    if (loading) return (
+  if (loading) return (
     <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-green-50 to-green-200">
       <div className="text-center">
         <div className="w-20 h-20 flex items-center justify-center mx-auto mb-4 bg-white rounded-full shadow-xl border-[3px] border-green-300 animate-pulse relative">
@@ -86,18 +86,8 @@ function AppRoutes() {
     );
   }
 
-  // No logged in → registro
-  if (!user) {
-    return (
-      <Routes>
-        <Route path="/registro" element={<Registro />} />
-        <Route path="*" element={<Navigate to="/registro" />} />
-      </Routes>
-    );
-  }
-
-  // Logged in but NOT approved → pending screen
-  if (!isAprobado) {
+  // Logged in but NOT approved → pending screen (only for protected routes)
+  if (user && !isAprobado && (window.location.pathname === '/parcela' || window.location.pathname === '/ciclo')) {
     return (
       <Routes>
         <Route path="*" element={<PantallaPendiente />} />
@@ -105,11 +95,14 @@ function AppRoutes() {
     );
   }
 
-  // Logged in AND approved → normal flow
-  if (user && !user.ubicacion) {
+  // Logged in AND approved, no location → selector
+  if (user && isAprobado && !user.ubicacion) {
     return <SelectorUbicacion esPrimeraVez={true} />;
   }
 
+  // ── RUTAS PRINCIPALES ──
+  // Diagnóstico: SIEMPRE accesible (con o sin login)
+  // Parcela y Ciclo: requieren login + aprobación
   return (
     <Routes>
       <Route path="/admin" element={<Admin />} />
@@ -118,9 +111,19 @@ function AppRoutes() {
       <Route path="*" element={
         <Layout>
           <Routes>
+            {/* Diagnóstico — siempre accesible */}
             <Route path="/" element={<Diagnostico onPlagaDetectada={setPlagaDetectada} />} />
-            <Route path="/parcela" element={user ? <MiParcela /> : <Navigate to="/registro" />} />
-            <Route path="/ciclo" element={<CicloCultivo />} />
+
+            {/* Parcela — requiere login */}
+            <Route path="/parcela" element={
+              user && isAprobado ? <MiParcela /> : <Navigate to="/registro" />
+            } />
+
+            {/* Ciclo — requiere login */}
+            <Route path="/ciclo" element={
+              user && isAprobado ? <CicloCultivo /> : <Navigate to="/registro" />
+            } />
+
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </Layout>
