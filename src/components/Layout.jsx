@@ -5,14 +5,10 @@ import { useAuth } from '../lib/AuthContext';
 import SelectorUbicacion from './SelectorUbicacion';
 import OnlineStatus from './OnlineStatus';
 
-const navTodos = [
+const navItems = [
   { path: '/',        icon: Camera,  label: 'Diagnóstico' },
   { path: '/ciclo',   icon: Calendar, label: 'Ciclo' },
   { path: '/parcela', icon: Leaf,    label: 'Parcela' },
-];
-
-const navSinLogin = [
-  { path: '/',        icon: Camera,  label: 'Diagnóstico' },
 ];
 
 export default function Layout({ children }) {
@@ -27,8 +23,6 @@ export default function Layout({ children }) {
 
   const ADMIN_EMAIL = 'jose.llanos.d@uni.pe';
   const esAdmin = user?.email === ADMIN_EMAIL;
-
-  const navItems = user ? navTodos : navSinLogin;
 
   const handleLogout = async () => {
     await logout();
@@ -119,7 +113,13 @@ export default function Layout({ children }) {
           {navItems.map(({ path, icon: Icon, label }) => {
             const active = location.pathname === path;
             return (
-              <button key={path} onClick={() => navigate(path)}
+              <button key={path} onClick={() => {
+                  if (!user && (path === '/parcela' || path === '/ciclo')) {
+                    navigate('/registro');
+                  } else {
+                    navigate(path);
+                  }
+                }}
                 className={`flex-1 flex flex-col items-center py-2.5 gap-0.5 transition-colors ${active ? 'text-primary' : 'text-gray-400'}`}>
                 <Icon size={22} strokeWidth={active ? 2.5 : 1.8} />
                 <span className="text-[10px] font-medium">{label}</span>
