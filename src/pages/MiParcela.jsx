@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Camera, Leaf, Calendar, TrendingUp, Loader2 } from 'lucide-react';
+import { Plus, Camera, Leaf, Calendar, TrendingUp, Loader2, Map } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { CULTIVOS } from '../lib/constants';
 import { db } from '../lib/firebase';
 import { collection, addDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { invokeGemini } from '../lib/gemini';
 import { useNavigate } from 'react-router-dom';
+import MapaParcela from '../components/MapaParcela';
 
 export default function MiParcela() {
   const { user } = useAuth();
@@ -22,6 +23,8 @@ export default function MiParcela() {
   const [form, setForm] = useState({
     nombre: '', cultivo: 'papa', variedad: '', area: '', fechaSiembra: '', gps: ''
   });
+  const [abrirMapa, setAbrirMapa] = useState(false);
+  const [poligono, setPoligono] = useState(null);
 
   const cultivoObj = CULTIVOS.find(c => c.id === form.cultivo);
 
@@ -57,15 +60,22 @@ export default function MiParcela() {
       const doc = await addDoc(collection(db, 'parcelas'), {
         userId: user?.uid, userName: user?.nombre,
         nombre: form.nombre, cultivo: form.cultivo, cultivoNombre: cultObj?.nombre,
-        cultivoEmoji: cultObj?.emoji, variedad: form.variedad, area: form.area,
+        cultivoEmoji: cultObj?.emoji, variedad: form.variedad,
+        area: poligono ? String(poligono.area) : form.area,
         fechaSiembra: form.fechaSiembra, gps: form.gps,
+        coordenadas: poligono?.coordenadas || [],
         createdAt: new Date().toISOString(),
       });
-      const nueva = { id: doc.id, ...form, cultivoNombre: cultObj?.nombre, cultivoEmoji: cultObj?.emoji };
+      const nueva = {
+        id: doc.id, ...form, cultivoNombre: cultObj?.nombre, cultivoEmoji: cultObj?.emoji,
+        area: poligono ? String(poligono.area) : form.area,
+        coordenadas: poligono?.coordenadas || [],
+      };
       setParcelas(prev => [...prev, nueva]);
       setParcelaActiva(nueva);
       setRegistros([]);
       setModalNuevo(false);
+      setPoligono(null);
     } catch (e) { alert('Error al crear parcela'); }
     setGuardando(false);
   };
@@ -207,6 +217,14 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                       <p className="font-bold text-primary">{registros.length}</p>
                     </div>
                   </div>
+                  {parcelaActiva.coordenadas?.length >= 3 && (
+                    <div className="mt-3 bg-blue-50 rounded-xl p-2.5 flex items-center gap-2">
+                      <Map size={14} className="text-blue-600" />
+                      <p className="text-xs text-blue-700 font-semibold">
+                        {parcelaActiva.coordenadas.length} puntos mapeados · {parcelaActiva.area} ha
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Botón ver ciclo */}
@@ -309,9 +327,22 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-600 block mb-1">Área (hectáreas)</label>
-                <input type="number" value={form.area} onChange={e => setForm({...form, area: e.target.value})}
-                  placeholder="Ej: 1.5"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary" />
+                <div className="flex gap-2">
+                  <input type="number" value={poligono ? poligono.area : form.area}
+                    onChange={e => setForm({...form, area: e.target.value})}
+                    placeholder="Ej: 1.5"
+                    className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
+                    disabled={!!poligono} />
+                  <button type="button" onClick={() => setAbrirMapa(true)}
+                    className="bg-primary text-white px-4 rounded-xl flex items-center gap-1 text-xs font-bold whitespace-nowrap">
+                    <Map size={14} /> Mapear
+                  </button>
+                </div>
+                {poligono && (
+                  <p className="text-xs text-green-600 mt-1 font-semibold">
+                    ✓ Área mapeada: {poligono.area} ha ({poligono.coordenadas.length} puntos)
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-600 block mb-1">Fecha de siembra *</label>
@@ -335,6 +366,19 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
             </div>
           </div>
         </div>
+      )}
+
+      {/* Mapa fullscreen */}
+      {abrirMapa && (
+        <MapaParcela
+          coordenadasIniciales={poligono?.coordenadas || []}
+          onGuardar={(data) => {
+            setPoligono(data);
+            setForm(prev => ({ ...prev, area: String(data.area) }));
+            setAbrirMapa(false);
+          }}
+          onCerrar={() => setAbrirMapa(false)}
+        />
       )}
     </div>
   );
