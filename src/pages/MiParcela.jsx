@@ -28,6 +28,13 @@ export default function MiParcela() {
   const [abrirMapa, setAbrirMapa] = useState(false);
   const [poligono, setPoligono] = useState(null);
 
+  // Auto-fill GPS con ubicación del usuario al abrir modal
+  useEffect(() => {
+    if (modalNuevo && user?.ubicacion && !form.gps) {
+      setForm(prev => ({ ...prev, gps: user.ubicacion }));
+    }
+  }, [modalNuevo, user?.ubicacion]);
+
   const cultivoObj = CULTIVOS.find(c => c.id === form.cultivo);
 
   useEffect(() => { cargarParcelas(); }, []);
@@ -55,7 +62,7 @@ export default function MiParcela() {
   };
 
   const crearParcela = async () => {
-    if (!form.nombre || !form.fechaSiembra) { alert('Completa nombre y fecha de siembra'); return; }
+    if (!form.nombre || !form.fechaSiembra || !form.gps) { alert('Completa nombre, fecha de siembra y ubicación'); return; }
     setGuardando(true);
     try {
       const cultObj = CULTIVOS.find(c => c.id === form.cultivo);
@@ -363,10 +370,11 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary" />
             </div>
             <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1.5">Ubicación GPS (opcional)</label>
+              <label className="text-xs font-semibold text-gray-600 block mb-1.5">Ubicación *</label>
               <input value={form.gps} onChange={e => setForm({...form, gps: e.target.value})}
-                placeholder="Coordenadas GPS"
+                placeholder="Ej: Cutervo, Cajamarca"
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary" />
+              <p className="text-[10px] text-gray-400 mt-1">Ubicación de tu registro. Se usa para clima y recomendaciones.</p>
             </div>
           </div>
 

@@ -1,14 +1,14 @@
 /**
  * src/pages/Registro.jsx
  *
- * Registro: nombre completo + correo + celular + contraseña
+ * Registro: nombre + correo + ubicación + contraseña
  * Login:    correo + contraseña
  */
 
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
-import { Loader2, Eye, EyeOff, User, Mail, Lock } from 'lucide-react';
+import { Loader2, Eye, EyeOff, User, Mail, Lock, MapPin, Navigation } from 'lucide-react';
 import DOMPurify from 'dompurify';
 
 const ERRORES = {
@@ -31,19 +31,50 @@ export default function Registro() {
   const { register, login } = useAuth();
   const navigate = useNavigate();
 
-  const [modo, setModo]         = useState('login');
-  const [nombre, setNombre]     = useState('');
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
-  const [showPass, setShowPass] = useState(false);
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
+  const [modo, setModo]           = useState('login');
+  const [nombre, setNombre]       = useState('');
+  const [email, setEmail]         = useState('');
+  const [ubicacion, setUbicacion] = useState('');
+  const [password, setPassword]   = useState('');
+  const [showPass, setShowPass]   = useState(false);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState('');
+  const [detectandoGPS, setDetectandoGPS] = useState(false);
 
   const submittingRef = useRef(false);
 
   const cambiarModo = (m) => {
     setModo(m); setError('');
-    setNombre(''); setEmail(''); setPassword('');
+    setNombre(''); setEmail(''); setUbicacion(''); setPassword('');
+  };
+
+  const detectarGPS = () => {
+    if (!navigator.geolocation) {
+      setError('Tu dispositivo no tiene GPS. Escribe tu ubicación manualmente.');
+      return;
+    }
+    setDetectandoGPS(true);
+    setError('');
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await fetch(`/api/geocode?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`);
+          if (!res.ok) throw new Error();
+          const data = await res.json();
+          const nombreCorto = [data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
+            .filter(Boolean).slice(0, 2).join(', ') || data.name.split(',')[0];
+          setUbicacion(nombreCorto);
+        } catch {
+          setUbicacion(`${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);
+        }
+        setDetectandoGPS(false);
+      },
+      () => {
+        setError('No se pudo obtener GPS. Escribe tu ubicación manualmente.');
+        setDetectandoGPS(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   };
 
   const handleSubmit = async () => {
@@ -55,6 +86,7 @@ export default function Registro() {
     if (modo === 'registro') {
       if (!nombre.trim())       { setError('Ingresa tu nombre completo.'); submittingRef.current = false; return; }
       if (!email.trim())        { setError('Ingresa tu correo electrónico.'); submittingRef.current = false; return; }
+      if (!ubicacion.trim())    { setError('Selecciona tu ubicación (GPS o manual).'); submittingRef.current = false; return; }
       if (password.length < 6)  { setError('La contraseña debe tener al menos 6 caracteres.'); submittingRef.current = false; return; }
     } else {
       if (!email.trim())        { setError('Ingresa tu correo electrónico.'); submittingRef.current = false; return; }
@@ -65,7 +97,8 @@ export default function Registro() {
     try {
       if (modo === 'registro') {
         const nombreSanitizado = DOMPurify.sanitize(nombre).trim();
-        await register({ nombre: nombreSanitizado, email, password });
+        const ubicacionSanitizada = DOMPurify.sanitize(ubicacion).trim();
+        await register({ nombre: nombreSanitizado, email, password, ubicacion: ubicacionSanitizada });
       } else {
         await login({ email, password });
       }
@@ -134,6 +167,33 @@ export default function Registro() {
                     autoComplete="name"
                   />
                 </div>
+              </div>
+
+              {/* Ubicación */}
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1.5">Ubicación *</label>
+                <div className="relative">
+                  <MapPin size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
+                  <input
+                    value={ubicacion}
+                    onChange={e => setUbicacion(e.target.value)}
+                    placeholder="Ej: Cutervo, Cajamarca"
+                    className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={detectarGPS}
+                  disabled={detectandoGPS}
+                  className="mt-2 w-full flex items-center justify-center gap-2 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 py-2.5 rounded-xl transition-colors"
+                >
+                  {detectandoGPS ? (
+                    <><Loader2 size={14} className="animate-spin" /> Detectando ubicación...</>
+                  ) : (
+                    <><Navigation size={14} /> Usar GPS de mi teléfono</>
+                  )}
+                </button>
+                <p className="text-[10px] text-gray-400 mt-1 text-center">Tu ubicación se usa para recomendaciones climáticas precisas</p>
               </div>
             </>
           )}

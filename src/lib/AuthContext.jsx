@@ -44,8 +44,8 @@ export const AuthProvider = ({ children }) => {
     return () => unsub();
   }, []);
 
-  // ── Registro: status = 'pendiente' (requiere aprobación del admin) ──────
-  const register = async ({ nombre, email, password }) => {
+  // ── Registro: status = 'aprobado' (acceso inmediato) ──────
+  const register = async ({ nombre, email, password, ubicacion }) => {
     const cred = await createUserWithEmailAndPassword(
       auth,
       email.trim().toLowerCase(),
@@ -55,6 +55,7 @@ export const AuthProvider = ({ children }) => {
     await setDoc(doc(db, 'usuarios', cred.user.uid), {
       nombre:    nombre.trim(),
       email:     email.trim().toLowerCase(),
+      ubicacion: ubicacion || '',
       rol:       'agricultor',
       status:    'aprobado',
       creadoPor: 'self',
@@ -64,6 +65,7 @@ export const AuthProvider = ({ children }) => {
       uid:    cred.user.uid,
       email:  email.trim().toLowerCase(),
       nombre: nombre.trim(),
+      ubicacion: ubicacion || '',
       rol:    'agricultor',
       status: 'aprobado',
     });
