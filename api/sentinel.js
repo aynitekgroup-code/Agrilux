@@ -69,7 +69,6 @@ export default async function handler(req, res) {
   }
 
   const SENTINEL_INSTANCE_ID = process.env.SENTINEL_INSTANCE_ID;
-  const MAPBOX_TOKEN = process.env.VITE_MAPBOX_TOKEN || process.env.MAPBOX_TOKEN;
 
   // ─── Método 1: Sentinel Hub WMS (si hay instance ID) ──────────────────────
   if (SENTINEL_INSTANCE_ID) {
@@ -119,27 +118,31 @@ export default async function handler(req, res) {
     }
   }
 
-  // ─── Método 2: Mapbox Satellite (si hay token) ────────────────────────────
-  if (MAPBOX_TOKEN) {
+  // ─── Método 2: ESRI World Imagery (gratis, sin API key) ──────────────────
+  {
     try {
-      const marker = `pin-l-leaf+22c55e(${lon},${lat})`;
-      const mapUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/${marker}/${lon},${lat},14,0/512x512@2x?access_token=${MAPBOX_TOKEN}`;
+      const z = 16;
+      const x = Math.floor((lon + 180) / 360 * Math.pow(2, z));
+      const latRad = lat * Math.PI / 180;
+      const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, z));
 
-      const mapRes = await fetch(mapUrl);
-      if (mapRes.ok) {
-        const arrayBuffer = await mapRes.arrayBuffer();
+      const tileUrl = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
+
+      const tileRes = await fetch(tileUrl);
+      if (tileRes.ok) {
+        const arrayBuffer = await tileRes.arrayBuffer();
         const base64 = Buffer.from(arrayBuffer).toString('base64');
 
         const ndviSimulado = calcularNDVIEstimado(lat, lon);
         const analisis = generarMapaNDVI(lat, lon, radiusKm, [ndviSimulado]);
 
         return res.status(200).json({
-          source: 'mapbox-satellite',
+          source: 'esri-world-imagery',
           satellite_image: `data:image/png;base64,${base64}`,
           ...analisis,
           generated_at: new Date().toISOString(),
           legend: {
-            note: 'Imagen satelital de Mapbox. Análisis NDVI estimado por ubicación.',
+            note: 'Imagen satelital ESRI World Imagery. Análisis NDVI estimado por ubicación.',
             red: 'Estrés severo (NDVI < 0.2)',
             yellow: 'Estrés moderado (NDVI 0.2–0.5)',
             green: 'Cultivo sano (NDVI > 0.5)',

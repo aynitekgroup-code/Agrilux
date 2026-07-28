@@ -510,7 +510,7 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
             </div>
             <p className="text-xs text-gray-400 mt-2 text-center">
               {sentinelNDVI.source === 'sentinel-hub-wms' ? 'Sentinel-2 ESA · Resolución 10m' :
-               sentinelNDVI.source === 'mapbox-satellite' ? 'Mapbox Satellite · NDVI estimado' :
+                sentinelNDVI.source === 'esri-world-imagery' ? 'Satélite ESRI · NDVI estimado' :
                'NDVI estimado por ubicación'}
             </p>
           </div>

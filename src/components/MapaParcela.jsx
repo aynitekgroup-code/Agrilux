@@ -1,10 +1,11 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { X, MapPin, Undo2, Check, Upload } from 'lucide-react';
+import { X, Undo2, Check, Upload } from 'lucide-react';
 import { importarKmzKml } from '../lib/importKmz';
 
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 'pk.eyJ1IjoiYXluaXRlay1ncm91cCIsImEiOiJjbG93Z3F5ZmowMDF4Mmt0Z2RqZnI3Z3Y5In0.placeholder';
+// Leaflet CDN
+const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+const LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
 
-// Calcular área de polígono (Shoelace formula) en hectáreas
 function calcularAreaHectareas(coordenadas) {
   if (coordenadas.length < 3) return 0;
   let area = 0;
@@ -15,7 +16,6 @@ function calcularAreaHectareas(coordenadas) {
     area -= coordenadas[j][0] * coordenadas[i][0];
   }
   area = Math.abs(area) / 2;
-  // Convertir grados² a hectáreas (aproximado para latitudes tropicales)
   const latMedia = coordenadas.reduce((s, c) => s + c[1], 0) / n;
   const metrosPorGradoLat = 111320;
   const metrosPorGradoLon = 111320 * Math.cos(latMedia * Math.PI / 180);
@@ -26,92 +26,73 @@ function calcularAreaHectareas(coordenadas) {
 export default function MapaParcela({ onGuardar, onCerrar, coordenadasIniciales = [] }) {
   const mapContainer = useRef(null);
   const mapRef = useRef(null);
+  const polygonRef = useRef(null);
+  const markersRef = useRef([]);
   const [puntos, setPuntos] = useState(coordenadasIniciales);
   const [area, setArea] = useState('');
   const [ubicacionActual, setUbicacionActual] = useState(null);
 
-  // Obtener ubicación actual
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
-      (pos) => setUbicacionActual([pos.coords.longitude, pos.coords.latitude]),
-      () => setUbicacionActual([-78.5, -6.0]), // Default: Cutervo
+      (pos) => setUbicacionActual([pos.coords.latitude, pos.coords.longitude]),
+      () => setUbicacionActual([-6.0, -78.5]),
       { timeout: 5000 }
     );
   }, []);
 
-  // Inicializar mapa
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
-
-    const center = ubicacionActual || [-78.5, -6.0];
-
-    const script = document.createElement('script');
-    script.src = 'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js';
-    script.onload = () => {
+    if (!window.L) {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
-      link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css';
+      link.href = LEAFLET_CSS;
       document.head.appendChild(link);
 
-      window.mapboxgl.accessToken = MAPBOX_TOKEN;
-      const map = new window.mapboxgl.Map({
-        container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/satellite-streets-v12',
+      const script = document.createElement('script');
+      script.src = LEAFLET_JS;
+      script.onload = () => initMap();
+      document.head.appendChild(script);
+    } else {
+      initMap();
+    }
+
+    function initMap() {
+      const L = window.L;
+      const center = ubicacionActual || [-6.0, -78.5];
+
+      const map = L.map(mapContainer.current, {
         center,
         zoom: 16,
+        zoomControl: false,
       });
 
-      map.on('load', () => {
-        // Capa para líneas del polígono
-        map.addSource('polygon', {
-          type: 'geojson',
-          data: { type: 'Feature', geometry: { type: 'Polygon', coordinates: [[]] } },
-        });
-        map.addLayer({
-          id: 'polygon-fill',
-          type: 'fill',
-          source: 'polygon',
-          paint: { 'fill-color': '#22C55E', 'fill-opacity': 0.2 },
-        });
-        map.addLayer({
-          id: 'polygon-line',
-          type: 'line',
-          source: 'polygon',
-          paint: { 'line-color': '#22C55E', 'line-width': 2 },
-        });
+      L.control.zoom({ position: 'topright' }).addTo(map);
 
-        // Marcadores de puntos
-        map.addSource('points', {
-          type: 'geojson',
-          data: { type: 'FeatureCollection', features: [] },
-        });
-        map.addLayer({
-          id: 'points-layer',
-          type: 'circle',
-          source: 'points',
-          paint: {
-            'circle-radius': 8,
-            'circle-color': '#22C55E',
-            'circle-stroke-color': '#fff',
-            'circle-stroke-width': 2,
-          },
-        });
-      });
+      // Capa satélite (ESRI - gratis, sin API key)
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Esri World Imagery',
+        maxZoom: 19,
+      }).addTo(map);
 
-      // Click en el mapa para agregar puntos
+      // Capa de calles encima
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: 'OpenStreetMap',
+        maxZoom: 19,
+        opacity: 0.4,
+      }).addTo(map);
+
+      // Click para agregar puntos
       map.on('click', (e) => {
-        const { lng, lat } = e.lngLat;
+        const { lat, lng } = e.latlng;
         setPuntos(prev => {
           const nuevos = [...prev, [lng, lat]];
-          actualizarMapa(map, nuevos);
           return nuevos;
         });
       });
 
       mapRef.current = map;
-    };
-    document.head.appendChild(script);
+    }
 
     return () => {
       if (mapRef.current) {
@@ -121,48 +102,51 @@ export default function MapaParcela({ onGuardar, onCerrar, coordenadasIniciales 
     };
   }, [ubicacionActual]);
 
-  const actualizarMapa = useCallback((map, nuevosPuntos) => {
-    if (!map || !map.isStyleLoaded()) return;
+  // Actualizar polígono y marcadores
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !window.L) return;
+    const L = window.L;
 
-    // Actualizar puntos
-    const features = nuevosPuntos.map(p => ({
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: p },
-    }));
-    map.getSource('points')?.setData({ type: 'FeatureCollection', features });
+    // Limpiar marcadores anteriores
+    markersRef.current.forEach(m => map.removeLayer(m));
+    markersRef.current = [];
+
+    // Agregar marcadores
+    puntos.forEach((p, i) => {
+      const marker = L.circleMarker([p[1], p[0]], {
+        radius: 8,
+        color: '#fff',
+        fillColor: '#22C55E',
+        fillOpacity: 1,
+        weight: 2,
+      }).addTo(map);
+      markersRef.current.push(marker);
+    });
 
     // Actualizar polígono
-    if (nuevosPuntos.length >= 3) {
-      const coords = [...nuevosPuntos, nuevosPuntos[0]]; // cerrar polígono
-      map.getSource('polygon')?.setData({
-        type: 'Feature',
-        geometry: { type: 'Polygon', coordinates: [coords] },
-      });
-      setArea(calcularAreaHectareas(nuevosPuntos));
+    if (polygonRef.current) {
+      map.removeLayer(polygonRef.current);
+      polygonRef.current = null;
+    }
+
+    if (puntos.length >= 3) {
+      const latLngs = puntos.map(p => [p[1], p[0]]);
+      polygonRef.current = L.polygon(latLngs, {
+        color: '#22C55E',
+        fillColor: '#22C55E',
+        fillOpacity: 0.2,
+        weight: 2,
+      }).addTo(map);
+      const newArea = calcularAreaHectareas(puntos);
+      setArea(newArea);
     } else {
-      map.getSource('polygon')?.setData({
-        type: 'Feature',
-        geometry: { type: 'Polygon', coordinates: [[]] },
-      });
       setArea('');
     }
-  }, []);
+  }, [puntos]);
 
-  // Actualizar mapa cuando cambian los puntos
-  useEffect(() => {
-    if (mapRef.current) actualizarMapa(mapRef.current, puntos);
-  }, [puntos, actualizarMapa]);
-
-  const deshacer = () => {
-    const nuevos = puntos.slice(0, -1);
-    setPuntos(nuevos);
-  };
-
-  const limpiar = () => {
-    setPuntos([]);
-    setArea('');
-  };
-
+  const deshacer = () => setPuntos(prev => prev.slice(0, -1));
+  const limpiar = () => { setPuntos([]); setArea(''); };
   const confirmar = () => {
     if (puntos.length < 3) return;
     onGuardar({ coordenadas: puntos, area: parseFloat(area) || 0 });
@@ -174,7 +158,6 @@ export default function MapaParcela({ onGuardar, onCerrar, coordenadasIniciales 
     try {
       const resultado = await importarKmzKml(file);
       setPuntos(resultado.coordenadas);
-      if (mapRef.current) actualizarMapa(mapRef.current, resultado.coordenadas);
     } catch (err) {
       alert('Error al importar: ' + err.message);
     }
@@ -182,8 +165,7 @@ export default function MapaParcela({ onGuardar, onCerrar, coordenadasIniciales 
 
   return (
     <div className="fixed inset-0 z-50 bg-white flex flex-col">
-      {/* Header */}
-      <div className="bg-primary text-white px-4 py-3 flex items-center justify-between">
+      <div className="bg-primary text-white px-4 py-3 flex items-center justify-between shrink-0">
         <div>
           <p className="font-bold text-sm">Mapear parcela</p>
           <p className="text-white/70 text-xs">
@@ -197,18 +179,15 @@ export default function MapaParcela({ onGuardar, onCerrar, coordenadasIniciales 
         </button>
       </div>
 
-      {/* Mapa */}
       <div ref={mapContainer} className="flex-1" />
 
-      {/* Controles inferiores */}
-      <div className="bg-white border-t border-gray-200 p-4 space-y-3">
+      <div className="bg-white border-t border-gray-200 p-4 space-y-3 shrink-0">
         {area && (
           <div className="bg-green-50 rounded-xl p-3 flex items-center justify-between">
             <div>
               <p className="text-xs text-green-600 font-semibold">Área calculada</p>
               <p className="text-lg font-bold text-green-700">{area} hectáreas</p>
             </div>
-            <div className="text-3xl">📐</div>
           </div>
         )}
 
