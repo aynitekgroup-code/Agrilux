@@ -304,75 +304,82 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
         )}
       </div>
 
-      {/* Modal nueva parcela */}
+      {/* Modal nueva parcela — fullscreen */}
       {modalNuevo && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
-          <div className="bg-white rounded-t-3xl w-full max-w-[430px] mx-auto p-6 max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="font-display font-bold text-lg text-gray-800">Nueva Parcela</h3>
-              <button onClick={() => setModalNuevo(false)} className="text-gray-400">✕</button>
+        <div className="fixed inset-0 z-50 bg-white flex flex-col max-w-[430px] mx-auto">
+          {/* Header */}
+          <div className="bg-primary text-white px-4 py-3 flex items-center gap-3 shrink-0">
+            <button onClick={() => setModalNuevo(false)} className="text-white/70 hover:text-white text-lg font-bold">
+              ←
+            </button>
+            <h3 className="font-display font-bold text-base">Nueva Parcela</h3>
+          </div>
+
+          {/* Contenido scrolleable */}
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div>
+              <label className="text-xs font-semibold text-gray-600 block mb-1.5">Nombre de la parcela *</label>
+              <input value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})}
+                placeholder="Ej: Lote El Recuerdo"
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary" />
             </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1">Nombre de la parcela *</label>
-                <input value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})}
-                  placeholder="Ej: Lote El Recuerdo"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary" />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1">Tipo de cultivo *</label>
-                <select value={form.cultivo} onChange={e => setForm({...form, cultivo: e.target.value, variedad: ''})}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary bg-white">
-                  {CULTIVOS.map(c => <option key={c.id} value={c.id}>{c.emoji} {c.nombre}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1">Variedad</label>
-                <select value={form.variedad} onChange={e => setForm({...form, variedad: e.target.value})}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary bg-white">
-                  <option value="">Seleccionar variedad</option>
-                  {cultivoObj?.variedades.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1">Área (hectáreas)</label>
-                <div className="flex gap-2">
-                  <input type="number" value={poligono ? poligono.area : form.area}
-                    onChange={e => setForm({...form, area: e.target.value})}
-                    placeholder="Ej: 1.5"
-                    className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
-                    disabled={!!poligono} />
-                  <button type="button" onClick={() => setAbrirMapa(true)}
-                    className="bg-primary text-white px-4 rounded-xl flex items-center gap-1 text-xs font-bold whitespace-nowrap">
-                    <Map size={14} /> Mapear
-                  </button>
-                </div>
-                {poligono && (
-                  <p className="text-xs text-green-600 mt-1 font-semibold">
-                    ✓ Área mapeada: {poligono.area} ha ({poligono.coordenadas.length} puntos)
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1">Fecha de siembra *</label>
-                <input type="date" value={form.fechaSiembra} onChange={e => setForm({...form, fechaSiembra: e.target.value})}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary" />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1">Ubicación GPS (opcional)</label>
-                <input value={form.gps} onChange={e => setForm({...form, gps: e.target.value})}
-                  placeholder="Coordenadas GPS"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary" />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button onClick={() => setModalNuevo(false)}
-                  className="flex-1 border border-gray-200 text-gray-600 font-bold py-3 rounded-xl">Cancelar</button>
-                <button onClick={crearParcela} disabled={guardando}
-                  className="flex-1 bg-primary text-white font-bold py-3 rounded-xl disabled:opacity-50">
-                  {guardando ? 'Creando...' : 'Crear parcela'}
+            <div>
+              <label className="text-xs font-semibold text-gray-600 block mb-1.5">Tipo de cultivo *</label>
+              <select value={form.cultivo} onChange={e => setForm({...form, cultivo: e.target.value, variedad: ''})}
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary bg-white">
+                {CULTIVOS.map(c => <option key={c.id} value={c.id}>{c.emoji} {c.nombre}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-600 block mb-1.5">Variedad</label>
+              <select value={form.variedad} onChange={e => setForm({...form, variedad: e.target.value})}
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary bg-white">
+                <option value="">Seleccionar variedad</option>
+                {cultivoObj?.variedades.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-600 block mb-1.5">Área (hectáreas)</label>
+              <div className="flex gap-2">
+                <input type="number" value={poligono ? poligono.area : form.area}
+                  onChange={e => setForm({...form, area: e.target.value})}
+                  placeholder="Ej: 1.5"
+                  className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary"
+                  disabled={!!poligono} />
+                <button type="button" onClick={() => setAbrirMapa(true)}
+                  className="bg-primary text-white px-5 rounded-xl flex items-center gap-1.5 text-xs font-bold whitespace-nowrap">
+                  <Map size={14} /> Mapear
                 </button>
               </div>
+              {poligono && (
+                <p className="text-xs text-green-600 mt-1.5 font-semibold">
+                  ✓ Área mapeada: {poligono.area} ha ({poligono.coordenadas.length} puntos)
+                </p>
+              )}
             </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-600 block mb-1.5">Fecha de siembra *</label>
+              <input type="date" value={form.fechaSiembra} onChange={e => setForm({...form, fechaSiembra: e.target.value})}
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-600 block mb-1.5">Ubicación GPS (opcional)</label>
+              <input value={form.gps} onChange={e => setForm({...form, gps: e.target.value})}
+                placeholder="Coordenadas GPS"
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary" />
+            </div>
+          </div>
+
+          {/* Botones fijos abajo */}
+          <div className="shrink-0 border-t border-gray-100 p-4 flex gap-3 bg-white">
+            <button onClick={() => setModalNuevo(false)}
+              className="flex-1 border border-gray-200 text-gray-600 font-bold py-3.5 rounded-xl text-sm">
+              Cancelar
+            </button>
+            <button onClick={crearParcela} disabled={guardando}
+              className="flex-1 bg-primary text-white font-bold py-3.5 rounded-xl text-sm disabled:opacity-50">
+              {guardando ? 'Creando...' : 'Crear parcela →'}
+            </button>
           </div>
         </div>
       )}
