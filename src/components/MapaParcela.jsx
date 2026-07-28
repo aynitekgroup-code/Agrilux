@@ -1,10 +1,24 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { X, Undo2, Check, Upload } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { MapContainer, TileLayer, Marker, Polygon, useMap, useMapEvents } from 'react-leaflet';
+import { X, Undo2, Check, Upload, Locate } from 'lucide-react';
 import { importarKmzKml } from '../lib/importKmz';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
-// Leaflet CDN
-const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-const LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+// Fix Leaflet default marker icon
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+});
+
+const MARKER_ICON = new L.DivIcon({
+  className: '',
+  html: `<div style="width:24px;height:24px;background:#22C55E;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.3);"></div>`,
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
+});
 
 function calcularAreaHectareas(coordenadas) {
   if (coordenadas.length < 3) return 0;
@@ -23,127 +37,48 @@ function calcularAreaHectareas(coordenadas) {
   return (areaM2 / 10000).toFixed(2);
 }
 
+function MapClickHandler({ onAddPunto }) {
+  useMapEvents({
+    click(e) {
+      onAddPunto(e.latlng.lng, e.latlng.lat);
+    },
+  });
+  return null;
+}
+
+function CenterUpdater({ center }) {
+  const map = useMap();
+  useEffect(() => {
+    if (center) map.setView(center, map.getZoom());
+  }, [center, map]);
+  return null;
+}
+
 export default function MapaParcela({ onGuardar, onCerrar, coordenadasIniciales = [] }) {
-  const mapContainer = useRef(null);
-  const mapRef = useRef(null);
-  const polygonRef = useRef(null);
-  const markersRef = useRef([]);
   const [puntos, setPuntos] = useState(coordenadasIniciales);
   const [area, setArea] = useState('');
-  const [ubicacionActual, setUbicacionActual] = useState(null);
+  const [center, setCenter] = useState([-6.0, -78.5]);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
-      (pos) => setUbicacionActual([pos.coords.latitude, pos.coords.longitude]),
-      () => setUbicacionActual([-6.0, -78.5]),
+      (pos) => setCenter([pos.coords.latitude, pos.coords.longitude]),
+      () => {},
       { timeout: 5000 }
     );
   }, []);
 
   useEffect(() => {
-    if (!mapContainer.current || mapRef.current) return;
-    if (!window.L) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = LEAFLET_CSS;
-      document.head.appendChild(link);
-
-      const script = document.createElement('script');
-      script.src = LEAFLET_JS;
-      script.onload = () => initMap();
-      document.head.appendChild(script);
-    } else {
-      initMap();
-    }
-
-    function initMap() {
-      const L = window.L;
-      const center = ubicacionActual || [-6.0, -78.5];
-
-      const map = L.map(mapContainer.current, {
-        center,
-        zoom: 16,
-        zoomControl: false,
-      });
-
-      L.control.zoom({ position: 'topright' }).addTo(map);
-
-      // Capa satélite (ESRI - gratis, sin API key)
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Esri World Imagery',
-        maxZoom: 19,
-      }).addTo(map);
-
-      // Capa de calles encima
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: 'OpenStreetMap',
-        maxZoom: 19,
-        opacity: 0.4,
-      }).addTo(map);
-
-      // Click para agregar puntos
-      map.on('click', (e) => {
-        const { lat, lng } = e.latlng;
-        setPuntos(prev => {
-          const nuevos = [...prev, [lng, lat]];
-          return nuevos;
-        });
-      });
-
-      mapRef.current = map;
-    }
-
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
-  }, [ubicacionActual]);
-
-  // Actualizar polígono y marcadores
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !window.L) return;
-    const L = window.L;
-
-    // Limpiar marcadores anteriores
-    markersRef.current.forEach(m => map.removeLayer(m));
-    markersRef.current = [];
-
-    // Agregar marcadores
-    puntos.forEach((p, i) => {
-      const marker = L.circleMarker([p[1], p[0]], {
-        radius: 8,
-        color: '#fff',
-        fillColor: '#22C55E',
-        fillOpacity: 1,
-        weight: 2,
-      }).addTo(map);
-      markersRef.current.push(marker);
-    });
-
-    // Actualizar polígono
-    if (polygonRef.current) {
-      map.removeLayer(polygonRef.current);
-      polygonRef.current = null;
-    }
-
     if (puntos.length >= 3) {
-      const latLngs = puntos.map(p => [p[1], p[0]]);
-      polygonRef.current = L.polygon(latLngs, {
-        color: '#22C55E',
-        fillColor: '#22C55E',
-        fillOpacity: 0.2,
-        weight: 2,
-      }).addTo(map);
-      const newArea = calcularAreaHectareas(puntos);
-      setArea(newArea);
+      setArea(calcularAreaHectareas(puntos));
     } else {
       setArea('');
     }
   }, [puntos]);
+
+  const handleAddPunto = useCallback((lng, lat) => {
+    setPuntos(prev => [...prev, [lng, lat]]);
+  }, []);
 
   const deshacer = () => setPuntos(prev => prev.slice(0, -1));
   const limpiar = () => { setPuntos([]); setArea(''); };
@@ -163,6 +98,10 @@ export default function MapaParcela({ onGuardar, onCerrar, coordenadasIniciales 
     }
   };
 
+  const polygonLatLngs = puntos.length >= 3
+    ? puntos.map(p => [p[1], p[0]])
+    : [];
+
   return (
     <div className="fixed inset-0 z-50 bg-white flex flex-col">
       <div className="bg-primary text-white px-4 py-3 flex items-center justify-between shrink-0">
@@ -179,7 +118,38 @@ export default function MapaParcela({ onGuardar, onCerrar, coordenadasIniciales 
         </button>
       </div>
 
-      <div ref={mapContainer} className="flex-1" />
+      <div className="flex-1 relative">
+        <MapContainer
+          center={center}
+          zoom={16}
+          className="w-full h-full"
+          zoomControl={false}
+          style={{ background: '#e5e7eb' }}
+        >
+          <TileLayer
+            attribution='&copy; Esri'
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            maxZoom={19}
+          />
+          <TileLayer
+            attribution='&copy; OpenStreetMap'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            maxZoom={19}
+            opacity={0.3}
+          />
+          <MapClickHandler onAddPunto={handleAddPunto} />
+          <CenterUpdater center={center} />
+          {puntos.map((p, i) => (
+            <Marker key={i} position={[p[1], p[0]]} icon={MARKER_ICON} />
+          ))}
+          {polygonLatLngs.length >= 3 && (
+            <Polygon
+              positions={polygonLatLngs}
+              pathOptions={{ color: '#22C55E', fillColor: '#22C55E', fillOpacity: 0.2, weight: 2 }}
+            />
+          )}
+        </MapContainer>
+      </div>
 
       <div className="bg-white border-t border-gray-200 p-4 space-y-3 shrink-0">
         {area && (

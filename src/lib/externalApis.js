@@ -38,6 +38,17 @@ export async function getWeather(lat, lon, label = '') {
   return res.json();
 }
 
+// ─── Pronóstico SENAMHI (scraping del sitio oficial) ────────────────────────
+export async function getPronosticoSENAMHI(lat, lon) {
+  const params = new URLSearchParams({ lat: lat.toString(), lon: lon.toString() });
+  const res = await fetch(`/api/senamhi-scraper?${params}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error obteniendo pronóstico SENAMHI');
+  }
+  return res.json();
+}
+
 // ─── Diagnóstico visual de plantas (crop.health → plant.id → HuggingFace) ────
 export async function identifyPlantDisease(compressedUrls) {
   const res = await fetch('/api/plant-disease', {

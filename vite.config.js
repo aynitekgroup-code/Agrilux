@@ -53,7 +53,7 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,woff,png}'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -78,6 +78,22 @@ export default defineConfig({
               cacheName: 'api-cache',
               expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 },
               networkTimeoutSeconds: 10
+            }
+          },
+          {
+            urlPattern: /^https:\/\/server\.arcgisonline\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'esri-tiles-cache',
+              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 }
+            }
+          },
+          {
+            urlPattern: /^https:\/\/{s}\.tile\.openstreetmap\.org\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'osm-tiles-cache',
+              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 }
             }
           }
         ]
