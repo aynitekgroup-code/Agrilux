@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { X, MapPin, Undo2, Check } from 'lucide-react';
+import { X, MapPin, Undo2, Check, Upload } from 'lucide-react';
+import { importarKmzKml } from '../lib/importKmz';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 'pk.eyJ1IjoiYXluaXRlay1ncm91cCIsImEiOiJjbG93Z3F5ZmowMDF4Mmt0Z2RqZnI3Z3Y5In0.placeholder';
 
@@ -167,6 +168,18 @@ export default function MapaParcela({ onGuardar, onCerrar, coordenadasIniciales 
     onGuardar({ coordenadas: puntos, area: parseFloat(area) || 0 });
   };
 
+  const handleKmzImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const resultado = await importarKmzKml(file);
+      setPuntos(resultado.coordenadas);
+      if (mapRef.current) actualizarMapa(mapRef.current, resultado.coordenadas);
+    } catch (err) {
+      alert('Error al importar: ' + err.message);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-white flex flex-col">
       {/* Header */}
@@ -217,6 +230,11 @@ export default function MapaParcela({ onGuardar, onCerrar, coordenadasIniciales 
         <p className="text-[10px] text-gray-400 text-center">
           Toca el mapa para colocar puntos. Mínimo 3 puntos para formar la parcela.
         </p>
+
+        <label className="w-full flex items-center justify-center gap-2 border border-dashed border-primary/30 text-primary/70 font-bold py-2.5 rounded-xl text-xs cursor-pointer hover:bg-primary/5 transition-colors">
+          <Upload size={14} /> Importar archivo KMZ/KML
+          <input type="file" accept=".kmz,.kml" onChange={handleKmzImport} className="hidden" />
+        </label>
       </div>
     </div>
   );

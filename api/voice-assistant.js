@@ -20,48 +20,71 @@ EJEMPLOS DE BUENAS RESPUESTAS:
 - "Las manchas en la papa pueden ser tizón tardío. Aplica clorotalonil cada 15 días."
 - "Hoy en tu zona hay 22°C y 80% de humedad. Condiciones favorables para hongos, revisa tus hojas."`;
 
-// ── Obtener clima real de Open-Meteo (gratis, sin API key) ──
+// ── Obtener clima real vía SENAMHI agent (Open-Meteo + estaciones Perú) ──
 async function obtenerClima(lat, lon) {
   try {
-    const r = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max&timezone=auto&forecast_days=3`
-    );
+    // Intentar SENAMHI agent (Vercel internal)
+    const protocol = 'https';
+    const host = 'www.vitalfarmbright.store';
+    const r = await fetch(`${protocol}://${host}/api/senamhi?lat=${lat}&lon=${lon}`);
     const data = await r.json();
-    if (!data.current) return null;
+    if (!data.climaActual) return null;
 
-    const codigos = {
-      0: 'despejado', 1: 'mayormente despejado', 2: 'parcial nublado', 3: 'nublado',
-      45: 'neblina', 48: 'neblina con escarcha',
-      51: 'llovizna leve', 53: 'llovizna moderada', 55: 'llovizna intensa',
-      61: 'lluvia leve', 63: 'lluvia moderada', 65: 'lluvia intensa',
-      71: 'nieve leve', 73: 'nieve moderada', 75: 'nieve intensa',
-      80: 'aguacero leve', 81: 'aguacero moderado', 82: 'aguacero fuerte',
-      95: 'tormenta', 96: 'tormenta con granizo', 99: 'tormenta fuerte con granizo',
-    };
+    const clima = data.climaActual;
+    const estacion = data.estacion;
+    let contexto = `CLIMA ACTUAL (${estacion?.nombre || 'zona'}): ${clima.temperatura}°C, ${clima.descripcion}, humedad ${clima.humedad}%, viento ${clima.viento} km/h`;
 
-    const desc = codigos[data.current.weather_code] || 'variable';
-    const temp = data.current.temperature_2m;
-    const hum = data.current.relative_humidity_2m;
-    const lluvia = data.current.precipitation;
-    const viento = data.current.wind_speed_10m;
-
-    let contexto = `CLIMA ACTUAL: ${temp}°C, ${desc}, humedad ${hum}%, viento ${viento} km/h`;
-
-    if (lluvia > 0) contexto += `, lluvia activa ${lluvia}mm`;
-    if (data.daily) {
-      const maxHoy = data.daily.temperature_2m_max?.[0];
-      const minHoy = data.daily.temperature_2m_min?.[0];
-      const lluviaHoy = data.daily.precipitation_sum?.[0];
-      const probLluvia = data.daily.precipitation_probability_max?.[0];
+    if (clima.precipitacion > 0) contexto += `, lluvia activa ${clima.precipitacion}mm`;
+    if (data.pronostico?.fechas) {
+      const maxHoy = data.pronostico.tempMax?.[0];
+      const minHoy = data.pronostico.tempMin?.[0];
+      const lluviaHoy = data.pronostico.lluvia?.[0];
+      const probLluvia = data.pronostico.probLluvia?.[0];
       contexto += `. HOY: ${minHoy}°C-${maxHoy}°C`;
       if (lluviaHoy > 0) contexto += `, ${lluviaHoy}mm de lluvia esperada`;
       if (probLluvia > 0) contexto += `, probabilidad lluvia ${probLluvia}%`;
     }
+    if (data.pronosticoCana?.recomendaciones?.length) {
+      contexto += `. RECOMENDACIONES CAÑA: ${data.pronosticoCana.recomendaciones.map(r => r.mensaje).join('; ')}`;
+    }
 
     return contexto;
   } catch (e) {
-    console.warn('Error clima:', e.message);
-    return null;
+    // Fallback a Open-Meteo directo
+    try {
+      const r = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max&timezone=auto&forecast_days=3`
+      );
+      const data = await r.json();
+      if (!data.current) return null;
+
+      const codigos = {
+        0: 'despejado', 1: 'mayormente despejado', 2: 'parcial nublado', 3: 'nublado',
+        45: 'neblina', 48: 'neblina con escarcha',
+        51: 'llovizna leve', 53: 'llovizna moderada', 55: 'llovizna intensa',
+        61: 'lluvia leve', 63: 'lluvia moderada', 65: 'lluvia intensa',
+        80: 'aguacero leve', 81: 'aguacero moderado', 82: 'aguacero fuerte',
+        95: 'tormenta', 96: 'tormenta con granizo', 99: 'tormenta fuerte con granizo',
+      };
+
+      const desc = codigos[data.current.weather_code] || 'variable';
+      const temp = data.current.temperature_2m;
+      const hum = data.current.relative_humidity_2m;
+      const lluvia = data.current.precipitation;
+      const viento = data.current.wind_speed_10m;
+
+      let contexto = `CLIMA ACTUAL: ${temp}°C, ${desc}, humedad ${hum}%, viento ${viento} km/h`;
+      if (lluvia > 0) contexto += `, lluvia activa ${lluvia}mm`;
+      if (data.daily) {
+        const maxHoy = data.daily.temperature_2m_max?.[0];
+        const minHoy = data.daily.temperature_2m_min?.[0];
+        contexto += `. HOY: ${minHoy}°C-${maxHoy}°C`;
+      }
+      return contexto;
+    } catch (e2) {
+      console.warn('Error clima fallback:', e2.message);
+      return null;
+    }
   }
 }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Camera, Leaf, Calendar, TrendingUp, Loader2, Map } from 'lucide-react';
+import { Plus, Camera, Leaf, Calendar, TrendingUp, Loader2, Map, Download } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { CULTIVOS } from '../lib/constants';
 import { db } from '../lib/firebase';
@@ -7,6 +7,8 @@ import { collection, addDoc, getDocs, query, where, orderBy } from 'firebase/fir
 import { invokeGemini } from '../lib/gemini';
 import { useNavigate } from 'react-router-dom';
 import MapaParcela from '../components/MapaParcela';
+import { exportarParcelasExcel } from '../lib/exportExcel';
+import { GraficoMonitoreo } from '../components/GraficosCultivo';
 
 export default function MiParcela() {
   const { user } = useAuth();
@@ -155,6 +157,10 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
             <h1 className="text-2xl font-display font-bold">Mi Parcela</h1>
             <p className="text-white/70 text-sm mt-1">Gestiona y monitorea tus cultivos</p>
           </div>
+          <button onClick={() => exportarParcelasExcel(parcelas, registros)}
+            className="bg-white/20 text-white font-bold text-sm px-3 py-2 rounded-xl flex items-center gap-1 shadow-sm">
+            <Download size={16} /> Excel
+          </button>
           <button onClick={() => setModalNuevo(true)}
             className="bg-white text-primary font-bold text-sm px-4 py-2 rounded-xl flex items-center gap-1 shadow-sm">
             <Plus size={16} /> Nueva
@@ -261,6 +267,9 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                     </div>
                   )}
                 </div>
+
+                {/* Gráfico de monitoreo */}
+                {registros.length > 1 && <GraficoMonitoreo registros={registros} />}
 
                 {/* Historial */}
                 {registros.length > 0 && (

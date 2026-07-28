@@ -136,3 +136,13 @@ export async function getCicloRecomendaciones(data) {
   }
   return res.json();
 }
+
+// ─── SENAMHI — Clima real de Perú + pronóstico agrícola ─────────────────────
+export async function getClimaSenamhi(lat, lon) {
+  const res = await fetch(`/api/senamhi?lat=${lat}&lon=${lon}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error obteniendo datos SENAMHI');
+  }
+  return res.json();
+}
