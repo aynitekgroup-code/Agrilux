@@ -86,17 +86,8 @@ function AppRoutes() {
     );
   }
 
-  // Logged in but NOT approved → pending screen (only for protected routes)
-  if (user && !isAprobado && (window.location.pathname === '/parcela' || window.location.pathname === '/ciclo')) {
-    return (
-      <Routes>
-        <Route path="*" element={<PantallaPendiente />} />
-      </Routes>
-    );
-  }
-
-  // Logged in AND approved, no location → selector
-  if (user && isAprobado && !user.ubicacion) {
+  // Logged in, no location → selector
+  if (user && !user.ubicacion) {
     return <SelectorUbicacion esPrimeraVez={true} />;
   }
 
@@ -116,12 +107,12 @@ function AppRoutes() {
 
             {/* Parcela — requiere login */}
             <Route path="/parcela" element={
-              user && isAprobado ? <MiParcela /> : <Navigate to="/registro" />
+              user ? <MiParcela /> : <Navigate to="/registro" />
             } />
 
             {/* Ciclo — requiere login */}
             <Route path="/ciclo" element={
-              user && isAprobado ? <CicloCultivo /> : <Navigate to="/registro" />
+              user ? <CicloCultivo /> : <Navigate to="/registro" />
             } />
 
             <Route path="*" element={<Navigate to="/" />} />

@@ -56,7 +56,7 @@ export const AuthProvider = ({ children }) => {
       nombre:    nombre.trim(),
       email:     email.trim().toLowerCase(),
       rol:       'agricultor',
-      status:    'pendiente',
+      status:    'aprobado',
       creadoPor: 'self',
       createdAt: new Date().toISOString(),
     });
@@ -65,7 +65,7 @@ export const AuthProvider = ({ children }) => {
       email:  email.trim().toLowerCase(),
       nombre: nombre.trim(),
       rol:    'agricultor',
-      status: 'pendiente',
+      status: 'aprobado',
     });
     return cred.user;
   };

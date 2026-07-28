@@ -15,12 +15,16 @@ const ERRORES = {
   'auth/email-already-in-use':     'Este correo ya está registrado.',
   'auth/invalid-email':            'El correo no es válido.',
   'auth/weak-password':            'La contraseña debe tener al menos 6 caracteres.',
-  'auth/invalid-credential':       'Correo o contraseña incorrectos.',
+  'auth/invalid-credential':       'Correo o contraseña incorrectos. Si no tienes cuenta, crea una en "Crear cuenta".',
   'auth/too-many-requests':        'Demasiados intentos. Espera unos minutos.',
+  'auth/user-not-found':           'No existe una cuenta con este correo. Crea una en "Crear cuenta".',
+  'auth/wrong-password':           'Contraseña incorrecta.',
+  'auth/network-request-failed':   'Error de conexión. Verifica tu internet.',
+  'auth/operation-not-allowed':    'Este método de inicio de sesión no está habilitado.',
 };
 
 function msgError(code) {
-  return ERRORES[code] || 'Error al procesar. Intenta de nuevo.';
+  return ERRORES[code] || `Error: ${code || 'desconocido'}. Intenta de nuevo.`;
 }
 
 export default function Registro() {
@@ -66,6 +70,7 @@ export default function Registro() {
         await login({ email, password });
       }
     } catch (e) {
+      console.error('Auth error:', e.code, e.message);
       setError(msgError(e.code));
     } finally {
       setLoading(false);
