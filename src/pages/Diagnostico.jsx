@@ -13,6 +13,7 @@ import {
   getSoilData,
   getNasaAlerts,
   getSentinelNDVI,
+  getPronosticoSENAMHI,
 } from '../lib/externalApis';
 import { CULTIVOS }      from '../lib/constants';
 import { db }            from '../lib/firebase';
@@ -48,6 +49,8 @@ export default function Diagnostico({ onPlagaDetectada }) {
   const [ubicacion, setUbicacion]       = useState('');
   const [weather, setWeather]           = useState(null);
   const [locationInfo, setLocationInfo] = useState(null);
+  const [senamhi, setSenamhi]           = useState(null);
+  const [senamhiLoading, setSenamhiLoading] = useState(false);
 
   const [plantDiagnosis, setPlantDiagnosis]     = useState(null);
   const [plantIdentificando, setPlantIdentificando] = useState(false);
@@ -100,6 +103,10 @@ export default function Diagnostico({ onPlagaDetectada }) {
           // NDVI más tarde, no bloquea
           getSentinelNDVI(lat, lon, 2)
             .then(setSentinelNDVI)
+            .catch(() => {});
+          // SENAMHI pronóstico oficial
+          getPronosticoSENAMHI(lat, lon)
+            .then(setSenamhi)
             .catch(() => {});
         } catch (e) { /* silencioso */ }
       },
@@ -526,6 +533,45 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
             </p>
             <p className={`text-sm ${nasaAlerts.riesgo === 'alto' ? 'text-red-700' : 'text-orange-700'}`}>{nasaAlerts.alerta}</p>
             <a href={nasaAlerts.mapa_url} target="_blank" rel="noreferrer" className="text-xs text-blue-500 underline mt-2 inline-block">Ver en mapa NASA →</a>
+          </div>
+        </div>
+      )}
+
+      {/* Pronóstico SENAMHI */}
+      {senamhi && senamhi.pronosticos?.length > 0 && (
+        <div className="px-4 pb-3">
+          <div className="bg-blue-50 rounded-2xl p-4 border border-blue-200">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">
+                🌤 Pronóstico SENAMHI Oficial
+              </p>
+              <span className="text-[10px] bg-blue-100 text-blue-600 rounded-full px-2 py-0.5 font-semibold">
+                {senamhi.estacion?.nombre}
+              </span>
+            </div>
+            <p className="text-xs text-blue-600 mb-3">
+              {senamhi.ubicacionEncontrada?.nombre} — {senamhi.ubicacionEncontrada?.departamento}
+            </p>
+            <div className="space-y-2">
+              {senamhi.pronosticos.slice(0, 3).map((p, i) => (
+                <div key={i} className="bg-white rounded-xl p-3 border border-blue-100">
+                  <p className="text-xs font-semibold text-gray-700 capitalize">{p.fecha}</p>
+                  <div className="flex items-center gap-4 mt-1">
+                    <span className="text-sm font-bold text-red-500">⬆ {p.tempMax}°C</span>
+                    <span className="text-sm font-bold text-blue-500">⬇ {p.tempMin}°C</span>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1">{p.descripcion}</p>
+                </div>
+              ))}
+            </div>
+            <a
+              href="https://www.senamhi.gob.pe/?p=pronostico-meteorologico"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 block text-center text-xs text-blue-600 underline font-semibold"
+            >
+              Ver pronóstico completo en SENAMHI →
+            </a>
           </div>
         </div>
       )}

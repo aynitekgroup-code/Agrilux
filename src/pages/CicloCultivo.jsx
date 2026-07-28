@@ -9,7 +9,7 @@ import { useAuth } from '../lib/AuthContext';
 import { CULTIVOS } from '../lib/constants';
 import { db } from '../lib/firebase';
 import { collection, getDocs, query, where, orderBy, addDoc } from 'firebase/firestore';
-import { getWeather, getSoilData, getCicloRecomendaciones } from '../lib/externalApis';
+import { getWeather, getSoilData, getCicloRecomendaciones, getPronosticoSENAMHI } from '../lib/externalApis';
 import { invokeGemini } from '../lib/gemini';
 import TimelineEtapa from '../components/TimelineEtapa';
 
@@ -38,6 +38,7 @@ export default function CicloCultivo() {
   const [clima, setClima] = useState(null);
   const [suelo, setSuelo] = useState(null);
   const [cargandoClima, setCargandoClima] = useState(false);
+  const [senamhi, setSenamhi] = useState(null);
 
   // Monitoreo
   const [analizando, setAnalizando] = useState(false);
@@ -90,9 +91,11 @@ export default function CicloCultivo() {
     Promise.allSettled([
       getWeather(lat, lon),
       getSoilData(lat, lon),
-    ]).then(([climaRes, sueloRes]) => {
+      getPronosticoSENAMHI(lat, lon),
+    ]).then(([climaRes, sueloRes, senamhiRes]) => {
       if (climaRes.status === 'fulfilled') setClima(climaRes.value);
       if (sueloRes.status === 'fulfilled') setSuelo(sueloRes.value);
+      if (senamhiRes.status === 'fulfilled') setSenamhi(senamhiRes.value);
       setCargandoClima(false);
     }).catch(() => setCargandoClima(false));
   }, [parcelaActiva]);
@@ -374,6 +377,40 @@ Responde en español, máximo 200 palabras, con viñetas.`,
             )}
           </div>
         </div>
+
+        {/* Pronóstico SENAMHI */}
+        {senamhi && senamhi.pronosticos?.length > 0 && (
+          <div className="bg-blue-50 rounded-2xl p-4 border border-blue-200">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-bold text-blue-700 uppercase tracking-wide flex items-center gap-1">
+                <Cloud size={14} /> Pronóstico SENAMHI Oficial
+              </p>
+              <span className="text-[10px] bg-blue-100 text-blue-600 rounded-full px-2 py-0.5 font-semibold">
+                {senamhi.estacion?.nombre}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {senamhi.pronosticos.slice(0, 3).map((p, i) => (
+                <div key={i} className="bg-white rounded-xl p-3 border border-blue-100">
+                  <p className="text-xs font-semibold text-gray-700 capitalize">{p.fecha}</p>
+                  <div className="flex items-center gap-4 mt-1">
+                    <span className="text-sm font-bold text-red-500">⬆ {p.tempMax}°C</span>
+                    <span className="text-sm font-bold text-blue-500">⬇ {p.tempMin}°C</span>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1">{p.descripcion}</p>
+                </div>
+              ))}
+            </div>
+            <a
+              href="https://www.senamhi.gob.pe/?p=pronostico-meteorologico"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 block text-center text-xs text-blue-600 underline font-semibold"
+            >
+              Ver pronóstico completo en SENAMHI →
+            </a>
+          </div>
+        )}
 
         {/* Timeline del ciclo */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
