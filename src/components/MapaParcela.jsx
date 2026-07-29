@@ -109,7 +109,7 @@ export default function MapaParcela({ onGuardar, onCerrar, coordenadasIniciales 
     : [];
 
   return (
-    <div className="fixed inset-0 z-50 bg-white flex flex-col">
+    <div className="fixed inset-0 z-[60] bg-white flex flex-col">
       <div className="bg-primary text-white px-4 py-3 flex items-center justify-between shrink-0">
         <div>
           <p className="font-bold text-sm">Mapear parcela</p>

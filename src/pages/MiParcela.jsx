@@ -327,7 +327,7 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
 
       {/* Modal nueva parcela — fullscreen */}
       {modalNuevo && (
-        <div className="fixed inset-0 z-50 bg-white flex flex-col max-w-[430px] mx-auto">
+        <div className="fixed inset-0 z-[60] bg-white flex flex-col max-w-[430px] mx-auto">
           {/* Header */}
           <div className="bg-primary text-white px-4 py-3 flex items-center gap-3 shrink-0">
             <button onClick={() => setModalNuevo(false)} className="text-white/70 hover:text-white text-lg font-bold">
@@ -393,7 +393,7 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
           </div>
 
           {/* Botones fijos abajo */}
-          <div className="shrink-0 border-t border-gray-100 p-4 flex gap-3 bg-white">
+          <div className="shrink-0 border-t border-gray-100 p-4 pb-6 flex gap-3 bg-white">
             <button onClick={() => setModalNuevo(false)}
               className="flex-1 border border-gray-200 text-gray-600 font-bold py-3.5 rounded-xl text-sm">
               Cancelar
