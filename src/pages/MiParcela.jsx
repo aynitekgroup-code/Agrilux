@@ -43,7 +43,14 @@ export default function MiParcela() {
     try {
       const q = query(collection(db, 'parcelas'), where('userId', '==', user?.uid));
       const snap = await getDocs(q);
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const data = snap.docs.map(d => {
+        const doc = { id: d.id, ...d.data() };
+        // Parsear coordenadas si vienen como string JSON
+        if (typeof doc.coordenadas === 'string' && doc.coordenadas) {
+          try { doc.coordenadas = JSON.parse(doc.coordenadas); } catch { doc.coordenadas = []; }
+        }
+        return doc;
+      });
       setParcelas(data);
       if (data.length > 0 && !parcelaActiva) {
         setParcelaActiva(data[0]);
@@ -66,13 +73,17 @@ export default function MiParcela() {
     setGuardando(true);
     try {
       const cultObj = CULTIVOS.find(c => c.id === form.cultivo);
+      // Firestore no soporta arrays anidados — convertir coordenadas a string
+      const coordenadasStr = poligono?.coordenadas?.length
+        ? JSON.stringify(poligono.coordenadas)
+        : '';
       const doc = await addDoc(collection(db, 'parcelas'), {
         userId: user?.uid, userName: user?.nombre,
         nombre: form.nombre, cultivo: form.cultivo, cultivoNombre: cultObj?.nombre,
         cultivoEmoji: cultObj?.emoji, variedad: form.variedad,
         area: poligono ? String(poligono.area) : form.area,
         fechaSiembra: form.fechaSiembra, gps: form.gps || user?.ubicacion || '',
-        coordenadas: poligono?.coordenadas || [],
+        coordenadas: coordenadasStr,
         createdAt: new Date().toISOString(),
       });
       const nueva = {
