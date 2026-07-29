@@ -24,17 +24,23 @@ function calcularAreaHectareas(coordenadas) {
   if (coordenadas.length < 3) return 0;
   let area = 0;
   const n = coordenadas.length;
+  // Coordenadas están en formato [lng, lat]
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
-    area += coordenadas[i][0] * coordenadas[j][1];
-    area -= coordenadas[j][0] * coordenadas[i][0];
+    const x1 = coordenadas[i][0]; // lng
+    const y1 = coordenadas[i][1]; // lat
+    const x2 = coordenadas[j][0]; // lng
+    const y2 = coordenadas[j][1]; // lat
+    area += x1 * y2;
+    area -= x2 * y1;
   }
   area = Math.abs(area) / 2;
+  // Promedio de latitudes para conversión
   const latMedia = coordenadas.reduce((s, c) => s + c[1], 0) / n;
   const metrosPorGradoLat = 111320;
   const metrosPorGradoLon = 111320 * Math.cos(latMedia * Math.PI / 180);
   const areaM2 = area * metrosPorGradoLat * metrosPorGradoLon;
-  return (areaM2 / 10000).toFixed(2);
+  return Math.round((areaM2 / 10000) * 100) / 100;
 }
 
 function MapClickHandler({ onAddPunto }) {

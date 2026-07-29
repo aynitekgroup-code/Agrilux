@@ -62,7 +62,7 @@ export default function MiParcela() {
   };
 
   const crearParcela = async () => {
-    if (!form.nombre || !form.fechaSiembra || !form.gps) { alert('Completa nombre, fecha de siembra y ubicación'); return; }
+    if (!form.nombre || !form.fechaSiembra) { alert('Completa nombre y fecha de siembra'); return; }
     setGuardando(true);
     try {
       const cultObj = CULTIVOS.find(c => c.id === form.cultivo);
@@ -71,7 +71,7 @@ export default function MiParcela() {
         nombre: form.nombre, cultivo: form.cultivo, cultivoNombre: cultObj?.nombre,
         cultivoEmoji: cultObj?.emoji, variedad: form.variedad,
         area: poligono ? String(poligono.area) : form.area,
-        fechaSiembra: form.fechaSiembra, gps: form.gps,
+        fechaSiembra: form.fechaSiembra, gps: form.gps || user?.ubicacion || '',
         coordenadas: poligono?.coordenadas || [],
         createdAt: new Date().toISOString(),
       });
@@ -85,7 +85,10 @@ export default function MiParcela() {
       setRegistros([]);
       setModalNuevo(false);
       setPoligono(null);
-    } catch (e) { alert('Error al crear parcela'); }
+    } catch (e) { 
+      console.error('Error crear parcela:', e);
+      alert('Error al crear parcela: ' + e.message); 
+    }
     setGuardando(false);
   };
 
@@ -370,11 +373,11 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary" />
             </div>
             <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1.5">Ubicación *</label>
+              <label className="text-xs font-semibold text-gray-600 block mb-1.5">Ubicación (opcional)</label>
               <input value={form.gps} onChange={e => setForm({...form, gps: e.target.value})}
                 placeholder="Ej: Cutervo, Cajamarca"
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary" />
-              <p className="text-[10px] text-gray-400 mt-1">Ubicación de tu registro. Se usa para clima y recomendaciones.</p>
+              <p className="text-[10px] text-gray-400 mt-1">Si no ingresas, se usará tu ubicación del registro.</p>
             </div>
           </div>
 
