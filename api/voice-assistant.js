@@ -1,92 +1,268 @@
 // api/voice-assistant.js
-// Asistente de voz agrícola con datos climáticos en tiempo real
+// Asistente de voz agrícola con TODOS los datos: ubicación, clima, SENAMHI, suelo, NASA, estación más cercana
 // Cadena: OpenRouter → DeepSeek → GitHub (texto)
+
+// ── Base de datos de estaciones meteorológicas de Perú ──
+const ESTACIONES_PERU = [
+  // Costa Norte
+  { id:'TUM', nombre:'Tumbes', dept:'Tumbes', lat:-3.56, lon:-80.44, alt:25 },
+  { id:'PIU', nombre:'Piura', dept:'Piura', lat:-5.17, lon:-80.63, alt:29 },
+  { id:'SUL', nombre:'Sullana', dept:'Piura', lat:-4.90, lon:-80.69, alt:62 },
+  { id:'CAT', nombre:'Catacaos', dept:'Piura', lat:-5.27, lon:-80.68, alt:15 },
+  { id:'CHI', nombre:'Chiclayo', dept:'Lambayeque', lat:-6.77, lon:-79.84, alt:27 },
+  { id:'LAM', nombre:'Lambayeque', dept:'Lambayeque', lat:-6.70, lon:-79.91, alt:13 },
+  { id:'FER', nombre:'Ferreñafe', dept:'Lambayeque', lat:-6.64, lon:-79.79, alt:43 },
+  { id:'MOR', nombre:'Mórrope', dept:'Lambayeque', lat:-6.85, lon:-80.01, alt:12 },
+  // Costa Centro
+  { id:'TRU', nombre:'Trujillo', dept:'La Libertad', lat:-8.11, lon:-79.03, alt:34 },
+  { id:'CHE', nombre:'Chepén', dept:'La Libertad', lat:-7.23, lon:-79.43, alt:55 },
+  { id:'PAC', nombre:'Pacasmayo', dept:'La Libertad', lat:-7.40, lon:-79.57, alt:8 },
+  { id:'CHI2', nombre:'Chimbote', dept:'Áncash', lat:-9.07, lon:-78.59, alt:4 },
+  { id:'CAS', nombre:'Casma', dept:'Áncash', lat:-9.43, lon:-78.27, alt:6 },
+  { id:'HUA', nombre:'Huarmey', dept:'Áncash', lat:-10.07, lon:-78.17, alt:9 },
+  { id:'SMA', nombre:'Santa María de Nieva', dept:'Áncash', lat:-6.06, lon:-78.07, alt:450 },
+  { id:'BAG', nombre:'Bagua Grande', dept:'Amazonas', lat:-5.76, lon:-78.44, alt:450 },
+  { id:'CAT2', nombre:'Cajamarca', dept:'Cajamarca', lat:-7.16, lon:-78.52, alt:2618 },
+  { id:'CEL', nombre:'Celendín', dept:'Cajamarca', lat:-6.88, lon:-78.15, alt:2630 },
+  { id:'CUT', nombre:'Cutervo', dept:'Cajamarca', lat:-6.38, lon:-78.82, alt:2630 },
+  { id:'CHO', nombre:'Chota', dept:'Cajamarca', lat:-6.56, lon:-78.65, alt:2370 },
+  { id:'BAM', nombre:'Bambamarca', dept:'Cajamarca', lat:-6.68, lon:-78.52, alt:2450 },
+  { id:'CON', nombre:'Contumazá', dept:'Cajamarca', lat:-7.37, lon:-78.81, alt:2670 },
+  // Costa Sur
+  { id:'LIM', nombre:'Lima', dept:'Lima', lat:-12.03, lon:-76.93, alt:182 },
+  { id:'HUA2', nombre:'Huaral', dept:'Lima', lat:-11.50, lon:-77.21, alt:410 },
+  { id:'CAÑ', nombre:'Cañete', dept:'Lima', lat:-13.07, lon:-76.35, alt:93 },
+  { id:'PIS', nombre:'Pisco', dept:'Ica', lat:-13.70, lon:-76.02, alt:13 },
+  { id:'ICA', nombre:'Ica', dept:'Ica', lat:-14.07, lon:-75.73, alt:400 },
+  { id:'NAZ', nombre:'Nazca', dept:'Ica', lat:-14.83, lon:-74.95, alt:520 },
+  { id:'CHI3', nombre:'Chincha', dept:'Ica', lat:-13.41, lon:-76.13, alt:69 },
+  // Costa Sur profunda
+  { id:'ARE', nombre:'Arequipa', dept:'Arequipa', lat:-16.34, lon:-71.57, alt:2050 },
+  { id:'MOL', nombre:'Mollendo', dept:'Arequipa', lat:-17.02, lon:-72.02, alt:60 },
+  { id:'CAY', nombre:'Caylloma', dept:'Arequipa', lat:-15.19, lon:-72.05, alt:3400 },
+  { id:'ILO', nombre:'Ilo', dept:'Moquegua', lat:-17.64, lon:-71.34, alt:11 },
+  { id:'MOQ', nombre:'Moquegua', dept:'Moquegua', lat:-17.20, lon:-70.94, alt:1410 },
+  { id:'TAC', nombre:'Tacna', dept:'Tacna', lat:-18.01, lon:-70.25, alt:441 },
+  // Sierra
+  { id:'CUZ', nombre:'Cusco', dept:'Cusco', lat:-13.53, lon:-71.97, alt:3310 },
+  { id:'URC', nombre:'Urubamba', dept:'Cusco', lat:-13.31, lon:-72.11, alt:2870 },
+  { id:'PUN', nombre:'Puno', dept:'Puno', lat:-15.84, lon:-70.03, alt:3825 },
+  { id:'JUL', nombre:'Juliaca', dept:'Puno', lat:-15.50, lon:-70.13, alt:3825 },
+  { id:'HAN', nombre:'Huancayo', dept:'Junín', lat:-12.07, lon:-75.22, alt:3249 },
+  { id:'JAU', nombre:'Jauja', dept:'Junín', lat:-11.78, lon:-75.50, alt:3400 },
+  { id:'TAR', nombre:'Tarma', dept:'Junín', lat:-11.42, lon:-75.69, alt:3058 },
+  { id:'CER', nombre:'Cerro de Pasco', dept:'Pasco', lat:-10.69, lon:-76.26, alt:4380 },
+  { id:'OXAP', nombre:'Oxapampa', dept:'Pasco', lat:-10.58, lon:-75.40, alt:1826 },
+  { id:'HUA3', nombre:'Huánuco', dept:'Huánuco', lat:-9.93, lon:-76.24, alt:1870 },
+  { id:'TIN', nombre:'Tingo María', dept:'Huánuco', lat:-9.30, lon:-76.01, alt:670 },
+  { id:'AYA', nombre:'Ayacucho', dept:'Ayacucho', lat:-13.16, lon:-74.22, alt:2761 },
+  { id:'HUAN', nombre:'Huancavelica', dept:'Huancavelica', lat:-12.79, lon:-74.97, alt:3680 },
+  // Selva
+  { id:'TAR2', nombre:'Tarapoto', dept:'San Martín', lat:-6.48, lon:-76.36, alt:345 },
+  { id:'MOY', nombre:'Moyobamba', dept:'San Martín', lat:-6.03, lon:-76.97, alt:860 },
+  { id:'LAM2', nombre:'Lamas', dept:'San Martín', lat:-6.42, lon:-76.53, alt:790 },
+  { id:'UCH', nombre:'Uchiza', dept:'San Martín', lat:-8.11, lon:-76.51, alt:660 },
+  { id:'YUR', nombre:'Yurimaguas', dept:'Loreto', lat:-5.90, lon:-76.08, alt:182 },
+  { id:'PUC', nombre:'Pucallpa', dept:'Ucayali', lat:-8.38, lon:-74.55, alt:154 },
+  { id:'IQU', nombre:'Iquitos', dept:'Loreto', lat:-3.75, lon:-73.25, alt:126 },
+  { id:'CRI', nombre:'Cruzeiro do Sul', dept:'Acre (Brasil)', lat:-7.62, lon:-72.67, alt:160 },
+  { id:'PUE', nombre:'Puerto Maldonado', dept:'Madre de Dios', lat:-12.60, lon:-69.18, alt:190 },
+  { id:'TAM', nombre:'Tambopata', dept:'Madre de Dios', lat:-12.83, lon:-69.50, alt:210 },
+];
+
+// ── Algoritmo: estación más cercana ──
+function encontrarEstacionCercana(lat, lon) {
+  let minDist = Infinity;
+  let mejor = ESTACIONES_PERU[0];
+
+  for (const est of ESTACIONES_PERU) {
+    // Fórmula de Haversine simplificada
+    const dLat = (est.lat - lat) * Math.PI / 180;
+    const dLon = (est.lon - lon) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(lat * Math.PI / 180) * Math.cos(est.lat * Math.PI / 180) *
+              Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distKm = 6371 * c; // Radio de la Tierra en km
+
+    if (distKm < minDist) {
+      minDist = distKm;
+      mejor = est;
+    }
+  }
+
+  return { ...mejor, distanciaKm: Math.round(minDist) };
+}
+
+// ── Obtener clima real vía Open-Meteo ──
+async function obtenerClimaOpenMeteo(lat, lon) {
+  try {
+    const r = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m,weather_code,cloud_cover&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max&timezone=auto&forecast_days=3`
+    );
+    const data = await r.json();
+    if (!data.current) return null;
+
+    const codigos = {
+      0: 'despejado', 1: 'mayormente despejado', 2: 'parcial nublado', 3: 'nublado',
+      45: 'neblina', 48: 'neblina con escarcha',
+      51: 'llovizna leve', 53: 'llovizna moderada', 55: 'llovizna intensa',
+      61: 'lluvia leve', 63: 'lluvia moderada', 65: 'lluvia intensa',
+      71: 'nevada leve', 73: 'nevada moderada', 75: 'nevada fuerte',
+      80: 'aguacero leve', 81: 'aguacero moderado', 82: 'aguacero fuerte',
+      95: 'tormenta', 96: 'tormenta con granizo', 99: 'tormenta fuerte',
+    };
+
+    return {
+      temp: data.current.temperature_2m,
+      humedad: data.current.relative_humidity_2m,
+      viento: data.current.wind_speed_10m,
+      lluvia: data.current.precipitation,
+      nubes: data.current.cloud_cover,
+      descripcion: codigos[data.current.weather_code] || 'variable',
+      pronostico: {
+        tempMax: data.daily?.temperature_2m_max?.slice(0, 3) || [],
+        tempMin: data.daily?.temperature_2m_min?.slice(0, 3) || [],
+        lluvia: data.daily?.precipitation_sum?.slice(0, 3) || [],
+        probLluvia: data.daily?.precipitation_probability_max?.slice(0, 3) || [],
+      },
+    };
+  } catch (e) {
+    console.warn('Open-Meteo error:', e.message);
+    return null;
+  }
+}
+
+// ── Agente SENAMHI: scraping del pronóstico oficial ──
+async function obtenerPronosticoSENAMHI(lat, lon, ubicacionNombre) {
+  try {
+    const r = await fetch(`https://www.senamhi.gob.pe/?p=pronostico-meteorologico`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html',
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!r.ok) return null;
+    const html = await r.text();
+
+    // Buscar pronósticos por nombre de ubicación
+    const nombreBusqueda = ubicacionNombre?.toUpperCase() || '';
+
+    // Patrón: "NOMBRE - DEPARTAMENTO" seguido de datos
+    const regex = /([A-ZÁÉÍÓÚÑ\s]+)\s*-\s*([A-ZÁÉÍÓÚÑ\s]+)[\s\S]*?(?:martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|lunes),\s*\d{1,2}\s+de\s+\w+[\s\S]*?(-?\d{1,2})\s*º\s*C[\s\S]*?(-?\d{1,2})\s*º\s*C[\s\S]*?([^.]+\.\s*[^.]*\.?)/gi;
+
+    let encontrado = null;
+    let match;
+
+    while ((match = regex.exec(html)) !== null) {
+      const nombreEstacion = match[1].trim();
+      // Buscar coincidencia parcial con la ubicación del usuario
+      if (nombreBusqueda && (
+        nombreEstacion.includes(nombreBusqueda) ||
+        nombreBusqueda.includes(nombreEstacion) ||
+        nombreEstacion === nombreBusqueda
+      )) {
+        encontrado = {
+          estacion: nombreEstacion,
+          departamento: match[2].trim(),
+          tempMax: parseInt(match[3]),
+          tempMin: parseInt(match[4]),
+          descripcion: match[5].trim(),
+        };
+        break;
+      }
+    }
+
+    // Si no encontró por nombre, buscar la primera ubicación disponible
+    if (!encontrado) {
+      const regexGenerico = /([A-ZÁÉÍÓÚÑ\s]+)\s*-\s*([A-ZÁÉÍÓÚÑ\s]+)[\s\S]*?(-?\d{1,2})\s*º\s*C[\s\S]*?(-?\d{1,2})\s*º\s*C[\s\S]*?([^.]+\.\s*[^.]*\.?)/i;
+      const matchGenerico = regexGenerico.exec(html);
+      if (matchGenerico) {
+        encontrado = {
+          estacion: matchGenerico[1].trim(),
+          departamento: matchGenerico[2].trim(),
+          tempMax: parseInt(matchGenerico[3]),
+          tempMin: parseInt(matchGenerico[4]),
+          descripcion: matchGenerico[5].trim(),
+        };
+      }
+    }
+
+    return encontrado;
+  } catch (e) {
+    console.warn('SENAMHI scraping error:', e.message);
+    return null;
+  }
+}
+
+// ── Obtener datos de suelo (SoilGrids) ──
+async function obtenerSuelo(lat, lon) {
+  try {
+    const r = await fetch(
+      `https://rest.isric.org/soilgrids/v2.0/properties/query?lon=${lon}&lat=${lat}&property=phh2o&property=clay&property=sand&property=occo&depth=0-5cm&value=mean`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!r.ok) return null;
+    const data = await r.json();
+    const layers = data.properties?.layers || [];
+    const ph = layers.find(l => l.name === 'phh2o');
+    const clay = layers.find(l => l.name === 'clay');
+    const sand = layers.find(l => l.name === 'sand');
+
+    return {
+      ph: ph?.depths?.[0]?.values?.mean ? (ph.depths[0].values.mean / 10).toFixed(1) : null,
+      arcilla: clay?.depths?.[0]?.values?.mean ? (clay.depths[0].values.mean / 10).toFixed(0) : null,
+      arena: sand?.depths?.[0]?.values?.mean ? (sand.depths[0].values.mean / 10).toFixed(0) : null,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+// ── Obtener alertas NASA FIRMS ──
+async function obtenerAlertasNASA(lat, lon) {
+  try {
+    const r = await fetch(
+      `https://firms.modaps.eosdis.nasa.gov/api/area/csv/OPENKEY/VIIRS_SNPP_NRT/${lon - 0.1},${lat - 0.1},${lon + 0.1},${lat + 0.1}/1`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!r.ok) return null;
+    const text = await r.text();
+    const lineas = text.split('\n').filter(l => l.trim() && !l.startsWith('latitude'));
+    return { incendios: lineas.length, riesgo: lineas.length > 5 ? 'alto' : lineas.length > 0 ? 'bajo' : 'ninguno' };
+  } catch (e) {
+    return null;
+  }
+}
 
 const SYSTEM_PROMPT_BASE = `Eres PlaguIA, el asistente agrícola inteligente de Agrilux. Hablas como un agrónomo experto peruano, amigable y directo.
 
 REGLAS:
-- Responde SIEMPRE en español, tono cálido y campesino
-- Máximo 3 oraciones por respuesta (fácil de escuchar por voz)
+- Responde SIEMPRE en español peruano, tono cálido y campesino
+- Máximo 4 oraciones por respuesta (fácil de escuchar por voz)
 - Sé práctico: nombre del producto, dosis, y cuándo aplicar
 - Si no sabes algo, di "No tengo esa información, consulta con un agrónomo local"
 - Si el agricultor menciona un cultivo, ajusta tu respuesta a ese cultivo
-- Usa datos climáticos REALES cuando los tengas para dar recomendaciones precisas
+- Usa TODOS los datos climáticos y de suelo que tengas para dar recomendaciones precisas
+- Si el usuario pregunta por el clima o SENAMHI, usa la información del pronóstico oficial
 - Usa emojis moderados para hacer la conversación amigable
 
 CULTIVOS QUE CONOCES BIEN: papa, maíz, palta, arándano, caña de azúcar, plátano, papaya.
 
+CAPACIDADES ESPECIALES:
+- Puedo consultar el clima actual y pronóstico de SENAMHI
+- Conozco la estación meteorológica más cercana a tu ubicación
+- Tengo datos de suelo (pH, textura) de tu zona
+- Monitoreo alertas de incendios de NASA
+- Puedo recomendar productos agrícolas según las condiciones actuales
+
 EJEMPLOS DE BUENAS RESPUESTAS:
 - "¿Hojas amarillas? Puede ser deficiencia de nitrógeno. Aplica urea a 200 kg/ha. ¿En qué cultura lo tienes?"
 - "Las manchas en la papa pueden ser tizón tardío. Aplica clorotalonil cada 15 días."
-- "Hoy en tu zona hay 22°C y 80% de humedad. Condiciones favorables para hongos, revisa tus hojas."`;
-
-// ── Obtener clima real vía SENAMHI agent (Open-Meteo + estaciones Perú) ──
-async function obtenerClima(lat, lon) {
-  try {
-    // Intentar SENAMHI agent (Vercel internal)
-    const protocol = 'https';
-    const host = 'www.vitalfarmbright.store';
-    const r = await fetch(`${protocol}://${host}/api/senamhi?lat=${lat}&lon=${lon}`);
-    const data = await r.json();
-    if (!data.climaActual) return null;
-
-    const clima = data.climaActual;
-    const estacion = data.estacion;
-    let contexto = `CLIMA ACTUAL (${estacion?.nombre || 'zona'}): ${clima.temperatura}°C, ${clima.descripcion}, humedad ${clima.humedad}%, viento ${clima.viento} km/h`;
-
-    if (clima.precipitacion > 0) contexto += `, lluvia activa ${clima.precipitacion}mm`;
-    if (data.pronostico?.fechas) {
-      const maxHoy = data.pronostico.tempMax?.[0];
-      const minHoy = data.pronostico.tempMin?.[0];
-      const lluviaHoy = data.pronostico.lluvia?.[0];
-      const probLluvia = data.pronostico.probLluvia?.[0];
-      contexto += `. HOY: ${minHoy}°C-${maxHoy}°C`;
-      if (lluviaHoy > 0) contexto += `, ${lluviaHoy}mm de lluvia esperada`;
-      if (probLluvia > 0) contexto += `, probabilidad lluvia ${probLluvia}%`;
-    }
-    if (data.pronosticoCana?.recomendaciones?.length) {
-      contexto += `. RECOMENDACIONES CAÑA: ${data.pronosticoCana.recomendaciones.map(r => r.mensaje).join('; ')}`;
-    }
-
-    return contexto;
-  } catch (e) {
-    // Fallback a Open-Meteo directo
-    try {
-      const r = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max&timezone=auto&forecast_days=3`
-      );
-      const data = await r.json();
-      if (!data.current) return null;
-
-      const codigos = {
-        0: 'despejado', 1: 'mayormente despejado', 2: 'parcial nublado', 3: 'nublado',
-        45: 'neblina', 48: 'neblina con escarcha',
-        51: 'llovizna leve', 53: 'llovizna moderada', 55: 'llovizna intensa',
-        61: 'lluvia leve', 63: 'lluvia moderada', 65: 'lluvia intensa',
-        80: 'aguacero leve', 81: 'aguacero moderado', 82: 'aguacero fuerte',
-        95: 'tormenta', 96: 'tormenta con granizo', 99: 'tormenta fuerte con granizo',
-      };
-
-      const desc = codigos[data.current.weather_code] || 'variable';
-      const temp = data.current.temperature_2m;
-      const hum = data.current.relative_humidity_2m;
-      const lluvia = data.current.precipitation;
-      const viento = data.current.wind_speed_10m;
-
-      let contexto = `CLIMA ACTUAL: ${temp}°C, ${desc}, humedad ${hum}%, viento ${viento} km/h`;
-      if (lluvia > 0) contexto += `, lluvia activa ${lluvia}mm`;
-      if (data.daily) {
-        const maxHoy = data.daily.temperature_2m_max?.[0];
-        const minHoy = data.daily.temperature_2m_min?.[0];
-        contexto += `. HOY: ${minHoy}°C-${maxHoy}°C`;
-      }
-      return contexto;
-    } catch (e2) {
-      console.warn('Error clima fallback:', e2.message);
-      return null;
-    }
-  }
-}
+- "Hoy en tu zona hay 22°C y 80% de humedad. Condiciones favorables para hongos, revisa tus hojas."
+- "El pronóstico del SENAMHI indica lluvia para los próximos días. Aplica fungicida preventivo."`;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
@@ -95,21 +271,85 @@ export default async function handler(req, res) {
   const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
   const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
-  const { mensaje, historial = [], lat, lon } = req.body;
+  const { mensaje, historial = [], lat, lon, ubicacion, nombre } = req.body;
   if (!mensaje) return res.status(400).json({ error: 'Falta el campo mensaje' });
 
-  // Obtener clima si tenemos coordenadas
-  let climaContexto = '';
-  if (lat && lon) {
-    climaContexto = await obtenerClima(lat, lon) || '';
+  // ── Recopilar TODA la información disponible ──
+  const contextoParts = [];
+
+  // 1. Ubicación del usuario
+  if (ubicacion) {
+    contextoParts.push(`UBICACIÓN DEL AGRICULTOR: ${ubicacion}`);
+  }
+  if (nombre) {
+    contextoParts.push(`NOMBRE: ${nombre}`);
   }
 
-  // Construir system prompt con contexto climático
-  const systemPrompt = climaContexto
-    ? `${SYSTEM_PROMPT_BASE}\n\nDATOS CLIMÁTICOS EN TIEMPO REAL DEL AGRICULTOR:\n${climaContexto}\n\nUsa estos datos para tus recomendaciones. Si hace frío, sugiere preventivos. Si hay lluvia, prioriza fungicidas. Si hay humedad alta, alerta sobre hongos.`
-    : SYSTEM_PROMPT_BASE;
+  // 2. Estación meteorológica más cercana
+  let estacionCercana = null;
+  if (lat && lon) {
+    estacionCercana = encontrarEstacionCercana(lat, lon);
+    contextoParts.push(`ESTACIÓN METEREOLÓGICA MÁS CERCANA: ${estacionCercana.nombre} (${estacionCercana.dept}), a ${estacionCercana.distanciaKm}km, altitud ${estacionCercana.alt}m`);
+  }
 
-  // Construir historial de conversación
+  // 3. Clima en tiempo real (Open-Meteo)
+  let clima = null;
+  if (lat && lon) {
+    clima = await obtenerClimaOpenMeteo(lat, lon);
+    if (clima) {
+      contextoParts.push(`CLIMA ACTUAL: ${clima.temp}°C, ${clima.descripcion}, humedad ${clima.humedad}%, viento ${clima.viento} km/h, nubosidad ${clima.nubes}%`);
+      if (clima.lluvia > 0) contextoParts.push(`LLUVIA ACTIVA: ${clima.lluvia}mm`);
+      if (clima.pronostico) {
+        const maxHoy = clima.pronostico.tempMax[0];
+        const minHoy = clima.pronostico.tempMin[0];
+        const lluviaHoy = clima.pronostico.lluvia[0];
+        const probLluvia = clima.pronostico.probLluvia[0];
+        let pronText = `PRONÓSTICO HOY: ${minHoy}°C - ${maxHoy}°C`;
+        if (lluviaHoy > 0) pronText += `, ${lluviaHoy}mm de lluvia esperada`;
+        if (probLluvia > 0) pronText += `, probabilidad lluvia ${probLluvia}%`;
+        contextoParts.push(pronText);
+      }
+    }
+  }
+
+  // 4. Pronóstico SENAMHI (scraping) — siempre consultar si pregunta por clima
+  const mencionaClima = /clima|tiempo|lluvia|temperatura|senamhi|pronóstico|pronostico|calor|frío|frio|hoy|mañana|manana/i.test(mensaje);
+  if (lat && lon) {
+    const ubicacionNombre = ubicacion?.split(',')[0]?.trim() || '';
+    const senamhi = await obtenerPronosticoSENAMHI(lat, lon, ubicacionNombre);
+    if (senamhi) {
+      contextoParts.push(`PRONÓSTICO OFICIAL SENAMHI (${senamhi.estacion} - ${senamhi.departamento}): Máx ${senamhi.tempMax}°C, Mín ${senamhi.tempMin}°C. ${senamhi.descripcion}`);
+    }
+  }
+
+  // 5. Datos de suelo
+  if (lat && lon) {
+    const suelo = await obtenerSuelo(lat, lon);
+    if (suelo) {
+      let sueloText = 'SUELO DE LA ZONA:';
+      if (suelo.ph) sueloText += ` pH ${suelo.ph}`;
+      if (suelo.arcilla) sueloText += `, arcilla ${suelo.arcilla}%`;
+      if (suelo.arena) sueloText += `, arena ${suelo.arena}%`;
+      contextoParts.push(sueloText);
+    }
+  }
+
+  // 6. Alertas NASA
+  if (lat && lon) {
+    const nasa = await obtenerAlertasNASA(lat, lon);
+    if (nasa && nasa.riesgo !== 'ninguno') {
+      contextoParts.push(`ALERTA NASA: ${nasa.incendios} focos de calor detectados, riesgo ${nasa.riesgo}`);
+    }
+  }
+
+  // ── Construir system prompt con TODO el contexto ──
+  const contextoCompleto = contextoParts.length > 0
+    ? `\n\nINFORMACIÓN EN TIEMPO REAL DEL AGRICULTOR:\n${contextoParts.join('\n')}\n\nUsa TODOS estos datos para tus recomendaciones. Si hay lluvia, prioriza fungicidas sistémicos. Si hay humedad alta, alerta sobre hongos. Si está frío, sugiere preventivos. Si el suelo es ácido, ajusta dosis. Menciona el pronóstico SENAMHI si el usuario pregunta por el clima.`
+    : '';
+
+  const systemPrompt = SYSTEM_PROMPT_BASE + contextoCompleto;
+
+  // ── Construir historial de conversación ──
   const messages = [
     { role: 'system', content: systemPrompt },
     ...historial.map(h => ({
@@ -133,7 +373,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           model: 'google/gemini-2.5-flash',
           messages,
-          max_tokens: 300,
+          max_tokens: 350,
           temperature: 0.7,
         }),
       });
@@ -142,7 +382,9 @@ export default async function handler(req, res) {
         return res.status(200).json({
           respuesta: data.choices[0].message.content,
           provider: 'openrouter',
-          clima: climaContexto || null,
+          estacion: estacionCercana?.nombre || null,
+          ubicacion: ubicacion || null,
+          clima: clima ? `${clima.temp}°C, ${clima.descripcion}` : null,
         });
       }
     } catch (e) { console.warn('Voice OpenRouter error:', e.message); }
@@ -160,7 +402,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           model: 'deepseek-chat',
           messages,
-          max_tokens: 300,
+          max_tokens: 350,
           temperature: 0.7,
         }),
       });
@@ -169,7 +411,9 @@ export default async function handler(req, res) {
         return res.status(200).json({
           respuesta: data.choices[0].message.content,
           provider: 'deepseek',
-          clima: climaContexto || null,
+          estacion: estacionCercana?.nombre || null,
+          ubicacion: ubicacion || null,
+          clima: clima ? `${clima.temp}°C, ${clima.descripcion}` : null,
         });
       }
     } catch (e) { console.warn('Voice DeepSeek error:', e.message); }
@@ -187,7 +431,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           model: 'Phi-4-multimodal-instruct',
           messages,
-          max_tokens: 300,
+          max_tokens: 350,
           temperature: 0.7,
         }),
       });
@@ -196,7 +440,9 @@ export default async function handler(req, res) {
         return res.status(200).json({
           respuesta: data.choices[0].message.content,
           provider: 'github',
-          clima: climaContexto || null,
+          estacion: estacionCercana?.nombre || null,
+          ubicacion: ubicacion || null,
+          clima: clima ? `${clima.temp}°C, ${clima.descripcion}` : null,
         });
       }
     } catch (e) { console.warn('Voice GitHub error:', e.message); }

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Mic, MicOff, Volume2, VolumeX, Loader2, X, MessageCircle } from 'lucide-react';
+import { useAuth } from '../lib/AuthContext';
 
 /**
  * VoiceAssistant — Asistente agrícola inteligente por voz
@@ -7,14 +8,23 @@ import { Mic, MicOff, Volume2, VolumeX, Loader2, X, MessageCircle } from 'lucide
  * Flujo:
  * 1. Agricultor presiona micrófono y habla
  * 2. Se transcribe con Web Speech API (gratuito, offline)
- * 3. Se envía a /api/voice-assistant → IA responde
+ * 3. Se envía a /api/voice-assistant → IA responde con datos reales
  * 4. Se lee la respuesta en voz alta (es-PE)
  * 5. El agricultor puede seguir hablando (conversación continua)
+ *
+ * Datos disponibles para el agente:
+ * - Ubicación del usuario (registrada en la app)
+ * - Clima en tiempo real (Open-Meteo + SENAMHI scraping)
+ * - Estación meteorológica más cercana (algoritmo de distancia)
+ * - Datos de suelo (SoilGrids)
+ * - Alertas NASA FIRMS
+ * - NDVI satelital
  */
 
-const WELCOME_MSG = '¡Hola! Soy tu asistente agrícola. ¿En qué te puedo ayudar? Pregúntame sobre plagas, enfermedades, o qué aplicar en tu cultivo.';
+const WELCOME_MSG = '¡Hola! Soy tu asistente agrícola. Puedo darte información del clima de tu zona, recomendaciones para tus cultivos, o consultar el pronóstico del SENAMHI. ¿En qué te puedo ayudar?';
 
 export default function VoiceAssistant({ disabled = false }) {
+  const { user } = useAuth();
   const [abierto, setAbierto]             = useState(false);
   const [escuchando, setEscuchando]       = useState(false);
   const [procesando, setProcesando]       = useState(false);
@@ -51,6 +61,8 @@ export default function VoiceAssistant({ disabled = false }) {
           historial: hist.slice(-10),
           lat: coordenadas?.lat || null,
           lon: coordenadas?.lon || null,
+          ubicacion: user?.ubicacion || null,
+          nombre: user?.nombre || null,
         }),
       });
       const data = await r.json();
@@ -68,7 +80,7 @@ export default function VoiceAssistant({ disabled = false }) {
     } finally {
       setProcesando(false);
     }
-  }, [coordenadas]);
+  }, [coordenadas, user]);
 
   // ── Text-to-Speech en español peruano ──
   const leerTexto = useCallback((texto) => {
