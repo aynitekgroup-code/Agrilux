@@ -1,6 +1,8 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Loader2, X, MessageCircle } from 'lucide-react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { Mic, MicOff, Volume2, VolumeX, Loader2, X, MessageCircle, Store, MapPin } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
+import { useAgentes } from '../lib/AgentContext';
+import { guardarConversacion, getHistorialConversaciones } from '../lib/learningSystem';
 
 /**
  * VoiceAssistant — Asistente agrícola inteligente por voz
@@ -25,6 +27,7 @@ const WELCOME_MSG = '¡Hola! Soy tu asistente agrícola. Puedo darte informació
 
 export default function VoiceAssistant({ disabled = false }) {
   const { user } = useAuth();
+  const { ubicacion, coords, productoRecomendado, problemaDetectado, tiendasCercanas } = useAgentes();
   const [abierto, setAbierto]             = useState(false);
   const [escuchando, setEscuchando]       = useState(false);
   const [procesando, setProcesando]       = useState(false);
@@ -34,12 +37,14 @@ export default function VoiceAssistant({ disabled = false }) {
   const [error, setError]                 = useState('');
   const [mostrarChat, setMostrarChat]     = useState(false);
   const [coordenadas, setCoordenadas]     = useState(null);
+  const [guardando, setGuardando]         = useState(false);
+  const [tiendasBusqueda, setTiendasBusqueda] = useState(null);
 
   const recognitionRef = useRef(null);
   const chatEndRef     = useRef(null);
 
   // Obtener ubicación del navegador al montar
-  React.useEffect(() => {
+  useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => setCoordenadas({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
@@ -48,25 +53,90 @@ export default function VoiceAssistant({ disabled = false }) {
     );
   }, []);
 
+  // Guardar conversación cuando se cierra o hay 4+ mensajes
+  const guardarConversacionActual = useCallback(async () => {
+    if (!user?.uid || historial.length < 2) return;
+    
+    setGuardando(true);
+    try {
+      const mensajes = historial.map(m => ({
+        role: m.rol === 'usuario' ? 'user' : 'assistant',
+        content: m.texto
+      }));
+      await guardarConversacion(user.uid, mensajes);
+    } catch (error) {
+      console.error('Error guardando conversación:', error);
+    } finally {
+      setGuardando(false);
+    }
+  }, [user?.uid, historial]);
+
+  // Guardar al cerrar panel
+  useEffect(() => {
+    if (!abierto && historial.length > 2) {
+      guardarConversacionActual();
+    }
+  }, [abierto]);
+
+  // Cargar historial previo al abrir
+  useEffect(() => {
+    if (abierto && user?.uid && historial.length === 0) {
+      const cargarHistorial = async () => {
+        try {
+          const conversaciones = await getHistorialConversaciones(user.uid, 1);
+          if (conversaciones.length > 0 && conversaciones[0].mensajes) {
+            const mensajesPrevios = conversaciones[0].mensajes.slice(-6).map(m => ({
+              rol: m.role === 'user' ? 'usuario' : 'asistente',
+              texto: m.content
+            }));
+            if (mensajesPrevios.length > 0) {
+              setHistorial([
+                { rol: 'asistente', texto: '¡Hola de nuevo! Continuemos con tu consulta agrícola.' },
+                ...mensajesPrevios
+              ]);
+            }
+          }
+        } catch (error) {
+          console.error('Error cargando historial:', error);
+        }
+      };
+      cargarHistorial();
+    }
+  }, [abierto, user?.uid]);
+
   // ── Enviar mensaje a la API y obtener respuesta ──
   const enviarAI = useCallback(async (mensaje, hist) => {
     setProcesando(true);
     setError('');
     try {
+      // Incluir contexto compartido de todos los agentes
+      const contextoAgentes = {
+        cultivoActivo: productoRecomendado?.cultivo || null,
+        problemaDetectado: problemaDetectado?.nombre || null,
+        productoRecomendado: productoRecomendado?.nombre || null,
+        tiendasCercanas: tiendasCercanas.length > 0 ? tiendasCercanas.slice(0, 3).map(t => `${t.nombre} (${t.distanciaKm}km)`).join(', ') : null,
+      };
+
       const r = await fetch('/api/voice-assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mensaje,
           historial: hist.slice(-10),
-          lat: coordenadas?.lat || null,
-          lon: coordenadas?.lon || null,
-          ubicacion: user?.ubicacion || null,
+          lat: coordenadas?.lat || coords?.lat || null,
+          lon: coordenadas?.lon || coords?.lon || null,
+          ubicacion: ubicacion || user?.ubicacion || null,
           nombre: user?.nombre || null,
+          contexto: contextoAgentes,
         }),
       });
       const data = await r.json();
       const respuesta = data.respuesta || 'No pude procesar tu pregunta. Intenta de nuevo.';
+
+      // Si la respuesta menciona tiendas, mostrar sección de tiendas
+      if (data.tiendas?.length > 0) {
+        setTiendasBusqueda(data.tiendas);
+      }
 
       setHistorial(prev => [...prev, { rol: 'asistente', texto: respuesta }]);
       leerTexto(respuesta);

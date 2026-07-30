@@ -6,12 +6,15 @@ import {
   Volume2, VolumeX, Info,
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
+import { useAgentes } from '../lib/AgentContext';
 import { CULTIVOS } from '../lib/constants';
 import { db } from '../lib/firebase';
 import { collection, getDocs, query, where, orderBy, addDoc } from 'firebase/firestore';
 import { getWeather, getSoilData, getCicloRecomendaciones, getPronosticoSENAMHI } from '../lib/externalApis';
 import { invokeGemini } from '../lib/gemini';
 import TimelineEtapa from '../components/TimelineEtapa';
+import BuscadorInsumos from '../components/BuscadorInsumos';
+import { getResumenProblemas } from '../lib/learningSystem';
 
 function diasDesdeSiembra(fecha) {
   if (!fecha) return 0;
@@ -20,6 +23,7 @@ function diasDesdeSiembra(fecha) {
 
 export default function CicloCultivo() {
   const { user } = useAuth();
+  const { reportarRecomendacionCiclo, seleccionarCultivo } = useAgentes();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const parcelaId = searchParams.get('parcelaId');
@@ -47,6 +51,12 @@ export default function CicloCultivo() {
 
   // Voz
   const [leyendo, setLeyendo] = useState(false);
+
+  // Sistema de aprendizaje
+  const [historialClinico, setHistorialClinico] = useState(null);
+
+  // Alertas preventivas por etapa
+  const [alertasRiesgo, setAlertasRiesgo] = useState(null);
 
   // Cargar parcelas del usuario
   useEffect(() => {
@@ -81,7 +91,7 @@ export default function CicloCultivo() {
     } catch { setRegistros([]); }
   };
 
-  // Cargar clima y suelo cuando se selecciona parcela
+  // Cargar clima, suelo e historial cuando se selecciona parcela
   useEffect(() => {
     if (!parcelaActiva?.gps) return;
     const [lat, lon] = (parcelaActiva?.gps || '').split(',').map(Number);
@@ -98,13 +108,32 @@ export default function CicloCultivo() {
       if (senamhiRes.status === 'fulfilled') setSenamhi(senamhiRes.value);
       setCargandoClima(false);
     }).catch(() => setCargandoClima(false));
-  }, [parcelaActiva]);
+
+    // Cargar historial clínico de la parcela
+    if (user?.uid) {
+      getResumenProblemas(parcelaActiva.id)
+        .then(setHistorialClinico)
+        .catch(() => setHistorialClinico(null));
+    }
+
+    // Cargar alertas preventivas
+    const diasCalc = diasDesdeSiembra(parcelaActiva.fechaSiembra);
+    fetch(`/api/alertas-preventivas?lat=${lat}&lon=${lon}&cultivo=${parcelaActiva.cultivo}&diasDesdeSiembra=${diasCalc}`)
+      .then(r => r.json())
+      .then(setAlertasRiesgo)
+      .catch(() => setAlertasRiesgo(null));
+  }, [parcelaActiva, user?.uid]);
 
   // Calcular etapa actual
   const cultivoObj = CULTIVOS.find(c => c.id === parcelaActiva?.cultivo);
   const dias = parcelaActiva?.fechaSiembra ? diasDesdeSiembra(parcelaActiva.fechaSiembra) : 0;
   const etapaActual = cultivoObj?.ciclo?.find(e => dias >= e.diasInicio && dias < e.diasFin)
     || cultivoObj?.ciclo?.[cultivoObj.ciclo.length - 1];
+
+  // Sincronizar cultivo con AgentContext
+  useEffect(() => {
+    if (cultivoObj) seleccionarCultivo(cultivoObj);
+  }, [cultivoObj?.id]);
 
   // Generar recomendaciones IA
   const generarRecomendaciones = async () => {
@@ -135,9 +164,17 @@ export default function CicloCultivo() {
           phosphorus: suelo.phosphorus,
         } : null,
         registros: registros.slice(0, 1),
+        historial: historialClinico || null,
       });
       setRecomendaciones(result.recomendaciones);
       setRecomendacionModelo(result.modelo_usado);
+
+      // Sincronizar con AgentContext — todos los agentes saben de la recomendación del ciclo
+      reportarRecomendacionCiclo({
+        etapa: etapaActual.nombre,
+        cultivo: cultivoObj.nombre,
+        recomendaciones: result.recomendaciones,
+      });
     } catch (e) {
       setRecomendaciones('No se pudieron generar recomendaciones en este momento. Intenta de nuevo.');
     }
@@ -326,6 +363,69 @@ Responde en español, máximo 200 palabras, con viñetas.`,
               </div>
             </div>
           )}
+
+          {/* 🔮 Alertas Preventivas por Etapa */}
+          {alertasRiesgo && (alertasRiesgo.alertas?.length > 0 || alertasRiesgo.riesgo?.nivel === 'critico' || alertasRiesgo.riesgo?.nivel === 'alto') && (
+            <div className={`rounded-2xl p-4 border-2 ${
+              alertasRiesgo.riesgo?.nivel === 'critico' ? 'bg-red-50 border-red-400' :
+              alertasRiesgo.riesgo?.nivel === 'alto' ? 'bg-orange-50 border-orange-400' :
+              'bg-yellow-50 border-yellow-300'
+            }`}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xl">🔮</span>
+                <div className="flex-1">
+                  <p className={`text-sm font-bold ${
+                    alertasRiesgo.riesgo?.nivel === 'critico' ? 'text-red-700' :
+                    alertasRiesgo.riesgo?.nivel === 'alto' ? 'text-orange-700' : 'text-yellow-700'
+                  }`}>
+                    Riesgo {alertasRiesgo.riesgo?.nivel === 'critico' ? 'Crítico' :
+                      alertasRiesgo.riesgo?.nivel === 'alto' ? 'Alto' : 'Moderado'} en Etapa: {etapaActual?.nombre}
+                  </p>
+                  <p className="text-[10px] text-gray-500">
+                    {alertasRiesgo.clima?.temperatura}°C · {alertasRiesgo.clima?.humedad}% humedad · {alertasRiesgo.clima?.lluvia7d}mm 7d
+                  </p>
+                </div>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold ${
+                  alertasRiesgo.riesgo?.nivel === 'critico' ? 'bg-red-500' :
+                  alertasRiesgo.riesgo?.nivel === 'alto' ? 'bg-orange-500' : 'bg-yellow-500'
+                }`}>
+                  {alertasRiesgo.riesgo?.puntos || 0}
+                </div>
+              </div>
+
+              {alertasRiesgo.alertas?.length > 0 && (
+                <div className="space-y-2 mb-3">
+                  {alertasRiesgo.alertas.map((a, i) => (
+                    <div key={i} className="bg-white rounded-xl p-3 border border-gray-100">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-bold text-gray-800">{a.nombre}</p>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          a.gravedad === 'ALTA' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                        }`}>
+                          {a.gravedad}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600">Prevenir: {a.preventivo}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {alertasRiesgo.recomendaciones?.length > 0 && (
+                <div className="bg-white/60 rounded-xl p-3">
+                  <p className="text-xs font-bold text-gray-600 mb-1">📋 Acciones preventivas</p>
+                  <ul className="space-y-1">
+                    {alertasRiesgo.recomendaciones.map((r, i) => (
+                      <li key={i} className="text-xs text-gray-700 flex items-start gap-2">
+                        <span className="text-green-600 mt-0.5">•</span>
+                        {r}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Datos ambientales */}
@@ -475,6 +575,19 @@ Responde en español, máximo 200 palabras, con viñetas.`,
             </p>
           )}
         </div>
+
+        {/* 🔍 Buscador de insumos — sincronizado con diagnóstico */}
+        {etapaActual && (
+          <BuscadorInsumos
+            producto={etapaActual.alertas?.[0]?.includes('fungicida') ? 'Fungicida preventivo' :
+              etapaActual.alertas?.[0]?.includes('insecticida') ? 'Insecticida' :
+              'Fertilizante ' + (etapaActual.nombre || '')}
+            cultivo={parcelaActiva?.cultivoNombre}
+            ubicacion={user?.ubicacion}
+            lat={parseFloat(parcelaActiva?.gps?.split(',')[0]) || -12.05}
+            lon={parseFloat(parcelaActiva?.gps?.split(',')[1]) || -77.04}
+          />
+        )}
 
         {/* Alertas de la etapa */}
         {etapaActual?.alertas?.length > 0 && (

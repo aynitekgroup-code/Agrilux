@@ -5,6 +5,7 @@ import {
   Sparkles, ImagePlus, X, MapPin, Upload,
 } from 'lucide-react';
 import { useAuth }       from '../lib/AuthContext';
+import { useAgentes }    from '../lib/AgentContext';
 import { invokeGemini }  from '../lib/gemini';
 import {
   geocodePlace,
@@ -22,7 +23,14 @@ import { collection, addDoc } from 'firebase/firestore';
 import { SISTEMA_PROMPT, CHAT_SYSTEM, ANALISIS_SCHEMA } from './diagnostico/diagnosticoPrompts';
 import SelectorUbicacion  from '../components/SelectorUbicacion';
 import VoiceAssistant     from '../components/VoiceAssistant';
+import BuscadorInsumos    from '../components/BuscadorInsumos';
 import { isOnline, guardarDiagnosticoOffline, guardarClima, obtenerClimaCacheado } from '../lib/offlineStorage';
+import { 
+  guardarHistorialClinico, 
+  calificarDiagnostico, 
+  getContextoHistorial,
+  getResumenProblemas 
+} from '../lib/learningSystem';
 
 const COLOR_HEADER = {
   critica:  'bg-red-700',
@@ -34,8 +42,14 @@ const COLOR_HEADER = {
 
 export default function Diagnostico({ onPlagaDetectada }) {
   const { user } = useAuth();
+  const { reportarDiagnostico, seleccionarCultivo, actualizarUbicacion } = useAgentes();
 
   const [cultivo, setCultivo]           = useState(CULTIVOS[0]);
+
+  // Sincronizar cultivo con AgentContext
+  useEffect(() => {
+    seleccionarCultivo(cultivo);
+  }, [cultivo]);
   const [fotos, setFotos]               = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [analizando, setAnalizando]     = useState(false);
@@ -61,6 +75,14 @@ export default function Diagnostico({ onPlagaDetectada }) {
   const [nasaAlerts, setNasaAlerts]           = useState(null);
   const [sentinelNDVI, setSentinelNDVI]       = useState(null);
 
+  // Alertas preventivas (diagnóstico predictivo)
+  const [alertasPreventivas, setAlertasPreventivas] = useState(null);
+
+  // Sistema de aprendizaje
+  const [historialId, setHistorialId]         = useState(null);
+  const [feedbackEnviado, setFeedbackEnviado] = useState(false);
+  const [resumenHistorial, setResumenHistorial] = useState(null);
+
   const fileRef    = useRef(null);
   const cameraRef  = useRef(null);
   const chatEndRef = useRef(null);
@@ -72,6 +94,13 @@ export default function Diagnostico({ onPlagaDetectada }) {
   const [leyendoSeccion, setLeyendoSeccion] = useState(null);
 
   const ubicacionEfectiva = (ubicacion || user?.ubicacion || localStorage.getItem('agrilux_ubicacion') || '').trim();
+
+  // Sincronizar ubicación con AgentContext
+  useEffect(() => {
+    if (ubicacionEfectiva) {
+      actualizarUbicacion(ubicacionEfectiva, coords);
+    }
+  }, [ubicacionEfectiva]);
 
   // ── Geolocalización silenciosa al montar ─────────────────────────────────────
   // Intenta obtener ubicación del navegador en background, sin mostrar nada al usuario
@@ -107,6 +136,11 @@ export default function Diagnostico({ onPlagaDetectada }) {
           // SENAMHI pronóstico oficial
           getPronosticoSENAMHI(lat, lon)
             .then(setSenamhi)
+            .catch(() => {});
+          // Alertas preventivas (diagnóstico predictivo)
+          fetch(`/api/alertas-preventivas?lat=${lat}&lon=${lon}&cultivo=${cultivo.id}&diasDesdeSiembra=30`)
+            .then(r => r.json())
+            .then(setAlertasPreventivas)
             .catch(() => {});
         } catch (e) { /* silencioso */ }
       },
@@ -222,6 +256,8 @@ Responde SOLO con este JSON (sin markdown):
 
     setAnalizando(true);
     setPlantDiagnosis(null);
+    setFeedbackEnviado(false);
+    setHistorialId(null);
 
     try {
       let compressedUrls = [];
@@ -283,7 +319,37 @@ Responde SOLO con este JSON (sin markdown):
         } else {
           await guardarDiagnosticoOffline(diagnosticoData);
         }
+
+        // Guardar en historial clínico para sistema de aprendizaje
+        if (user?.uid && analisis.tiene_problema) {
+          try {
+            const historialIdResult = await guardarHistorialClinico({
+              userId: user.uid,
+              parcelaId: null, // Se puede asociar después
+              parcelaNombre: user?.ubicacion || '',
+              cultivo: cultivo.id,
+              variedad: null,
+              diagnostico: {
+                tiene_problema: analisis.tiene_problema,
+                nombre_problema: analisis.nombre_problema,
+                nombre_cientifico: analisis.nombre_cientifico,
+                gravedad: analisis.gravedad,
+                porcentaje_severidad: analisis.porcentaje_severidad,
+                causa: analisis.causa,
+                que_hacer: analisis.que_hacer
+              },
+              productoAplicado: analisis.productos?.[0]?.nombre || null,
+              fotoUrl: fotos.length > 0 ? fotos[0].dataUrl : null
+            });
+            setHistorialId(historialIdResult);
+          } catch (err) {
+            console.log('Historial error:', err);
+          }
+        }
       } catch (e) { console.log('Dataset error:', e); }
+
+      // Sincronizar con AgentContext — todos los agentes saben del diagnóstico
+      reportarDiagnostico(analisis);
 
       if (analisis.tiene_problema && onPlagaDetectada)
         onPlagaDetectada(analisis.nombre_problema);
@@ -433,8 +499,42 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
     setResultado(null); setFotos([]); setChat([]);
     setSoilData(null);
     setNasaAlerts(null); setSentinelNDVI(null);
+    setAlertasPreventivas(null);
     setPregunta('');
+    setHistorialId(null);
+    setFeedbackEnviado(false);
+    setResumenHistorial(null);
   };
+
+  // ── Sistema de Aprendizaje: Feedback ────────────────────────────────────
+  const enviarFeedback = async (calificacion, util, comentario = '') => {
+    if (!historialId) return;
+    
+    try {
+      await calificarDiagnostico(historialId, calificacion, util, comentario);
+      setFeedbackEnviado(true);
+    } catch (error) {
+      console.error('Error al enviar feedback:', error);
+    }
+  };
+
+  const cargarHistorialParcela = async () => {
+    if (!user?.uid) return;
+    
+    try {
+      const resumen = await getResumenProblemas(user.uid);
+      setResumenHistorial(resumen);
+    } catch (error) {
+      console.error('Error al cargar historial:', error);
+    }
+  };
+
+  // Cargar historial al montar
+  useEffect(() => {
+    if (user?.uid) {
+      cargarHistorialParcela();
+    }
+  }, [user?.uid]);
 
   /* ═══════════════════════════════════════════════
      PANTALLA RESULTADO
@@ -572,6 +672,87 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
             >
               Ver pronóstico completo en SENAMHI →
             </a>
+          </div>
+        </div>
+      )}
+
+      {/* 🔮 Alertas Preventivas — Diagnóstico Predictivo */}
+      {alertasPreventivas && (alertasPreventivas.alertas?.length > 0 || alertasPreventivas.riesgo?.nivel === 'critico' || alertasPreventivas.riesgo?.nivel === 'alto') && (
+        <div className="px-4 pb-3">
+          <div className={`rounded-2xl p-4 border-2 ${
+            alertasPreventivas.riesgo?.nivel === 'critico' ? 'bg-red-50 border-red-400' :
+            alertasPreventivas.riesgo?.nivel === 'alto' ? 'bg-orange-50 border-orange-400' :
+            'bg-yellow-50 border-yellow-300'
+          }`}>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-2xl">🔮</span>
+              <div>
+                <p className={`text-xs font-bold uppercase tracking-wide ${
+                  alertasPreventivas.riesgo?.nivel === 'critico' ? 'text-red-700' :
+                  alertasPreventivas.riesgo?.nivel === 'alto' ? 'text-orange-700' : 'text-yellow-700'
+                }`}>
+                  Alerta Preventiva — {alertasPreventivas.riesgo?.nivel === 'critico' ? 'Riesgo Crítico' :
+                    alertasPreventivas.riesgo?.nivel === 'alto' ? 'Riesgo Alto' : 'Riesgo Moderado'}
+                </p>
+                <p className="text-xs text-gray-500">Basado en clima + etapa del cultivo + historial</p>
+              </div>
+            </div>
+
+            {/* Indicador de riesgo */}
+            <div className="flex items-center gap-3 mb-3">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-bold ${
+                alertasPreventivas.riesgo?.nivel === 'critico' ? 'bg-red-500' :
+                alertasPreventivas.riesgo?.nivel === 'alto' ? 'bg-orange-500' : 'bg-yellow-500'
+              }`}>
+                {alertasPreventivas.riesgo?.puntos || 0}
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-gray-500">Factores de riesgo:</p>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {alertasPreventivas.riesgo?.factores?.map((f, i) => (
+                    <span key={i} className="text-[10px] bg-white/80 text-gray-600 px-2 py-0.5 rounded-full">{f}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Alertas específicas */}
+            {alertasPreventivas.alertas?.length > 0 && (
+              <div className="space-y-2 mb-3">
+                {alertasPreventivas.alertas.map((a, i) => (
+                  <div key={i} className="bg-white rounded-xl p-3 border border-gray-100">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-sm font-bold text-gray-800">{a.nombre}</p>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        a.gravedad === 'ALTA' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                      }`}>
+                        {a.gravedad}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 mb-2">Prevenir: {a.preventivo}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Recomendaciones preventivas */}
+            {alertasPreventivas.recomendaciones?.length > 0 && (
+              <div className="bg-white/60 rounded-xl p-3">
+                <p className="text-xs font-bold text-gray-600 mb-2">📋 Acciones preventivas</p>
+                <ul className="space-y-1">
+                  {alertasPreventivas.recomendaciones.map((r, i) => (
+                    <li key={i} className="text-xs text-gray-700 flex items-start gap-2">
+                      <span className="text-green-600 mt-0.5">•</span>
+                      {r}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <p className="text-[10px] text-gray-400 mt-3 text-center">
+              🕐 Cálculo: {new Date(alertasPreventivas.timestamp).toLocaleString('es-PE')} · {cultivo.emoji} Etapa: {alertasPreventivas.etapa}
+            </p>
           </div>
         </div>
       )}
@@ -795,6 +976,17 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
           </div>
         )}
 
+        {/* 🔍 Buscador de insumos — encuentra tiendas y ofertas */}
+        {resultado.tiene_problema && resultado.productos?.length > 0 && (
+          <BuscadorInsumos
+            producto={resultado.productos[0]?.nombre || ''}
+            cultivo={cultivo.nombre}
+            ubicacion={ubicacionEfectiva}
+            lat={weather?.location?.lat || -12.05}
+            lon={weather?.location?.lon || -77.04}
+          />
+        )}
+
         {resultado.alerta_clima && (
           <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
             <p className="text-xs font-bold text-blue-600 mb-1">🌤️ Condición Climática</p>
@@ -819,6 +1011,84 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
               <Volume2 size={16} /> Escuchar recomendación
             </button>
         }
+
+        {/* Feedback del usuario - Sistema de aprendizaje */}
+        {historialId && !feedbackEnviado && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">📊 ¿Fue útil este diagnóstico?</p>
+            <div className="flex gap-3 justify-center mb-3">
+              <button
+                onClick={() => enviarFeedback(5, true, 'Diagnóstico útil')}
+                className="flex flex-col items-center gap-1 px-4 py-3 bg-green-50 rounded-xl border border-green-200 hover:bg-green-100 transition-colors"
+              >
+                <span className="text-2xl">👍</span>
+                <span className="text-xs font-semibold text-green-700">Útil</span>
+              </button>
+              <button
+                onClick={() => enviarFeedback(2, false, 'No fue útil')}
+                className="flex flex-col items-center gap-1 px-4 py-3 bg-red-50 rounded-xl border border-red-200 hover:bg-red-100 transition-colors"
+              >
+                <span className="text-2xl">👎</span>
+                <span className="text-xs font-semibold text-red-700">No útil</span>
+              </button>
+              <button
+                onClick={() => enviarFeedback(3, null, 'Parcialmente útil')}
+                className="flex flex-col items-center gap-1 px-4 py-3 bg-yellow-50 rounded-xl border border-yellow-200 hover:bg-yellow-100 transition-colors"
+              >
+                <span className="text-2xl">🤔</span>
+                <span className="text-xs font-semibold text-yellow-700">Regular</span>
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 text-center">Tu feedback mejora los diagnósticos futuros</p>
+          </div>
+        )}
+
+        {feedbackEnviado && (
+          <div className="bg-green-50 rounded-2xl p-4 border border-green-200">
+            <p className="text-sm text-green-700 text-center font-semibold">✅ ¡Gracias! Tu feedback nos ayuda a mejorar</p>
+          </div>
+        )}
+
+        {/* Historial de la parcela */}
+        {resumenHistorial && resumenHistorial.totalDiagnosticos > 0 && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">📋 Historial de esta parcela</p>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="bg-blue-50 rounded-xl p-3 text-center">
+                <p className="text-2xl font-bold text-blue-600">{resumenHistorial.totalDiagnosticos}</p>
+                <p className="text-xs text-blue-500">Diagnósticos</p>
+              </div>
+              <div className={`rounded-xl p-3 text-center ${
+                resumenHistorial.tendencia === 'empeorando' ? 'bg-red-50' :
+                resumenHistorial.tendencia === 'mejorando' ? 'bg-green-50' : 'bg-gray-50'
+              }`}>
+                <p className="text-2xl">
+                  {resumenHistorial.tendencia === 'empeorando' ? '📈' :
+                   resumenHistorial.tendencia === 'mejorando' ? '📉' : '➡️'}
+                </p>
+                <p className={`text-xs font-semibold ${
+                  resumenHistorial.tendencia === 'empeorando' ? 'text-red-600' :
+                  resumenHistorial.tendencia === 'mejorando' ? 'text-green-600' : 'text-gray-600'
+                }`}>
+                  {resumenHistorial.tendencia === 'empeorando' ? 'Empeorando' :
+                   resumenHistorial.tendencia === 'mejorando' ? 'Mejorando' : 'Estable'}
+                </p>
+              </div>
+            </div>
+            {resumenHistorial.problemasFrecuentes.length > 0 && (
+              <div>
+                <p className="text-xs text-gray-500 mb-2">Problemas más frecuentes:</p>
+                <div className="flex flex-wrap gap-2">
+                  {resumenHistorial.problemasFrecuentes.slice(0, 3).map((p, i) => (
+                    <span key={i} className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full">
+                      {p.problema} ({p.veces}x)
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Chat del resultado */}
         <div id="chat-section" className="bg-white rounded-2xl p-4 shadow-sm">
@@ -1006,6 +1276,39 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
             GPS · Voz · Texto — para recomendaciones más precisas
           </p>
         </div>
+
+        {/* 🔮 Alerta Preventiva — se muestra antes de diagnosticar */}
+        {alertasPreventivas && (alertasPreventivas.alertas?.length > 0 || alertasPreventivas.riesgo?.nivel === 'critico' || alertasPreventivas.riesgo?.nivel === 'alto') && (
+          <div className={`rounded-2xl p-4 border-2 ${
+            alertasPreventivas.riesgo?.nivel === 'critico' ? 'bg-red-50 border-red-400' :
+            alertasPreventivas.riesgo?.nivel === 'alto' ? 'bg-orange-50 border-orange-400' :
+            'bg-yellow-50 border-yellow-300'
+          }`}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xl">🔮</span>
+              <p className={`text-sm font-bold ${
+                alertasPreventivas.riesgo?.nivel === 'critico' ? 'text-red-700' :
+                alertasPreventivas.riesgo?.nivel === 'alto' ? 'text-orange-700' : 'text-yellow-700'
+              }`}>
+                Alerta Preventiva — Riesgo {alertasPreventivas.riesgo?.nivel === 'critico' ? 'Crítico' :
+                  alertasPreventivas.riesgo?.nivel === 'alto' ? 'Alto' : 'Moderado'}
+              </p>
+            </div>
+            {alertasPreventivas.alertas?.length > 0 && (
+              <div className="space-y-1.5">
+                {alertasPreventivas.alertas.slice(0, 2).map((a, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      a.gravedad === 'ALTA' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                    }`}>{a.gravedad}</span>
+                    <span className="text-xs text-gray-700">{a.nombre}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-[10px] text-gray-500 mt-2">Basado en clima + etapa + historial de tu zona</p>
+          </div>
+        )}
 
         {/* Selector de cultivo */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">

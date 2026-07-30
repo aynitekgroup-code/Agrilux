@@ -4,6 +4,7 @@ import { Camera, Leaf, Calendar, Newspaper, LogOut, Menu, X, MapPin, Shield, Use
 import { useAuth } from '../lib/AuthContext';
 import SelectorUbicacion from './SelectorUbicacion';
 import OnlineStatus from './OnlineStatus';
+import AgentStatus from './AgentStatus';
 
 const navItems = [
   { path: '/',        icon: Camera,  label: 'Diagnóstico' },
@@ -108,7 +109,12 @@ export default function Layout({ children }) {
         </div>
       </div>
 
-      <main className="flex-1 pb-28 overflow-y-auto">{children}</main>
+      <main className="flex-1 pb-28 overflow-y-auto">
+        <div className="px-4 pt-2">
+          <AgentStatus />
+        </div>
+        {children}
+      </main>
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-gray-100 shadow-lg z-50">
         <div className="flex">
           {navItems.map(({ path, icon: Icon, label }) => {

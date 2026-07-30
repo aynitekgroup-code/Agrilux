@@ -256,13 +256,15 @@ CAPACIDADES ESPECIALES:
 - Conozco la estación meteorológica más cercana a tu ubicación
 - Tengo datos de suelo (pH, textura) de tu zona
 - Monitoreo alertas de incendios de NASA
+- Puedo predecir riesgos de plagas y enfermedades ANTES de que aparezcan (diagnóstico preventivo)
 - Puedo recomendar productos agrícolas según las condiciones actuales
 
 EJEMPLOS DE BUENAS RESPUESTAS:
 - "¿Hojas amarillas? Puede ser deficiencia de nitrógeno. Aplica urea a 200 kg/ha. ¿En qué cultura lo tienes?"
 - "Las manchas en la papa pueden ser tizón tardío. Aplica clorotalonil cada 15 días."
 - "Hoy en tu zona hay 22°C y 80% de humedad. Condiciones favorables para hongos, revisa tus hojas."
-- "El pronóstico del SENAMHI indica lluvia para los próximos días. Aplica fungicida preventivo."`;
+- "El pronóstico del SENAMHI indica lluvia para los próximos días. Aplica fungicida preventivo."
+- "⚠️ ALERTA PREVENTIVA: Detecté condiciones de alto riesgo para tizón tardío en tu zona. Humedad 85%, temperatura 18°C. Aplica Mancozeb 2kg/ha AHORA antes de que aparezca la enfermedad."`;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
@@ -340,6 +342,19 @@ export default async function handler(req, res) {
     if (nasa && nasa.riesgo !== 'ninguno') {
       contextoParts.push(`ALERTA NASA: ${nasa.incendios} focos de calor detectados, riesgo ${nasa.riesgo}`);
     }
+  }
+
+  // 7. Alertas preventivas (diagnóstico predictivo)
+  if (lat && lon) {
+    try {
+      const alertasRes = await fetch(`https://${req.headers.host || 'localhost'}/api/alertas-preventivas?lat=${lat}&lon=${lon}&cultivo=papa&diasDesdeSiembra=30`);
+      const alertas = await alertasRes.json();
+      if (alertas.alertas?.length > 0) {
+        const alertasTexto = alertas.alertas.map(a => `${a.nombre} (${a.gravedad}): ${a.preventivo}`).join('; ');
+        contextoParts.push(`ALERTAS PREVENTIVAS ACTIVAS: ${alertasTexto}`);
+        contextoParts.push(`NIVEL DE RIESGO GENERAL: ${alertas.riesgo?.nivel || 'desconocido'} (${alertas.riesgo?.puntos || 0} puntos)`);
+      }
+    } catch (e) { /* silencioso */ }
   }
 
   // ── Construir system prompt con TODO el contexto ──

@@ -27,6 +27,7 @@ export default function MiParcela() {
   });
   const [abrirMapa, setAbrirMapa] = useState(false);
   const [poligono, setPoligono] = useState(null);
+  const [riesgoParcela, setRiesgoParcela] = useState(null);
 
   // Auto-fill GPS con ubicación del usuario al abrir modal
   useEffect(() => {
@@ -38,6 +39,18 @@ export default function MiParcela() {
   const cultivoObj = CULTIVOS.find(c => c.id === form.cultivo);
 
   useEffect(() => { cargarParcelas(); }, []);
+
+  // Cargar alertas preventivas cuando cambia la parcela activa
+  useEffect(() => {
+    if (!parcelaActiva?.gps || !parcelaActiva?.cultivo) return;
+    const lat = parcelaActiva.lat || -12.05;
+    const lon = parcelaActiva.lon || -77.04;
+    const dias = diasDesdeSiembra(parcelaActiva.fechaSiembra);
+    fetch(`/api/alertas-preventivas?lat=${lat}&lon=${lon}&cultivo=${parcelaActiva.cultivo}&diasDesdeSiembra=${dias}`)
+      .then(r => r.json())
+      .then(setRiesgoParcela)
+      .catch(() => setRiesgoParcela(null));
+  }, [parcelaActiva?.id]);
 
   const cargarParcelas = async () => {
     try {
@@ -253,6 +266,51 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                     </div>
                   )}
                 </div>
+
+                {/* 🔮 Indicador de Riesgo Preventivo */}
+                {riesgoParcela && (riesgoParcela.alertas?.length > 0 || riesgoParcela.riesgo?.nivel === 'critico' || riesgoParcela.riesgo?.nivel === 'alto') && (
+                  <div className={`rounded-2xl p-4 border-2 ${
+                    riesgoParcela.riesgo?.nivel === 'critico' ? 'bg-red-50 border-red-400' :
+                    riesgoParcela.riesgo?.nivel === 'alto' ? 'bg-orange-50 border-orange-400' :
+                    'bg-yellow-50 border-yellow-300'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xl">🔮</span>
+                      <div className="flex-1">
+                        <p className={`text-sm font-bold ${
+                          riesgoParcela.riesgo?.nivel === 'critico' ? 'text-red-700' :
+                          riesgoParcela.riesgo?.nivel === 'alto' ? 'text-orange-700' : 'text-yellow-700'
+                        }`}>
+                          Riesgo {riesgoParcela.riesgo?.nivel === 'critico' ? 'Crítico' :
+                            riesgoParcela.riesgo?.nivel === 'alto' ? 'Alto' : 'Moderado'}
+                        </p>
+                        <p className="text-[10px] text-gray-500">
+                          {riesgoParcela.clima?.temperatura}°C · {riesgoParcela.clima?.humedad}% humedad · {riesgoParcela.clima?.lluvia7d}mm 7d
+                        </p>
+                      </div>
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold ${
+                        riesgoParcela.riesgo?.nivel === 'critico' ? 'bg-red-500' :
+                        riesgoParcela.riesgo?.nivel === 'alto' ? 'bg-orange-500' : 'bg-yellow-500'
+                      }`}>
+                        {riesgoParcela.riesgo?.puntos || 0}
+                      </div>
+                    </div>
+                    {riesgoParcela.alertas?.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {riesgoParcela.alertas.slice(0, 3).map((a, i) => (
+                          <span key={i} className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            a.gravedad === 'ALTA' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                          }`}>
+                            {a.nombre}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {riesgoParcela.recomendaciones?.length > 0 && (
+                      <p className="text-[10px] text-gray-600 mt-2">📋 {riesgoParcela.recomendaciones[0]}</p>
+                    )}
+                  </div>
+                )}
 
                 {/* Botón ver ciclo */}
                 <button onClick={() => navigate(`/ciclo?parcelaId=${parcelaActiva.id}`)}

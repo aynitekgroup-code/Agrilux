@@ -1,9 +1,9 @@
 /**
  * api/ciclo-recomendaciones.js
  * Genera recomendaciones agronómicas personalizadas para la etapa actual del cultivo.
- * Combina: etapa del ciclo + clima local + suelo + NDVI + registros anteriores.
+ * Combina: etapa del ciclo + clima local + suelo + NDVI + registros + HISTORIAL.
  *
- * POST body: { cultivo, etapa, diasDesdeSiembra, variedad, lat, lon, registros }
+ * POST body: { cultivo, etapa, diasDesdeSiembra, variedad, lat, lon, registros, historial }
  * Returns: { recomendaciones: string, modelo_usado: string }
  */
 
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
   const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
-  const { cultivo, etapa, diasDesdeSiembra, variedad, lat, lon, clima, suelo, registros } = req.body;
+  const { cultivo, etapa, diasDesdeSiembra, variedad, lat, lon, clima, suelo, registros, historial } = req.body;
 
   if (!cultivo || !etapa) {
     return res.status(400).json({ error: 'Faltan campos requeridos: cultivo, etapa' });
@@ -29,6 +29,7 @@ REGLAS:
 - Incluye: fertilización, riego, control de plagas, tareas específicas de la etapa.
 - Si hay datos de clima, úsalos para ajustar recomendaciones.
 - Si hay datos de suelo, úsalos para recomendar enmiendas.
+- Si hay HISTORIAL de problemas, úsalo para dar recomendaciones preventivas y personalizadas.
 - Sé concreto: "Aplicar 50kg de urea por hectárea" no "aplicar fertilizante".
 - Incluye un recordatorio de seguridad: "Si ves [síntoma], busca ayuda técnica".
 - NO inventes datos que no se te proporcionen.`;
@@ -59,8 +60,49 @@ UBICACIÓN: Lat ${lat || 'N/A'}, Lon ${lon || 'N/A'}`;
   if (registros && registros.length > 0) {
     const ultimo = registros[0];
     prompt += `\n\nÚLTIMO MONITOREO (${ultimo.fecha}):
-- Días desde siembra entonces: ${ultimo.diasDesdeSiembra}
-- Observación: ${ultimo.recomendacion || 'Sin datos'}`;
+    - Días desde siembra entonces: ${ultimo.diasDesdeSiembra}
+    - Observación: ${ultimo.recomendacion || 'Sin datos'}`;
+  }
+
+  // Agregar historial clínico si está disponible
+  if (historial) {
+    if (historial.totalDiagnosticos > 0) {
+      prompt += `\n\n📋 HISTORIAL DE LA PARCELA (${historial.totalDiagnosticos} diagnósticos anteriores):`;
+      
+      if (historial.ultimoDiagnostico) {
+        const ultimo = historial.ultimoDiagnostico;
+        const fecha = ultimo.fecha ? new Date(ultimo.fecha).toLocaleDateString('es-PE') : 'desconocida';
+        prompt += `\n• Último diagnóstico (${fecha}): ${ultimo.problema || 'sin problema'} - ${ultimo.gravedad}`;
+        
+        if (ultimo.productoAplicado) {
+          prompt += `\n  Producto aplicado: ${ultimo.productoAplicado}`;
+        }
+        
+        if (ultimo.resultado) {
+          prompt += `\n  Resultado: ${ultimo.resultado}`;
+        }
+      }
+      
+      if (historial.problemasFrecuentes && historial.problemasFrecuentes.length > 0) {
+        prompt += `\n\n• Problemas más frecuentes en esta parcela:`;
+        historial.problemasFrecuentes.forEach(p => {
+          prompt += `\n  - ${p.problema} (${p.veces} veces)`;
+        });
+      }
+      
+      if (historial.tendencia === 'empeorando') {
+        prompt += `\n\n⚠️ ALERTA: El cultivo está EMPEORANDO según los últimos diagnósticos.`;
+      } else if (historial.tendencia === 'mejorando') {
+        prompt += `\n\n✅ El cultivo está MEJORANDO según los últimos diagnósticos.`;
+      }
+      
+      if (historial.problemasActivos && historial.problemasActivos.length > 0) {
+        prompt += `\n\n• Problemas ACTIVOS sin resolver:`;
+        historial.problemasActivos.forEach(p => {
+          prompt += `\n  - ${p.problema} (${p.gravedad})`;
+        });
+      }
+    }
   }
 
   prompt += `\n\nDame recomendaciones concretas para esta etapa del cultivo. Incluye:

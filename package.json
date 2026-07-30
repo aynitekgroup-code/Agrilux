@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/cli": "^8.4.2",
+    "@capacitor/core": "^8.4.2",
     "dompurify": "^3.4.11",
     "firebase": "^10.7.0",
     "jszip": "^3.10.1",

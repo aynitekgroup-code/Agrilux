@@ -157,3 +157,21 @@ export async function getClimaSenamhi(lat, lon) {
   }
   return res.json();
 }
+
+// ─── Buscar insumos — tiendas locales + redes sociales ──────────────────────
+export async function buscarInsumos({ lat, lon, producto, cultivo, ubicacion, radio = 30 }) {
+  const params = new URLSearchParams({
+    lat: (lat || -12.05).toString(),
+    lon: (lon || -77.04).toString(),
+    producto: producto || '',
+    cultivo: cultivo || '',
+    ubicacion: ubicacion || '',
+    radio: radio.toString(),
+  });
+  const res = await fetch(`/api/buscar-insumos?${params}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error buscando insumos');
+  }
+  return res.json();
+}

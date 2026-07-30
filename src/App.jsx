@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/AuthContext';
+import { AgentProvider } from './lib/AgentContext';
 import Layout from './components/Layout';
 import SelectorUbicacion from './components/SelectorUbicacion';
 import Registro from './pages/Registro';
@@ -130,9 +131,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
+      <AgentProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </AgentProvider>
     </AuthProvider>
   );
 }
