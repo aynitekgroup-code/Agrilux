@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, Leaf, Calendar, LogOut, Menu, X, MapPin, Shield, User } from 'lucide-react';
+import { Camera, Leaf, Calendar, Newspaper, LogOut, Menu, X, MapPin, Shield, User } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import SelectorUbicacion from './SelectorUbicacion';
 import OnlineStatus from './OnlineStatus';
@@ -9,6 +9,7 @@ const navItems = [
   { path: '/',        icon: Camera,  label: 'Diagnóstico' },
   { path: '/ciclo',   icon: Calendar, label: 'Ciclo' },
   { path: '/parcela', icon: Leaf,    label: 'Parcela' },
+  { path: '/noticias', icon: Newspaper, label: 'Noticias' },
 ];
 
 export default function Layout({ children }) {

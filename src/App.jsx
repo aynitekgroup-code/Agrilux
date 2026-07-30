@@ -7,6 +7,7 @@ import Registro from './pages/Registro';
 import Diagnostico from './pages/Diagnostico';
 import MiParcela from './pages/MiParcela';
 import CicloCultivo from './pages/CicloCultivo';
+import NoticiasPage from './pages/NoticiasPage';
 import Admin from './pages/Admin';
 import { Clock, Mail, LogOut } from 'lucide-react';
 
@@ -114,6 +115,9 @@ function AppRoutes() {
             <Route path="/ciclo" element={
               user ? <CicloCultivo /> : <Navigate to="/registro" />
             } />
+
+            {/* Noticias — accesible para todos */}
+            <Route path="/noticias" element={<NoticiasPage />} />
 
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
