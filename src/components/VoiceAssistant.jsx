@@ -39,6 +39,7 @@ export default function VoiceAssistant({ disabled = false }) {
   const [coordenadas, setCoordenadas]     = useState(null);
   const [guardando, setGuardando]         = useState(false);
   const [tiendasBusqueda, setTiendasBusqueda] = useState(null);
+  const [enlacesBusqueda, setEnlacesBusqueda] = useState(null);
 
   const recognitionRef = useRef(null);
   const chatEndRef     = useRef(null);
@@ -108,6 +109,8 @@ export default function VoiceAssistant({ disabled = false }) {
   const enviarAI = useCallback(async (mensaje, hist) => {
     setProcesando(true);
     setError('');
+    setTiendasBusqueda(null);
+    setEnlacesBusqueda(null);
     try {
       // Incluir contexto compartido de todos los agentes
       const contextoAgentes = {
@@ -133,9 +136,13 @@ export default function VoiceAssistant({ disabled = false }) {
       const data = await r.json();
       const respuesta = data.respuesta || 'No pude procesar tu pregunta. Intenta de nuevo.';
 
-      // Si la respuesta menciona tiendas, mostrar sección de tiendas
+      // Si la respuesta incluye tiendas, mostrar sección de tiendas
       if (data.tiendas?.length > 0) {
         setTiendasBusqueda(data.tiendas);
+        setEnlacesBusqueda(data.enlaces);
+      } else {
+        setTiendasBusqueda(null);
+        setEnlacesBusqueda(null);
       }
 
       setHistorial(prev => [...prev, { rol: 'asistente', texto: respuesta }]);
@@ -310,6 +317,51 @@ export default function VoiceAssistant({ disabled = false }) {
                 </div>
               </div>
             )}
+
+            {/* Resultados de tiendas */}
+            {tiendasBusqueda && tiendasBusqueda.length > 0 && (
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-3 border border-green-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Store size={14} className="text-green-600" />
+                  <p className="text-xs font-bold text-green-700">Tiendas encontradas</p>
+                </div>
+                <div className="space-y-1.5">
+                  {tiendasBusqueda.slice(0, 3).map((t, i) => (
+                    <div key={i} className="bg-white rounded-xl p-2 flex items-center gap-2 border border-green-100">
+                      <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white text-[10px] font-bold">
+                        {t.nombre?.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-gray-700 truncate">{t.nombre}</p>
+                        <p className="text-[10px] text-gray-400">{t.distanciaKm}km · ⭐ {t.rating || 'N/A'}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Enlaces de redes sociales */}
+                {enlacesBusqueda && (
+                  <div className="flex gap-1.5 mt-2 flex-wrap">
+                    <a href={enlacesBusqueda.googleMaps} target="_blank" rel="noreferrer"
+                      className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-semibold hover:bg-blue-200">
+                      🗺️ Maps
+                    </a>
+                    <a href={enlacesBusqueda.facebook} target="_blank" rel="noreferrer"
+                      className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-semibold hover:bg-blue-200">
+                      📘 Facebook
+                    </a>
+                    <a href={enlacesBusqueda.tiktok} target="_blank" rel="noreferrer"
+                      className="text-[10px] bg-gray-100 text-gray-700 px-2 py-1 rounded-full font-semibold hover:bg-gray-200">
+                      🎵 TikTok
+                    </a>
+                    <a href={enlacesBusqueda.whatsapp} target="_blank" rel="noreferrer"
+                      className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded-full font-semibold hover:bg-green-200">
+                      💬 WhatsApp
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div ref={chatEndRef} />
           </div>
 

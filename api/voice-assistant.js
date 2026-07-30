@@ -357,6 +357,35 @@ export default async function handler(req, res) {
     } catch (e) { /* silencioso */ }
   }
 
+  // ── Detectar si el usuario busca tiendas o productos ──
+  const buscaTienda = /comprar|tienda|dónde|donde|conseguir|adquirir|mercado|ferretería|agro|insumo|producto|oferta|descuento|precio/i.test(mensaje);
+  let tiendasResult = null;
+  
+  if (buscaTienda && lat && lon) {
+    // Extraer nombre del producto del mensaje
+    const productoMatch = mensaje.match(/comprar\s+(.+?)(?:\s+en|\s+cerca|\s+de|\s+por|\s+para|\?|$)/i)
+      || mensaje.match(/tienda\s+(?:de\s+)?(.+?)(?:\s+en|\s+cerca|\s+de|\s+por|\s+para|\?|$)/i)
+      || mensaje.match(/dónde\s+(?:comprar|conseguir)\s+(.+?)(?:\s+en|\s+cerca|\s+de|\s+por|\s+para|\?|$)/i);
+    const producto = productoMatch?.[1]?.trim() || '';
+    
+    if (producto) {
+      try {
+        const busquedaRes = await fetch(`https://${req.headers.host || 'localhost'}/api/buscar-insumos?lat=${lat}&lon=${lon}&producto=${encodeURIComponent(producto)}&radio=30`);
+        tiendasResult = await busquedaRes.json();
+        
+        if (tiendasResult.tiendas?.length > 0) {
+          const tiendasInfo = tiendasResult.tiendas.slice(0, 3).map(t => 
+            `${t.nombre} (${t.distanciaKm}km, rating ${t.rating || 'N/A'})`
+          ).join(', ');
+          contextoParts.push(`TIENDAS ENCONTRADAS PARA "${producto.toUpperCase()}": ${tiendasInfo}`);
+          contextoParts.push(`ENLACES DE BÚSQUEDA: Google Maps: ${tiendasResult.enlaces?.googleMaps || 'N/A'}, Facebook: ${tiendasResult.enlaces?.facebook || 'N/A'}, TikTok: ${tiendasResult.enlaces?.tiktok || 'N/A'}`);
+        } else {
+          contextoParts.push(`NO SE ENCONTRARON TIENDAS de "${producto}" en un radio de 30km. Sugiere buscar en Google Maps o Facebook Marketplace.`);
+        }
+      } catch (e) { /* silencioso */ }
+    }
+  }
+
   // ── Construir system prompt con TODO el contexto ──
   const contextoCompleto = contextoParts.length > 0
     ? `\n\nINFORMACIÓN EN TIEMPO REAL DEL AGRICULTOR:\n${contextoParts.join('\n')}\n\nUsa TODOS estos datos para tus recomendaciones. Si hay lluvia, prioriza fungicidas sistémicos. Si hay humedad alta, alerta sobre hongos. Si está frío, sugiere preventivos. Si el suelo es ácido, ajusta dosis. Menciona el pronóstico SENAMHI si el usuario pregunta por el clima.`
@@ -400,6 +429,8 @@ export default async function handler(req, res) {
           estacion: estacionCercana?.nombre || null,
           ubicacion: ubicacion || null,
           clima: clima ? `${clima.temp}°C, ${clima.descripcion}` : null,
+          tiendas: tiendasResult?.tiendas?.slice(0, 5) || [],
+          enlaces: tiendasResult?.enlaces || null,
         });
       }
     } catch (e) { console.warn('Voice OpenRouter error:', e.message); }
@@ -429,6 +460,8 @@ export default async function handler(req, res) {
           estacion: estacionCercana?.nombre || null,
           ubicacion: ubicacion || null,
           clima: clima ? `${clima.temp}°C, ${clima.descripcion}` : null,
+          tiendas: tiendasResult?.tiendas?.slice(0, 5) || [],
+          enlaces: tiendasResult?.enlaces || null,
         });
       }
     } catch (e) { console.warn('Voice DeepSeek error:', e.message); }
@@ -458,6 +491,8 @@ export default async function handler(req, res) {
           estacion: estacionCercana?.nombre || null,
           ubicacion: ubicacion || null,
           clima: clima ? `${clima.temp}°C, ${clima.descripcion}` : null,
+          tiendas: tiendasResult?.tiendas?.slice(0, 5) || [],
+          enlaces: tiendasResult?.enlaces || null,
         });
       }
     } catch (e) { console.warn('Voice GitHub error:', e.message); }

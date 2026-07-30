@@ -1,0 +1,59 @@
+Mensaje para WhatsApp a Aldo Schenone:
+
+---
+
+Hola Aldo, gusto saludarte. Te comparto la información general sobre Agrilux para nuestra reunión del miércoles 5.
+
+📋 *RESUMEN AGRILUX*
+
+*¿Qué es?*
+Plataforma de agricultura inteligente para pequeños agricultores de Latinoamérica. Combina IA + clima en tiempo real + conocimiento agronómico local.
+
+*Link de la plataforma:*
+https://www.vitalfarmbright.store
+
+*El problema que resolvemos:*
+• 30-50% de producción perdida por plagas
+• >80% de agricultores sin asesoría técnica
+• Uso inadecuado de agroquímicos
+
+*Nuestra solución:*
+📸 Diagnóstico con IA (foto → plaga → producto)
+🎤 Asistente de voz en español peruano
+📅 Ciclo del cultivo con alertas preventivas
+🔍 Búsqueda local de tiendas de insumos
+🛰 Monitoreo satelital (NDVI)
+🌧 Clima real (SENAMHI + Open-Meteo)
+
+*Cultivos:* Papa, maíz, palta, arándano, caña, plátano, papaya
+
+*Estado actual:*
+✅ Plataforma web en producción
+✅ IA funcionando (3 proveedores)
+✅ 7 cultivos con ciclos completos
+✅ 55 estaciones meteorológicas
+✅ Sistema de aprendizaje activo
+
+*Diferenciadores clave:*
+✅ Funciona sin internet
+✅ Voz en español local
+✅ Gratuito para agricultores
+✅ Diagnóstico predictivo (antes de que aparezca el problema)
+
+*Modelo de negocio:*
+• Agricultor pequeño: Gratis
+• Mediano: $10/mes
+• Agrónomo/Empresa: $50/mes
+• Cooperativa/Estado: $200/mes
+
+*Próximos pasos que propongo:*
+1. Demo en vivo de la plataforma
+2. Revisión técnica detallada
+3. Definir alcance de colaboración
+
+Te envío el informe completo en PDF. Quedo atento a tu confirmación para el miércoles.
+
+Saludos,
+José Llanos
+jose.llanos.d@uni.pe
++51 935 211 605
