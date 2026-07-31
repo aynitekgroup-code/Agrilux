@@ -7,7 +7,7 @@ Hola Aldo, gusto saludarte. Te comparto la información general sobre Agrilux pa
 📋 *RESUMEN AGRILUX*
 
 *¿Qué es?*
-Plataforma de agricultura inteligente para pequeños agricultores de Latinoamérica. Combina IA + clima en tiempo real + conocimiento agronómico local.
+Plataforma de agricultura inteligente para pequeños agricultores de Latinoamérica. Combina IA + clima en tiempo real + satélite + suelo + conocimiento agronómico local.
 
 *Link de la plataforma:*
 https://www.vitalfarmbright.store
@@ -16,29 +16,38 @@ https://www.vitalfarmbright.store
 • 30-50% de producción perdida por plagas
 • >80% de agricultores sin asesoría técnica
 • Uso inadecuado de agroquímicos
+• Datos de suelo caros ($500-2000 por estudio)
 
 *Nuestra solución:*
 📸 Diagnóstico con IA (foto → plaga → producto)
 🎤 Asistente de voz en español peruano
-📅 Ciclo del cultivo con alertas preventivas
-🔍 Búsqueda local de tiendas de insumos
-🛰 Monitoreo satelital (NDVI)
-🌧 Clima real (SENAMHI + Open-Meteo)
+📅 Ciclo del cultivo con etapas pre-siembra + alertas preventivas
+🔍 Búsqueda local de tiendas + redes sociales
+🛰 Satélite Sentinel-2 (NDVI, clorofila, humedad, biomasa)
+🌧 Clima real (Open-Meteo + 70 estaciones SENAMHI)
+🌱 Suelo (SoilGrids250m: pH, textura, materia orgánica)
+🔥 Alertas de incendios NASA
+📊 Diagnóstico predictivo (antes de que aparezca el problema)
 
 *Cultivos:* Papa, maíz, palta, arándano, caña, plátano, papaya
 
 *Estado actual:*
 ✅ Plataforma web en producción
-✅ IA funcionando (3 proveedores)
-✅ 7 cultivos con ciclos completos
-✅ 55 estaciones meteorológicas
+✅ IA funcionando (4 proveedores)
+✅ 7 cultivos con etapas completas
+✅ 70 estaciones meteorológicas
+✅ 4 agentes sincronizados
+✅ Satélite + suelo + clima integrados
 ✅ Sistema de aprendizaje activo
+✅ Offline-first (funciona sin internet)
 
 *Diferenciadores clave:*
 ✅ Funciona sin internet
 ✅ Voz en español local
 ✅ Gratuito para agricultores
-✅ Diagnóstico predictivo (antes de que aparezca el problema)
+✅ Diagnóstico predictivo
+✅ Satélite de alta resolución (10m)
+✅ Calibración de suelo con datos locales
 
 *Modelo de negocio:*
 • Agricultor pequeño: Gratis
@@ -51,7 +60,7 @@ https://www.vitalfarmbright.store
 2. Revisión técnica detallada
 3. Definir alcance de colaboración
 
-Te envío el informe completo en PDF. Quedo atento a tu confirmación para el miércoles.
+Te envío el informe completo. Quedo atento a tu confirmación para el miércoles.
 
 Saludos,
 José Llanos

@@ -42,7 +42,7 @@ const COLOR_HEADER = {
 
 export default function Diagnostico({ onPlagaDetectada }) {
   const { user } = useAuth();
-  const { reportarDiagnostico, seleccionarCultivo, actualizarUbicacion } = useAgentes();
+  const { reportarDiagnostico, seleccionarCultivo, actualizarUbicacion, coords } = useAgentes();
 
   const [cultivo, setCultivo]           = useState(CULTIVOS[0]);
 

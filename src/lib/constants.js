@@ -38,6 +38,9 @@ export const CULTIVOS = [
     categoria: 'basico',
     variedades: ['Amarillo duro', 'Blanco gigante', 'Choclo', 'Morado'],
     ciclo: [
+      { id: 'preparacion',     nombre: 'Preparación del terreno', emoji: '🚜', diasInicio: -20, diasFin: 0,
+        acciones: ['Arar el terreno a 20cm de profundidad', 'Aplicar estiércol o gallinaza (2-3 ton/ha)', 'Nivelar y marcar surcos a 80cm', 'Verificar pH del suelo (5.5-7.0 ideal)'],
+        alertas: ['Suelo muy seco dificulta germinación', 'pH bajo reduce rendimiento'] },
       { id: 'siembra',         nombre: 'Siembra',                emoji: '🌱', diasInicio: 0,   diasFin: 10,
         acciones: ['Germinar semilla previamente (remojo 12-24h)', 'Sembrar a 80cm entre surcos y 20cm entre plantas', 'Profundidad de 3-5cm', 'Aplicar abono de base (gallinaza o estiércol)'],
         alertas: ['Temperatura del suelo debe ser >12°C para germinar', 'No sembrar en suelo encharcado'] },
@@ -65,6 +68,9 @@ export const CULTIVOS = [
     categoria: 'frutal',
     variedades: ['Hass', 'Fuerte', 'Criolla', 'Ettinger'],
     ciclo: [
+      { id: 'preparacion',     nombre: 'Preparación del terreno', emoji: '🚜', diasInicio: -60, diasFin: 0,
+        acciones: ['Estacar puntos a 8-10m de distancia', 'Cavar hoyos de 60x60x60cm', 'Mezclar tierra con compost (50/50)', 'Instalar sistema de riego por goteo'],
+        alertas: ['Raíces superficiales necesitan riego constante', 'No plantar en suelo compactado'] },
       { id: 'siembra',         nombre: 'Siembra',                emoji: '🌱', diasInicio: 0,   diasFin: 21,
         acciones: ['Germinar semilla en bolsa (sin pelar, mitad arriba del agua)', 'Trasplantar cuando tallo tenga 20-30cm', 'Plantar a 8-10m de distancia entre árboles', 'Proteger del sol directo los primeros meses'],
         alertas: ['La palta de hueso tarda 5-7 años en producir', 'Variedades injertadas producen a los 3-4 años'] },
@@ -89,6 +95,9 @@ export const CULTIVOS = [
     categoria: 'frutal',
     variedades: ['Biloxi', 'Emerald', 'Jewel', 'O\'Neal'],
     ciclo: [
+      { id: 'preparacion',     nombre: 'Preparación del terreno', emoji: '🚜', diasInicio: -45, diasFin: 0,
+        acciones: ['Corregir pH a 4.5-5.5 con azufre o turba', 'Cavar surcos de 30cm de profundidad', 'Instalar sistema de riego por goteo', 'Agregar material orgánico al suelo'],
+        alertas: ['pH >6.0 mata las plantas', 'Suelo calcáreo es incompatible'] },
       { id: 'siembra',         nombre: 'Siembra',                emoji: '🌱', diasInicio: 0,   diasFin: 30,
         acciones: ['Preparar suelo ácido (pH 4.5-5.5)', 'Plantar a 1.5m entre plantas y 3m entre surcos', 'Agregar turba o aserrín al suelo', 'Mulching con paja de arroz 10cm'],
         alertas: ['Suelo con pH >6.0 mata la planta', 'Raíces superficiales necesitan riego por goteo'] },
@@ -166,6 +175,9 @@ export const CULTIVOS = [
     categoria: 'frutal',
     variedades: ['Sedita', 'Bellaco', 'Isla', 'Palillo', 'Guineo'],
     ciclo: [
+      { id: 'preparacion',     nombre: 'Preparación del terreno', emoji: '🚜', diasInicio: -30, diasFin: 0,
+        acciones: ['Eliminar plántulas viejas y rastrojo', 'Arar a 25cm de profundidad', 'Aplicar estiércol (20-30 ton/ha)', 'Marcar puntos a 2.5m x 2.5m'],
+        alertas: ['Suelo con nematodos requiere solarización', 'No replantar donde hubo plátano en 2 años'] },
       { id: 'siembra',         nombre: 'Siembra',                emoji: '🌱', diasInicio: 0,   diasFin: 30,
         acciones: ['Usar cormo de planta madre como semilla', 'Plantar a 2.5m x 2.5m', 'Cavar hoyo de 40x40x40cm', 'Aplicar abono de base y humus de lombriz'],
         alertas: ['Cormos con nematodos propagan enfermedad', 'No plantar donde hubo plátano antes de 2 años'] },
@@ -190,6 +202,9 @@ export const CULTIVOS = [
     categoria: 'frutal',
     variedades: ['Hawaiana', 'Solo Sunrise', 'Tainung', 'Maradol', 'Venezolana'],
     ciclo: [
+      { id: 'preparacion',     nombre: 'Preparación del terreno', emoji: '🚜', diasInicio: -21, diasFin: 0,
+        acciones: ['Preparar semillero con sustrato estéril', 'Germinar semillas en bandejas', 'Aplicar fumigante al suelo si hay nematodos', 'Instalar riego por goteo'],
+        alertas: ['Semilla vieja (>2 años) tiene baja germinación', 'Suelo frío retrasa germinación'] },
       { id: 'siembra',         nombre: 'Siembra',                emoji: '🌱', diasInicio: 0,   diasFin: 21,
         acciones: ['Germinar en bandejas con sustrato', 'Semilla remojada 48h previamente', 'Trasplantar cuando planta tenga 15-20cm', 'Plantar a 2m entre plantas'],
         alertas: ['Germinación lenta si temperatura <20°C', 'Plántulas extremadamente sensibles a exceso de agua'] },

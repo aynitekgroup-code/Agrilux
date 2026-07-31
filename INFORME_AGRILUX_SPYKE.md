@@ -10,7 +10,7 @@
 
 ## 1. RESUMEN EJECUTIVO
 
-**Agrilux** es una plataforma de agricultura inteligente diseñada para pequeños y medianos agricultores de Latinoamérica. Combina inteligencia artificial, datos climáticos en tiempo real y conocimiento agronómico local para ayudar a los agricultores a tomar mejores decisiones.
+**Agrilux** es una plataforma de agricultura inteligente diseñada para pequeños y medianos agricultores de Latinoamérica. Combina inteligencia artificial, datos climáticos en tiempo real, imágenes satelitales y conocimiento agronómico local para ayudar a los agricultores a tomar mejores decisiones.
 
 **Misión:** Democratizar el acceso a tecnología agrícola avanzada para agricultores que actualmente no tienen acceso a asesoría profesional.
 
@@ -24,7 +24,7 @@
 | **Falta de asesoría técnica** | >80% de pequeños agricultores no tienen acceso a agrónomos |
 | **Uso inadecuado de agroquímicos** | Sobredosis → contaminación + resistencia de plagas |
 | **Pérdidas por clima** | Eventos extremos no monitoreados destruyen cosechas |
-| **Mercados informales** | Agricultores venden por debajo del precio justo |
+| **Datos de suelo caros** | $500-2000 por estudio → agricultores no saben qué aplicar |
 
 ---
 
@@ -35,167 +35,159 @@
 - La IA identifica plagas, enfermedades y deficiencias nutricionales
 - Recomienda productos específicos con dosis y frecuencia
 - **Funciona sin internet** (modo offline)
+- **Cadena de modelos**: OpenRouter Gemini 2.5 → DeepSeek → GitHub Phi-4 → HuggingFace
 
 ### 3.2 Asistente de Voz en Español Peruano
 - Conversación por voz con un agrónomo virtual
 - Responde en el acento local del agricultor
 - Accede a clima, suelo, alertas y recomendaciones
 - **Ideal para agricultores con baja alfabetización digital**
+- Detecta automáticamente cuando el agricultor busca tiendas
 
 ### 3.3 Ciclo del Cultivo
-- Calendario completo de siembra a cosecha
-- Recomendaciones personalizadas por etapa
+- Calendario completo de pre-siembra → siembra → cosecha
+- Recomendaciones personalizadas por etapa + clima actual
 - Alertas preventivas antes de que aparezcan problemas
-- **7 cultivos peruanos detallados** (papa, maíz, palta, arándano, caña, plátano, papaya)
+- **7 cultivos peruanos detallados** con etapas pre-siembra
 
-### 3.4 Búsqueda Local de Insumos
-- Encuentra tiendas de agroquímicos cerca del agricultor
-- Genera enlaces directos a Facebook, Google Maps, TikTok
-- Conecta agricultores con proveedores locales
+### 3.4 Búsqueda de Tiendas Locales
+- Encuentra tiendas de insumos agrícolas cerca del agricultor
+- Enlaces directos a Google Maps, Facebook, TikTok, WhatsApp
+- **16 tiendas pre-cargadas** en todo Perú
+- Integrada con el asistente de voz
 
-### 3.5 Monitoreo Satelital
-- Análisis NDVI (índice de salud vegetal)
-- Alertas de incendios forestales (NASA FIRMS)
-- Datos de suelo (pH, textura, materia orgánica)
-- **Integración con SENAMHI** (meteorología oficial del Perú)
+### 3.5 Satélite y Monitoreo
+- **Sentinel-2**: NDVI, clorofila, humedad de hoja, biomasa, punto de rocío (10m resolución)
+- **NASA FIRMS**: Alertas de incendios forestales en tiempo real
+- **ESRI**: Capas de satélite de alta resolución
 
----
+### 3.6 Datos de Suelo
+- **SoilGrids250m**: pH, textura, materia orgánica, salinidad, calcio, nitrógeno
+- **4 capas de profundidad**: 0-5cm, 5-35cm, 35-65cm, 65-95cm
+- **Calibración local**: Posibilidad de calibrar con datos de campo
 
-## 4. CULTIVOS Y PROBLEMAS QUE ABORDAMOS
-
-### Cultivos Soportados
-| Cultivo | Región Principal | Ciclo | Problemas Comunes |
-|---------|-----------------|-------|-------------------|
-| 🥔 Papa | Sierra (Cajamarca, Junín, Cusco) | 150 días | Tizón tardío, polilla guatemalteca |
-| 🌽 Maíz | Costa y Sierra | 120 días | Gusano cogollero, roya |
-| 🥑 Palta (Hass) | Costa (Ica, Lima) | 365 días | Gusano del brote, antracnosis |
-| 🫐 Arándano | Sierra (Cajamarca, Cusco) | 240 días | Botrytis, pájaros |
-| 🎋 Caña de azúcar | Costa (Lambayeque, La Libertad) | 365 días | Gusano taladrador, roya |
-| 🍌 Plátano | Selva y Costa | 365 días | Sigatoka negra, picudo |
-| 🍈 Papaya | Costa y Selva | 210 días | Chancro bacterial, mosca de la fruta |
-
-### Regiones de Enfoque
-- **Perú** (mercado principal): Costa Norte, Sierra Norte, Selva
-- **Colombia** (expansión planeada)
-- **Ecuador** (expansión planeada)
-- **Bolivia** (expansión planeada)
+### 3.7 Sistema de Aprendizaje
+- Historial clínico por parcela
+- Feedback del agricultor (👍/👎)
+- Memoria entre sesiones
+- Mejora continua de recomendaciones
 
 ---
 
-## 5. ESTADO ACTUAL DEL DESARROLLO
+## 4. CÓMO CALCULAMOS LOS DATOS (TÉCNICO)
+
+### 🌡️ Clima
+| Fuente | Resolución | Datos |
+|--------|------------|-------|
+| Open-Meteo (principal) | 0.25° (~27km) | 30+ modelos: ECMWF, NOAA, DWD, Meteo-France |
+| SENAMHI (pronóstico oficial) | Por ubicación | Temperatura máxima/mínima, descripción |
+| 70 estaciones propias | Haversine | Históricos automáticos (A001-A620) |
+
+**Proceso**: Coordenadas → Buscar estación más cercana (Haversine) → Obtener pronóstico Open-Meteo → Cruzar con datos históricos → Generar recomendación.
+
+### 🌱 Suelo
+| Fuente | Resolución | Fiabilidad |
+|--------|------------|------------|
+| SoilGrids250m | 250m | 76% global |
+| Datos de campo | Punto | 100% |
+
+**Parámetros**: pH, CE (conductividad eléctrica), PSI (sodio), materia orgánica, calcio, nitrógeno, fósforo, potasio, textura (arcilla, limo, arena).
+
+**Métodos de interpolación**: IDW, Kriging, Natural Neighbor, Spline, Topo to Raster.
+
+### 🛰️ Satélite
+| Satélite | Resolución | Parámetros |
+|----------|------------|------------|
+| Sentinel-2 | 10m | NDVI, clorofila, humedad hoja, biomasa, punto de rocío |
+| NASA FIRMS | 375m | Incendios activos |
+| ESRI | Variable | Imágenes de alta resolución |
+
+**Proceso**: Coordenadas → Obtener imagen Sentinel-2 → Calcular índices espectrales → Generar mapa de NDVI → Detectar anomalías.
+
+---
+
+## 5. CULTIVOS SOPORTADOS
+
+| Cultivo | Etapas | Detalles |
+|---------|--------|----------|
+| 🥔 Papa | Preparación → Siembra → Germinación → Crecimiento → Floración → Tuberización → Cosecha | 150 días, 6 variedades |
+| 🌽 Maíz | Preparación → Siembra → Germinación → Crecimiento → Floración → Fructificación → Cosecha | 120 días, 4 variedades |
+| 🥑 Palta | Preparación → Siembra → Crecimiento → Floración → Fructificación → Cosecha | 365 días, 4 variedades |
+| 🫐 Arándano | Preparación → Siembra → Crecimiento → Floración → Fructificación → Cosecha | 240 días, 4 variedades |
+| 🎋 Caña | Preparación → Siembra → Germinación → Crecimiento → Maduración → Cosecha | 365 días, 8 variedades |
+| 🍌 Plátano | Preparación → Siembra → Crecimiento → Floración → Fructificación → Cosecha | 365 días, 5 variedades |
+| 🍈 Papaya | Preparación → Siembra → Crecimiento → Floración → Fructificación → Cosecha | 210 días, 5 variedades |
+
+**Regiones**: Perú (Costa Norte, Sierra, Selva) → Colombia → Ecuador → Bolivia
+
+---
+
+## 6. DIFERENCIADORES VS COMPETENCIA
+
+| Característica | Agrilux | PlantVillage Nuru | Agrio | Yara CheckIT |
+|----------------|---------|-------------------|-------|--------------|
+| Sin internet | ✅ PWA offline | ❌ | ❌ | ❌ |
+| Voz español local | ✅ es-PE peruano | ❌ | ❌ | ❌ |
+| Costo | Gratis (freemium) | Gratis | $20/mes | $50/mes |
+| Cultivos peruanos | ✅ 7 con ciclos completos | Genéricos | Genéricos | Genéricos |
+| Diagnóstico predictivo | ✅ Antes de que aparezca | ❌ Solo reactivo | ❌ | ❌ |
+| Satélite + suelo | ✅ Sentinel-2 + SoilGrids | ❌ | ❌ | Limitado |
+| Búsqueda tiendas | ✅ + redes sociales | ❌ | ❌ | ❌ |
+| Agentes sincronizados | ✅ Diagnóstico + Voz + Ciclo + Búsqueda | ❌ | ❌ | ❌ |
+| Alertas preventivas | ✅ Por clima + etapa + historial | ❌ | ❌ | ❌ |
+
+---
+
+## 7. ESTADO ACTUAL
 
 ### ✅ Completado
-- [x] Plataforma web PWA (Progressive Web App)
-- [x] Diagnóstico con IA (Gemini, DeepSeek, fallback a modelos gratuitos)
-- [x] Asistente de voz en español peruano
-- [x] 7 cultivos con ciclos completos
-- [x] Integración con Open-Meteo (clima gratuito)
-- [x] Integración con SENAMHI (meteorología oficial)
-- [x] Datos de suelo (SoilGrids)
-- [x] Alertas NASA FIRMS (incendios)
-- [x] Sistema de aprendizaje (memoria entre sesiones)
-- [x] Alertas preventivas (diagnóstico predictivo)
-- [x] Búsqueda local de insumos
-- [x] Monitoreo satelital (NDVI)
-- [x] Funcionamiento offline
-- [x] Despliegue en producción: vitalfarmbright.store
+- Plataforma web en producción (vitalfarmbright.store)
+- IA funcionando (Gemini 2.5 Flash + DeepSeek + GitHub Phi-4 + HuggingFace)
+- 7 cultivos con etapas pre-siembra + siembra + cosecha
+- 70 estaciones meteorológicas Perú (20+ en Lambayeque)
+- Sistema de aprendizaje activo (historial clínico por parcela)
+- Alertas preventivas calculadas por clima + etapa + historial
+- 4 agentes sincronizados: Diagnóstico, Ciclo, Voz, Búsqueda
+- Búsqueda de tiendas con enlaces a redes sociales
+- Mapa interactivo para seleccionar ubicación
+- Satélite Sentinel-2 con NDVI + parámetros extra
+- Suelo SoilGrids250m con calibración local
+- Offline-first con IndexedDB + Service Worker
 
 ### 🔧 En Desarrollo
-- [ ] App móvil nativa (Android/iOS)
-- [ ] Marketplace de insumos agrícolas
-- [ ] Sistema de comunidades de agricultores
-- [ ] IVR (llamadas automáticas para sin smartphone)
-- [ ] Integración con cooperativas y asociaciones
+- App móvil nativa (Capacitor)
+- Calibración de SoilGrids con datos locales
+- Parámetros satelitales extendidos (agua foliar, biomasa)
+- Integración con ERPs agrícolas
 
 ---
 
-## 6. DIFERENCIADORES CLAVE
+## 8. MODELO DE NEGOCIO
 
-| Característica | Agrilux | Competencia |
-|---------------|---------|-------------|
-| **Funciona sin internet** | ✅ Sí | ❌ No (requieren conexión permanente) |
-| **Voz en español local** | ✅ Peruano nativo | ❌ Genérico o inglés |
-| **Costo** | ✅ Gratuito para agricultores | 💰 $10-50/mes |
-| **Cultivos peruanos** | ✅ 7 ciclos detallados | ❌ Genéricos |
-| **Datos locales** | ✅ SENAMHI + 55 estaciones | ❌ Solo datos globales |
-| **Sin login para diagnosticar** | ✅ Acceso inmediato | ❌ Requiere registro |
-| **Diagnóstico predictivo** | ✅ Antes de que aparezca | ❌ Solo reactivo |
+| Segmento | Precio | Funciones |
+|----------|--------|-----------|
+| Agricultor pequeño | Gratis | Diagnóstico, clima, voz básica |
+| Agricultor mediano (Field Plus) | $10/mes | + Alertas predictivas, historial, exportación |
+| Agrónomo/Empresa (Pro) | $50/mes | + Múltiples parcelas, reportes, API |
+| Cooperativa/Estado (Enterprise) | $200/mes | + Dashboard administrativo, datos personalizados |
 
----
-
-## 7. MODELO DE NEGOCIO
-
-### Segmentos
-| Segmento | Precio | Descripción |
-|----------|--------|-------------|
-| **Agricultor pequeño** | Gratis | Diagnóstico, recomendaciones, voz, clima |
-| **Agricultor mediano** | $10/mes | + Monitoreo satelital, historial, reportes |
-| **Agrónomo/Empresa** | $50/mes | + Gestión de múltiples parcelas, exportación |
-| **Cooperativa/Estado** | $200/mes | + Dashboard administrativo, analytics, API |
-
-### Proyecciones de Ingresos
-| Año | Usuarios | Ingreso Mensual | Ingreso Anual |
-|-----|----------|----------------|---------------|
-| 1 | 500 | $6,000 | $72,000 |
-| 2 | 2,000 | $19,400 | $233,000 |
-| 3 | 5,000 | $46,900 | $563,000 |
+**Proyección Año 3:** $563,000 anuales
 
 ---
 
-## 8. APOYO BUSCADO
+## 9. APOYO BUSCADO
 
-### 8.1 Alianza Estratégica con Spyke Systems
-- **Integración técnica** con plataformas existentes
-- **Co-desarrollo** de funcionalidades específicas
-- **Distribución** a través de la red de clientes de Spyke
-
-### 8.2 Áreas de Colaboración Potencial
-| Área | Oportunidad |
-|------|-------------|
-| **Infraestructura cloud** | Optimización de costos y escalabilidad |
-| **Integración con ERPs agrícolas** | Conectar con sistemas de gestión existentes |
-| **Módulos financieros** | Créditos agrícolas, seguros, pagos |
-| **Logística inversa** | Conectar productores con mercados |
-| **Capacitación** | Programas de adopción tecnológica |
-
-### 8.3 Próximos Pasos (si hay interés)
-1. Demo en vivo de la plataforma
-2. Revisión técnica detallada
-3. Definición de alcance de colaboración
-4. Acuerdo de confidencialidad (si aplica)
-5. Piloto con un grupo de agricultores
-
----
-
-## 9. MÉTRICAS ACTUALES
-
-| Métrica | Valor |
-|---------|-------|
-| **Usuarios registrados** | En crecimiento |
-| **Diagnósticos realizados** | Activo |
-| **Cultivos soportados** | 7 |
-| **Estaciones meteorológicas** | 55 en Perú |
-| **Disponibilidad** | 99.9% (Vercel) |
-| **Tiempo de respuesta** | <2 segundos |
+- Alianza técnica con Spyke Systems
+- Co-desarrollo de funcionalidades
+- Distribución a través de red de clientes
+- Integración con ERPs agrícolas
+- Acceso a datos de campo para calibrar modelos
 
 ---
 
 ## 10. CONTACTO
 
-| Dato | Valor |
-|------|-------|
-| **Nombre** | José Llanos |
-| **Email** | jose.llanos.d@uni.pe |
-| **WhatsApp** | +51 935 211 605 |
-| **Plataforma** | https://www.vitalfarmbright.store |
-| **Reunión programada** | Miércoles 5 de agosto, 2026 |
-
----
-
-## 11. NOTA DE CONFIDENCIALIDAD
-
-Este documento contiene información general sobre el proyecto Agrilux. No incluye código fuente, datos técnicos sensibles ni información proprietaria. Cualquier información adicional compartida será tratada con reserva y puede ser cubierta por un acuerdo de confidencialidad si ambas partes lo consideran necesario.
-
----
-
-*"La tecnología debe servir a quien más la necesita, no a quien más puede pagarla."*
+**José Llanos**  
+📧 jose.llanos.d@uni.pe  
+📱 +51 935 211 605  
+🌐 vitalfarmbright.store

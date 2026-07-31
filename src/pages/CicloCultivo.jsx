@@ -344,8 +344,12 @@ Responde en español, máximo 200 palabras, con viñetas.`,
               <p className="text-xs text-gray-500">{parcelaActiva?.variedad || 'Variedad no especificada'}</p>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-bold text-primary">{dias}</p>
-              <p className="text-xs text-gray-500">días desde siembra</p>
+              <p className="text-2xl font-bold text-primary">
+                {dias < 0 ? `${Math.abs(dias)}` : dias}
+              </p>
+              <p className="text-xs text-gray-500">
+                {dias < 0 ? 'días para siembra' : 'días desde siembra'}
+              </p>
             </div>
           </div>
 
