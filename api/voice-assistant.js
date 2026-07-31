@@ -258,6 +258,8 @@ CAPACIDADES ESPECIALES:
 - Monitoreo alertas de incendios de NASA
 - Puedo predecir riesgos de plagas y enfermedades ANTES de que aparezcan (diagnóstico preventivo)
 - Puedo recomendar productos agrícolas según las condiciones actuales
+- PUEDO BUSCAR TIENDAS DE INSUMOS AGRÍCOLAS CERCA: cuando el agricultor pregunte por tiendas, productos, precios, ofertas, dónde comprar, o mercados, busca automáticamente tiendas cercanas y muestra resultados con distancias y enlaces a redes sociales
+- Menciono tiendas con su nombre, distancia, rating y enlaces cuando las encuentro
 
 EJEMPLOS DE BUENAS RESPUESTAS:
 - "¿Hojas amarillas? Puede ser deficiencia de nitrógeno. Aplica urea a 200 kg/ha. ¿En qué cultura lo tienes?"
@@ -358,32 +360,37 @@ export default async function handler(req, res) {
   }
 
   // ── Detectar si el usuario busca tiendas o productos ──
-  const buscaTienda = /comprar|tienda|dónde|donde|conseguir|adquirir|mercado|ferretería|agro|insumo|producto|oferta|descuento|precio/i.test(mensaje);
+  const buscaTienda = /comprar|tienda|tiendas|dónde|donde|conseguir|adquirir|mercado|ferretería|agro|insumo|producto|oferta|ofertas|descuento|precio|precios|vende|comercio|minimarket|bodega/i.test(mensaje);
   let tiendasResult = null;
   
   if (buscaTienda && lat && lon) {
     // Extraer nombre del producto del mensaje
     const productoMatch = mensaje.match(/comprar\s+(.+?)(?:\s+en|\s+cerca|\s+de|\s+por|\s+para|\?|$)/i)
       || mensaje.match(/tienda\s+(?:de\s+)?(.+?)(?:\s+en|\s+cerca|\s+de|\s+por|\s+para|\?|$)/i)
-      || mensaje.match(/dónde\s+(?:comprar|conseguir)\s+(.+?)(?:\s+en|\s+cerca|\s+de|\s+por|\s+para|\?|$)/i);
-    const producto = productoMatch?.[1]?.trim() || '';
+      || mensaje.match(/dónde\s+(?:comprar|conseguir|vende)\s+(.+?)(?:\s+en|\s+cerca|\s+de|\s+por|\s+para|\?|$)/i)
+      || mensaje.match(/(?:comprar|conseguir|adquirir)\s+(.+?)(?:\s+en|\s+cerca|\s+de|\s+por|\s+para|\?|$)/i)
+      || mensaje.match(/(.+?)\s+(?:barato|barata|oferta|descuento|precio)/i);
+    let producto = productoMatch?.[1]?.trim() || '';
     
-    if (producto) {
-      try {
-        const busquedaRes = await fetch(`https://${req.headers.host || 'localhost'}/api/buscar-insumos?lat=${lat}&lon=${lon}&producto=${encodeURIComponent(producto)}&radio=30`);
-        tiendasResult = await busquedaRes.json();
-        
-        if (tiendasResult.tiendas?.length > 0) {
-          const tiendasInfo = tiendasResult.tiendas.slice(0, 3).map(t => 
-            `${t.nombre} (${t.distanciaKm}km, rating ${t.rating || 'N/A'})`
-          ).join(', ');
-          contextoParts.push(`TIENDAS ENCONTRADAS PARA "${producto.toUpperCase()}": ${tiendasInfo}`);
-          contextoParts.push(`ENLACES DE BÚSQUEDA: Google Maps: ${tiendasResult.enlaces?.googleMaps || 'N/A'}, Facebook: ${tiendasResult.enlaces?.facebook || 'N/A'}, TikTok: ${tiendasResult.enlaces?.tiktok || 'N/A'}`);
-        } else {
-          contextoParts.push(`NO SE ENCONTRARON TIENDAS de "${producto}" en un radio de 30km. Sugiere buscar en Google Maps o Facebook Marketplace.`);
-        }
-      } catch (e) { /* silencioso */ }
+    // Si no extrajo producto, buscar tiendas genéricas
+    if (!producto || producto.length < 2) {
+      producto = 'insumos agrícolas';
     }
+    
+    try {
+      const busquedaRes = await fetch(`https://${req.headers.host || 'localhost'}/api/buscar-insumos?lat=${lat}&lon=${lon}&producto=${encodeURIComponent(producto)}&radio=30`);
+      tiendasResult = await busquedaRes.json();
+
+      if (tiendasResult.tiendas?.length > 0) {
+        const tiendasInfo = tiendasResult.tiendas.slice(0, 3).map(t => 
+          `${t.nombre} (${t.distanciaKm}km, rating ${t.rating || 'N/A'})`
+        ).join(', ');
+        contextoParts.push(`TIENDAS ENCONTRADAS PARA "${producto.toUpperCase()}": ${tiendasInfo}`);
+        contextoParts.push(`ENLACES DE BÚSQUEDA: Google Maps: ${tiendasResult.enlaces?.googleMaps || 'N/A'}, Facebook: ${tiendasResult.enlaces?.facebook || 'N/A'}, TikTok: ${tiendasResult.enlaces?.tiktok || 'N/A'}`);
+      } else {
+        contextoParts.push(`NO SE ENCONTRARON TIENDAS de "${producto}" en un radio de 30km. Sugiere buscar en Google Maps o Facebook Marketplace.`);
+      }
+    } catch (e) { /* silencioso */ }
   }
 
   // ── Construir system prompt con TODO el contexto ──

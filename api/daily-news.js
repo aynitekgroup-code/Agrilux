@@ -1,193 +1,12 @@
 /**
  * api/daily-news.js
- * Noticias agrícolas diarias - TODOS los scrapers en un solo archivo
- *SENASA + INIA + Minagri + RSS feeds
+ * Noticias agrícolas diarias - SIN cheerio (usa regex/string parsing)
+ * SENASA + INIA + Minagri + RSS feeds
  */
 
-import * as cheerio from 'cheerio';
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SENASA - Alertas Fitosanitarias
-// ═══════════════════════════════════════════════════════════════════════════════
-
 const SENASA_URL = 'https://www.senasa.gob.pe';
-
-const REGIONES_PERU = {
-  'la libertad': ['trujillo', 'chiclayo', 'viru', 'ascope', 'chepen', 'pacasmayo'],
-  'piura': ['piura', 'sullana', 'tumbes', 'paita', 'huancabamba', 'morropon'],
-  'lambayeque': ['chiclayo', 'ferreñafe', 'lambayeque'],
-  'cajamarca': ['cajamarca', 'cutervo', 'contumaza', 'san marcos'],
-  'san martin': ['moyobamba', 'tarapoto', 'juanjuí', 'saposoa'],
-  'junín': ['huancayo', 'tarma', 'satipo', 'jauja'],
-  'cusco': ['cusco', 'calca', 'urubamba', 'quillabamba'],
-  'arequipa': ['arequipa', 'mollendo', 'camana', 'chivay'],
-  'puno': ['puno', 'juliaca', 'azangaro', 'moho'],
-  'loreto': ['iquitos', 'yurimaguas', 'requena', 'nauta'],
-};
-
-const CULTIVOS_AFECTADOS = [
-  'papa', 'maíz', 'tomate', 'arroz', 'uva', 'palta', 'aguacate',
-  'fresa', 'frutilla', 'cebada', 'trigo', 'café', 'cacao',
-  'plátano', 'banano', 'ají', 'chile', 'cebolla', 'zanahoria',
-  'caña de azúcar', 'algodón', 'camote', 'yucca', 'yuca'
-];
-
-const PLAGAS_COMUNES = [
-  'tuta absoluta', 'polilla', 'gusano cogollero', 'gusano blanco',
-  'mosca blanca', 'pulgón', 'cochinilla', 'ácaros', 'trips',
-  'roya', 'fusarium', 'phytophthora', 'alternaria', 'botrytis',
-  'mildiu', 'oídio', 'antracnosis', 'nematodos', 'bacterias', 'virus'
-];
-
-async function scrapeSenasaAlerts() {
-  try {
-    const alerts = [];
-    const response = await fetch(`${SENASA_URL}/comunicados`, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      signal: AbortSignal.timeout(10000)
-    });
-    if (!response.ok) return getSenasaFallbackData();
-    const html = await response.text();
-    const $ = cheerio.load(html);
-    $('article, .noticia, .comunicado, .alerta, [class*="news"], [class*="alert"]').each((i, el) => {
-      const title = $(el).find('h2, h3, .title, [class*="title"]').first().text().trim();
-      const date = $(el).find('time, .date, [class*="date"], span').first().text().trim();
-      const link = $(el).find('a').first().attr('href') || '';
-      const summary = $(el).find('p, .summary, [class*="summary"]').first().text().trim();
-      if (title && title.length > 10) {
-        alerts.push({
-          titulo: title.substring(0, 200),
-          fecha: date || new Date().toISOString(),
-          resumen: summary.substring(0, 500),
-          enlace: link.startsWith('http') ? link : `${SENASA_URL}${link}`,
-          fuente: 'SENASA',
-          tipo: clasificarAlertaSenasa(title + ' ' + summary)
-        });
-      }
-    });
-    return alerts.length > 0 ? alerts.slice(0, 10) : getSenasaFallbackData();
-  } catch (error) {
-    return getSenasaFallbackData();
-  }
-}
-
-function clasificarAlertaSenasa(texto) {
-  const lower = texto.toLowerCase();
-  if (lower.includes('cuarentena') || lower.includes('emergencia')) return 'cuarentena';
-  if (lower.includes('foco') || lower.includes('brote')) return 'brote';
-  if (lower.includes('plaga') || lower.includes('enfermedad')) return 'alerta_fitosanitaria';
-  return 'noticia';
-}
-
-function getSenasaFallbackData() {
-  return [
-    { titulo: 'SENASA mantiene vigilancia fitosanitaria en regiones agrícolas', fecha: new Date().toISOString(), resumen: 'El SENASA continúa con programas de vigilancia y control de plagas cuarentenarias.', enlace: 'https://www.senasa.gob.pe', fuente: 'SENASA', tipo: 'vigilancia' },
-    { titulo: 'Recomendaciones para manejo integrado de plagas en cultivos de temporada', fecha: new Date().toISOString(), resumen: 'SENASA recomienda medidas de control preventivo antes de la temporada de lluvias.', enlace: 'https://www.senasa.gob.pe', fuente: 'SENASA', tipo: 'recomendacion' }
-  ];
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// INIA - Publicaciones Técnicas
-// ═══════════════════════════════════════════════════════════════════════════════
-
 const INIA_URL = 'https://www.inia.gob.pe';
-
-async function scrapeIniaPublications() {
-  try {
-    const publications = [];
-    const response = await fetch(`${INIA_URL}/publicaciones`, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      signal: AbortSignal.timeout(10000)
-    });
-    if (!response.ok) return getIniaFallbackData();
-    const html = await response.text();
-    const $ = cheerio.load(html);
-    $('article, .publicacion, [class*="publication"], [class*="item"]').each((i, el) => {
-      const title = $(el).find('h2, h3, h4, .title, [class*="title"]').first().text().trim();
-      const date = $(el).find('time, .date, [class*="date"]').first().text().trim();
-      const link = $(el).find('a').first().attr('href') || '';
-      const summary = $(el).find('p, .description, [class*="desc"]').first().text().trim();
-      if (title && title.length > 10) {
-        publications.push({
-          titulo: title.substring(0, 200),
-          fecha: date || new Date().toISOString(),
-          resumen: summary.substring(0, 500),
-          enlace: link.startsWith('http') ? link : `${INIA_URL}${link}`,
-          fuente: 'INIA',
-          tipo: 'publicacion_tecnica',
-          categoria: 'general'
-        });
-      }
-    });
-    return publications.length > 0 ? publications.slice(0, 10) : getIniaFallbackData();
-  } catch (error) {
-    return getIniaFallbackData();
-  }
-}
-
-function getIniaFallbackData() {
-  return [
-    { titulo: 'INIA presenta investigación en manejo integrado de plagas', fecha: new Date().toISOString(), resumen: 'Nuevos protocolos de MIP para cultivos andinos.', enlace: 'https://www.inia.gob.pe', fuente: 'INIA', tipo: 'investigacion', categoria: 'plagas' },
-    { titulo: 'Nuevas variedades de papa resistentes a la tardía', fecha: new Date().toISOString(), resumen: 'INIA libera variedades con resistencia a Phytophthora infestans.', enlace: 'https://www.inia.gob.pe', fuente: 'INIA', tipo: 'resultado_investigacion', categoria: 'variedades' }
-  ];
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// MINAGRI - Noticias y Convocatorias
-// ═══════════════════════════════════════════════════════════════════════════════
-
 const MINAGRI_URL = 'https://www.gob.pe/minagri';
-
-async function scrapeMinagriNews() {
-  try {
-    const news = [];
-    const response = await fetch(`${MINAGRI_URL}/publicaciones/noticias`, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      signal: AbortSignal.timeout(10000)
-    });
-    if (!response.ok) return getMinagriFallbackData();
-    const html = await response.text();
-    const $ = cheerio.load(html);
-    $('article, .noticia, [class*="news"], [class*="item"]').each((i, el) => {
-      const title = $(el).find('h2, h3, .title, [class*="title"]').first().text().trim();
-      const date = $(el).find('time, .date, [class*="date"]').first().text().trim();
-      const link = $(el).find('a').first().attr('href') || '';
-      const summary = $(el).find('p, .summary, [class*="summary"]').first().text().trim();
-      if (title && title.length > 10) {
-        news.push({
-          titulo: title.substring(0, 200),
-          fecha: date || new Date().toISOString(),
-          resumen: summary.substring(0, 500),
-          enlace: link.startsWith('http') ? link : `${MINAGRI_URL}${link}`,
-          fuente: 'Ministerio de Agricultura',
-          tipo: 'noticia'
-        });
-      }
-    });
-    return news.length > 0 ? news.slice(0, 10) : getMinagriFallbackData();
-  } catch (error) {
-    return getMinagriFallbackData();
-  }
-}
-
-function getMinagriFallbackData() {
-  return [
-    { titulo: 'Minagri anuncia medidas de apoyo al sector agrícola', fecha: new Date().toISOString(), resumen: 'Paquete de medidas para impulsar productividad agrícola.', enlace: 'https://www.gob.pe/minagri', fuente: 'Ministerio de Agricultura', tipo: 'noticia' },
-    { titulo: 'Convocatoria abierta para proyectos de riego', fecha: new Date().toISOString(), resumen: 'Minagri abre convocatoria para infraestructura de riego.', enlace: 'https://www.gob.pe/minagri', fuente: 'Ministerio de Agricultura', tipo: 'convocatoria' }
-  ];
-}
-
-async function getAgriculturalPublications() {
-  const [inia, minagri] = await Promise.allSettled([scrapeIniaPublications(), scrapeMinagriNews()]);
-  const all = [];
-  if (inia.status === 'fulfilled') all.push(...inia.value);
-  if (minagri.status === 'fulfilled') all.push(...minagri.value);
-  return all.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).slice(0, 20);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// RSS FEEDS - Noticias Agrícolas
-// ═══════════════════════════════════════════════════════════════════════════════
 
 const RSS_FEEDS = [
   { name: 'AgroPerú', url: 'https://agroperu.pe/feed/', fuente: 'AgroPerú' },
@@ -199,35 +18,54 @@ const RSS_FEEDS = [
 
 const KEYWORDS_AGRICOLAS = [
   'agricultura', 'agro', 'campo', 'cultivo', 'cosecha', 'siembra',
-  'plaga', 'enfermedad', 'fungicida', 'insecticida', 'herbicida',
-  'fertilizante', 'riego', 'suelo', 'papa', 'maíz', 'arroz',
-  'palta', 'aguacate', 'uva', 'café', 'cacao', 'caña',
-  'SENAMHI', 'clima', 'lluvia', 'sequía', 'helada',
-  'SENASA', 'fitosanitario', 'cuarentena', 'INIA',
+  'plaga', 'enfermedad', 'fungicida', 'insecticida', 'fertilizante',
+  'riego', 'suelo', 'papa', 'maíz', 'arroz', 'palta', 'café',
+  'SENAMHI', 'clima', 'lluvia', 'sequía', 'SENASA', 'INIA',
   'exportación', 'mercado', 'precio', 'orgánico'
 ];
 
-function parseRSS(xml, fuente) {
-  const $ = cheerio.load(xml, { xml: true });
-  const items = [];
-  $('item, entry').each((i, el) => {
-    const title = $(el).find('title').first().text().trim();
-    const link = $(el).find('link').first().text().trim() || $(el).find('link').attr('href') || '';
-    const pubDate = $(el).find('pubDate, published, updated').first().text().trim();
-    const description = $(el).find('description, summary, content\\:encoded').first().text().trim();
-    const cleanDescription = description.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').trim();
-    if (title && title.length > 5) {
-      items.push({
-        titulo: title.substring(0, 200),
-        fecha: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
-        resumen: cleanDescription.substring(0, 500),
-        enlace: link,
-        fuente: fuente,
-        categoria: 'general'
+function extraerEntre(texto, inicio, fin) {
+  const i = texto.indexOf(inicio);
+  if (i === -1) return '';
+  const start = i + inicio.length;
+  const j = texto.indexOf(fin, start);
+  if (j === -1) return texto.substring(start, start + 200);
+  return texto.substring(start, j);
+}
+
+function limpiarHTML(html) {
+  return html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
+}
+
+function extraerTitulos(html, fuente) {
+  const noticias = [];
+  const h2Regex = /<h[23][^>]*>(.*?)<\/h[23]>/gi;
+  let match;
+  while ((match = h2Regex.exec(html)) !== null) {
+    const titulo = limpiarHTML(match[1]);
+    if (titulo.length > 15 && titulo.length < 200) {
+      const linkMatch = html.substring(Math.max(0, match.index - 500), match.index).match(/href=["']([^"']+)["'][^>]*$/);
+      const link = linkMatch ? linkMatch[1] : '';
+      noticias.push({
+        titulo,
+        fecha: new Date().toISOString(),
+        resumen: '',
+        enlace: link.startsWith('http') ? link : `${fuente === 'SENASA' ? SENASA_URL : fuente === 'INIA' ? INIA_URL : MINAGRI_URL}${link}`,
+        fuente,
+        tipo: clasificarNoticia(titulo)
       });
     }
-  });
-  return items;
+  }
+  return noticias;
+}
+
+function clasificarNoticia(titulo) {
+  const t = titulo.toLowerCase();
+  if (t.includes('plaga') || t.includes('enfermedad') || t.includes('foco')) return 'alerta_fitosanitaria';
+  if (t.includes('clima') || t.includes('lluvia') || t.includes('helada')) return 'alerta_climatica';
+  if (t.includes('precio') || t.includes('mercado')) return 'mercado';
+  if (t.includes('convocatoria') || t.includes('subsidio')) return 'convocatoria';
+  return 'noticia';
 }
 
 function esNoticiaAgricola(titulo, resumen) {
@@ -235,76 +73,121 @@ function esNoticiaAgricola(titulo, resumen) {
   return KEYWORDS_AGRICOLAS.some(kw => texto.includes(kw));
 }
 
-function clasificarNoticia(titulo, resumen) {
-  const texto = (titulo + ' ' + resumen).toLowerCase();
-  if (texto.includes('plaga') || texto.includes('enfermedad')) return 'alerta_fitosanitaria';
-  if (texto.includes('clima') || texto.includes('lluvia') || texto.includes('helada')) return 'alerta_climatica';
-  if (texto.includes('precio') || texto.includes('mercado')) return 'mercado';
-  if (texto.includes('tecnología') || texto.includes('investigación')) return 'tecnologia';
-  if (texto.includes('subsidio') || texto.includes('crédito')) return 'financiamiento';
-  return 'noticia';
-}
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCRAPERS
+// ═══════════════════════════════════════════════════════════════════════════════
 
-async function fetchRSSFeed(feed) {
+async function scrapeSenasa() {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const response = await fetch(feed.url, {
-      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/rss+xml, application/xml, text/xml, */*' },
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const xml = await response.text();
-    return parseRSS(xml, feed.fuente);
-  } catch (error) {
-    return [];
-  }
+    const r = await fetch(`${SENASA_URL}/comunicados`, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return getSenasaFallback();
+    const html = await r.text();
+    const noticias = extraerTitulos(html, 'SENASA');
+    return noticias.length > 0 ? noticias.slice(0, 10) : getSenasaFallback();
+  } catch { return getSenasaFallback(); }
 }
 
-async function scrapeAgriculturalNews() {
+function getSenasaFallback() {
+  return [
+    { titulo: 'SENASA mantiene vigilancia fitosanitaria en regiones agrícolas', fecha: new Date().toISOString(), resumen: 'Programas de vigilancia y control de plagas cuarentenarias.', enlace: 'https://www.senasa.gob.pe', fuente: 'SENASA', tipo: 'vigilancia' },
+    { titulo: 'Recomendaciones para manejo integrado de plagas', fecha: new Date().toISOString(), resumen: 'Control preventivo antes de temporada de lluvias.', enlace: 'https://www.senasa.gob.pe', fuente: 'SENASA', tipo: 'recomendacion' }
+  ];
+}
+
+async function scrapeInia() {
+  try {
+    const r = await fetch(`${INIA_URL}/publicaciones`, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return getIniaFallback();
+    const html = await r.text();
+    const noticias = extraerTitulos(html, 'INIA');
+    return noticias.length > 0 ? noticias.slice(0, 10) : getIniaFallback();
+  } catch { return getIniaFallback(); }
+}
+
+function getIniaFallback() {
+  return [
+    { titulo: 'INIA presenta investigación en manejo integrado de plagas', fecha: new Date().toISOString(), resumen: 'Nuevos protocolos MIP para cultivos andinos.', enlace: 'https://www.inia.gob.pe', fuente: 'INIA', tipo: 'investigacion' }
+  ];
+}
+
+async function scrapeMinagri() {
+  try {
+    const r = await fetch(`${MINAGRI_URL}/publicaciones/noticias`, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return getMinagriFallback();
+    const html = await r.text();
+    const noticias = extraerTitulos(html, 'Minagri');
+    return noticias.length > 0 ? noticias.slice(0, 10) : getMinagriFallback();
+  } catch { return getMinagriFallback(); }
+}
+
+function getMinagriFallback() {
+  return [
+    { titulo: 'Minagri anuncia medidas de apoyo al sector agrícola', fecha: new Date().toISOString(), resumen: 'Medidas para impulsar productividad agrícola.', enlace: 'https://www.gob.pe/minagri', fuente: 'Ministerio de Agricultura', tipo: 'noticia' }
+  ];
+}
+
+async function scrapeRSS() {
   const allNews = [];
-  const results = await Promise.allSettled(RSS_FEEDS.map(feed => fetchRSSFeed(feed)));
-  results.forEach(result => {
-    if (result.status === 'fulfilled') allNews.push(...result.value);
-  });
-  const agriculturalNews = allNews.filter(n => esNoticiaAgricola(n.titulo, n.resumen));
-  const classified = agriculturalNews.map(n => ({ ...n, tipo: clasificarNoticia(n.titulo, n.resumen), fecha: new Date(n.fecha) }));
-  classified.sort((a, b) => b.fecha - a.fecha);
-  return classified.slice(0, 30);
+  const results = await Promise.allSettled(RSS_FEEDS.map(async (feed) => {
+    try {
+      const r = await fetch(feed.url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/rss+xml, application/xml, text/xml' }, signal: AbortSignal.timeout(8000) });
+      if (!r.ok) return [];
+      const xml = await r.text();
+      const noticias = [];
+      const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
+      let match;
+      while ((match = itemRegex.exec(xml)) !== null) {
+        const block = match[1];
+        const titulo = extraerEntre(block, '<title>', '</title>');
+        const link = extraerEntre(block, '<link>', '</link>');
+        const desc = limpiarHTML(extraerEntre(block, '<description>', '</description>'));
+        if (titulo.length > 5) {
+          noticias.push({
+            titulo: titulo.substring(0, 200),
+            fecha: new Date().toISOString(),
+            resumen: desc.substring(0, 500),
+            enlace: link,
+            fuente: feed.fuente,
+            tipo: clasificarNoticia(titulo)
+          });
+        }
+      }
+      return noticias;
+    } catch { return []; }
+  }));
+  results.forEach(r => { if (r.status === 'fulfilled') allNews.push(...r.value); });
+  return allNews.filter(n => esNoticiaAgricola(n.titulo, n.resumen)).slice(0, 30);
 }
 
 function filterNewsByRegion(news, region) {
-  const regionLower = region.toLowerCase();
-  const keywordsRegion = {
-    'la libertad': ['trujillo', 'chiclayo', 'viru', 'la libertad'],
+  const keywords = {
+    'la libertad': ['trujillo', 'chiclayo', 'viru'],
     'piura': ['piura', 'tumbes', 'sullana'],
-    'lambayeque': ['chiclayo', 'ferreñafe', 'lambayeque'],
+    'lambayeque': ['chiclayo', 'ferreñafe'],
     'cajamarca': ['cajamarca', 'cutervo'],
-    'san martin': ['san martin', 'moyobamba', 'tarapoto'],
-    'junín': ['junín', 'huancayo', 'tarma', 'satipo'],
+    'san martin': ['moyobamba', 'tarapoto'],
+    'junín': ['huancayo', 'tarma', 'satipo'],
     'cusco': ['cusco', 'calca', 'urubamba'],
     'arequipa': ['arequipa', 'mollendo'],
     'puno': ['puno', 'juliaca'],
     'loreto': ['loreto', 'iquitos']
   };
-  const keywords = keywordsRegion[regionLower] || [regionLower];
-  return news.filter(n => {
-    const texto = (n.titulo + ' ' + n.resumen).toLowerCase();
-    return keywords.some(kw => texto.includes(kw));
-  });
+  const kws = keywords[region.toLowerCase()] || [region.toLowerCase()];
+  return news.filter(n => { const t = (n.titulo + ' ' + n.resumen).toLowerCase(); return kws.some(k => t.includes(k)); });
 }
 
 function filterNewsByCrop(news, cultivo) {
-  const cultivoLower = cultivo.toLowerCase();
-  return news.filter(n => {
-    const texto = (n.titulo + ' ' + n.resumen).toLowerCase();
-    return texto.includes(cultivoLower);
-  });
+  const c = cultivo.toLowerCase();
+  return news.filter(n => (n.titulo + ' ' + n.resumen).toLowerCase().includes(c));
+}
+
+function eliminarDuplicados(news) {
+  const seen = new Set();
+  return news.filter(n => { const key = n.titulo.toLowerCase().substring(0, 50); if (seen.has(key)) return false; seen.add(key); return true; });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// HANDLER PRINCIPAL
+// HANDLER
 // ═══════════════════════════════════════════════════════════════════════════════
 
 let newsCache = null;
@@ -322,50 +205,32 @@ export default async function handler(req, res) {
     const { region, cultivo, force } = req.query;
     const now = Date.now();
     if (!force && newsCache && (now - lastCacheTime) < CACHE_DURATION) {
-      return returnFilteredNews(newsCache, region, cultivo, res);
+      return returnFiltered(newsCache, region, cultivo, res);
     }
 
-    const [senasaAlerts, publicaciones, rssNews] = await Promise.allSettled([
-      scrapeSenasaAlerts(),
-      getAgriculturalPublications(),
-      scrapeAgriculturalNews()
-    ]);
-
+    const [senasa, inia, minagri, rss] = await Promise.allSettled([scrapeSenasa(), scrapeInia(), scrapeMinagri(), scrapeRSS()]);
     const allNews = [];
-    if (senasaAlerts.status === 'fulfilled') allNews.push(...senasaAlerts.value);
-    if (publicaciones.status === 'fulfilled') allNews.push(...publicaciones.value);
-    if (rssNews.status === 'fulfilled') allNews.push(...rssNews.value);
+    if (senasa.status === 'fulfilled') allNews.push(...senasa.value);
+    if (inia.status === 'fulfilled') allNews.push(...inia.value);
+    if (minagri.status === 'fulfilled') allNews.push(...minagri.value);
+    if (rss.status === 'fulfilled') allNews.push(...rss.value);
 
-    const uniqueNews = eliminarDuplicados(allNews);
-    uniqueNews.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-    newsCache = uniqueNews;
+    const unique = eliminarDuplicados(allNews);
+    unique.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    newsCache = unique;
     lastCacheTime = now;
-
-    return returnFilteredNews(uniqueNews, region, cultivo, res);
+    return returnFiltered(unique, region, cultivo, res);
   } catch (error) {
     return res.status(500).json({ error: 'Error al obtener noticias', mensaje: error.message });
   }
 }
 
-function returnFilteredNews(allNews, region, cultivo, res) {
+function returnFiltered(allNews, region, cultivo, res) {
   let filtered = [...allNews];
   if (region) { const r = filterNewsByRegion(filtered, region); if (r.length > 0) filtered = r; }
   if (cultivo) { const c = filterNewsByCrop(filtered, cultivo); if (c.length > 0) filtered = c; }
   filtered = filtered.slice(0, 20);
   const stats = { total: filtered.length, porFuente: {}, porTipo: {} };
-  filtered.forEach(n => {
-    stats.porFuente[n.fuente] = (stats.porFuente[n.fuente] || 0) + 1;
-    stats.porTipo[n.tipo] = (stats.porTipo[n.tipo] || 0) + 1;
-  });
+  filtered.forEach(n => { stats.porFuente[n.fuente] = (stats.porFuente[n.fuente] || 0) + 1; stats.porTipo[n.tipo] = (stats.porTipo[n.tipo] || 0) + 1; });
   return res.status(200).json({ success: true, fecha: new Date().toISOString(), noticias: filtered, stats, filtros: { region: region || null, cultivo: cultivo || null } });
-}
-
-function eliminarDuplicados(news) {
-  const seen = new Set();
-  return news.filter(n => {
-    const key = n.titulo.toLowerCase().substring(0, 50);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
