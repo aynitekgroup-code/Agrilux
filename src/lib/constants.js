@@ -8,6 +8,9 @@ export const CULTIVOS = [
     categoria: 'basico',
     variedades: ['Yungay', 'Perricholi', 'Única', 'Canchán', 'Huayro', 'Peruanita'],
     ciclo: [
+      { id: 'preparacion',     nombre: 'Preparación del terreno', emoji: '🚜', diasInicio: -30, diasFin: 0,
+        acciones: ['Arar o jinear el terreno a 20-25cm de profundidad', 'Aplicar abono orgánico (estiércol o compost)', 'Nivelar el terreno para evitar encharcamientos', 'Analizar suelo y corregir pH si es necesario'],
+        alertas: ['No preparar suelo muy húmedo (se forman terrones)', 'Aplicar cal si pH < 5.0'] },
       { id: 'siembra',         nombre: 'Siembra',                emoji: '🌱', diasInicio: 0,   diasFin: 15,
         acciones: ['Preparar suelo con yunta o arado', 'Cortar semilla en trozos de 40-60g con 2-3 brotes', 'Plantar a 20cm de distancia y 15cm de profundidad', 'Aplicar fertilizante base (100-200 kg/ha de fosfato)'],
         alertas: ['No sembrar si hay heladas pronosticadas', 'Verificar que la semilla no esté afectada por tizón tardío'] },

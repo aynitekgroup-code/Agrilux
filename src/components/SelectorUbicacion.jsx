@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Loader2, MapPin, Mic, Navigation, Check, X } from 'lucide-react';
+import { Loader2, MapPin, Mic, Navigation, Check, X, Map } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 
 export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) {
@@ -10,8 +10,11 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
   const [confirmando, setConfirmando] = useState(false);
   const [error, setError] = useState('');
   const [modo, setModo] = useState(null);
+  const [coordsSeleccionadas, setCoordsSeleccionadas] = useState(null);
   const inputRef = useRef(null);
   const reconRef = useRef(null);
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
 
   const leerTexto = useCallback((texto) => {
     if (!('speechSynthesis' in window)) return;
@@ -31,6 +34,43 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
     if (modo === 'escribir' && inputRef.current) {
       inputRef.current.focus();
     }
+  }, [modo]);
+
+  useEffect(() => {
+    if (modo === 'mapa' && mapRef.current && !mapInstanceRef.current) {
+      const L = window.L;
+      if (!L) return;
+      const lat = -10.0;
+      const lon = -76.5;
+      const map = L.map(mapRef.current, { zoomControl: false }).setView([lat, lon], 6);
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Esri'
+      }).addTo(map);
+      let marker = null;
+      map.on('click', async (e) => {
+        const { lat, lng } = e.latlng;
+        setCoordsSeleccionadas({ lat, lon: lng });
+        if (marker) marker.remove();
+        marker = L.marker([lat, lng]).addTo(map);
+        try {
+          const res = await fetch(`/api/geocode?lat=${lat}&lon=${lng}`);
+          if (res.ok) {
+            const data = await res.json();
+            const nombre = [data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
+              .filter(Boolean).slice(0, 2).join(', ') || data.name?.split(',')[0] || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            setUbicacion(nombre);
+          } else {
+            setUbicacion(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+          }
+        } catch {
+          setUbicacion(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+        }
+        setModo('confirmar');
+      });
+      mapInstanceRef.current = map;
+      setTimeout(() => map.invalidateSize(), 100);
+    }
+    return () => { if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; } };
   }, [modo]);
 
   const detectarGPS = async () => {
@@ -126,6 +166,10 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
               className="w-full bg-blue-500 text-white font-bold py-5 rounded-2xl text-base shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95">
               <Mic size={22} /> Decir ubicación por voz
             </button>
+            <button onClick={() => setModo('mapa')}
+              className="w-full bg-emerald-500 text-white font-bold py-5 rounded-2xl text-base shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95">
+              <Map size={22} /> Seleccionar en mapa
+            </button>
             <button onClick={() => setModo('escribir')}
               className="w-full bg-gray-100 text-gray-800 font-bold py-5 rounded-2xl text-base hover:bg-gray-200 transition-all flex items-center justify-center gap-3 active:scale-95">
               <MapPin size={22} /> Escribir ubicación
@@ -171,7 +215,7 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
           </div>
         )}
 
-        {!detectando && !grabando && modo !== 'confirmar' && (
+        {!detectando && !grabando && modo !== 'confirmar' && modo !== 'mapa' && (
           <div className="w-full max-w-sm space-y-3">
             <button onClick={() => { setModo('gps'); detectarGPS(); }}
               className="w-full bg-primary text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95">
@@ -181,9 +225,23 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
               className="w-full bg-blue-500 text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95">
               <Mic size={20} /> Decir por voz
             </button>
+            <button onClick={() => setModo('mapa')}
+              className="w-full bg-emerald-500 text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95">
+              <Map size={20} /> Seleccionar en mapa
+            </button>
             <button onClick={() => setModo('escribir')}
               className="w-full border-2 border-dashed border-gray-300 text-gray-600 font-bold py-4 rounded-2xl hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-3 active:scale-95">
               <MapPin size={20} /> Escribir manualmente
+            </button>
+          </div>
+        )}
+
+        {modo === 'mapa' && (
+          <div className="w-full max-w-sm">
+            <p className="text-sm text-gray-500 mb-2 text-center">Toca en el mapa para seleccionar tu ubicación</p>
+            <div ref={mapRef} className="w-full h-64 rounded-2xl border-2 border-gray-200 overflow-hidden" />
+            <button onClick={() => setModo(null)} className="w-full mt-2 py-2 text-gray-500 text-sm font-medium hover:text-gray-700">
+              ← Volver a opciones
             </button>
           </div>
         )}
