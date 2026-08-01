@@ -393,20 +393,44 @@ export default async function handler(req, res) {
     }
     
     try {
-      const busquedaRes = await fetch(`https://${req.headers.host || 'localhost'}/api/buscar-insumos?lat=${lat}&lon=${lon}&producto=${encodeURIComponent(producto)}&radio=30`);
+      // Buscar tiendas + precios exactos
+      const [busquedaRes, preciosRes] = await Promise.all([
+        fetch(`https://${req.headers.host || 'localhost'}/api/buscar-insumos?lat=${lat}&lon=${lon}&producto=${encodeURIComponent(producto)}&radio=30`),
+        fetch(`https://${req.headers.host || 'localhost'}/api/precios-insumos?producto=${encodeURIComponent(producto)}&lat=${lat}&lon=${lon}&ubicacion=${ubicacion || ''}`)
+      ]);
       tiendasResult = await busquedaRes.json();
+      const preciosData = await preciosRes.json().catch(() => null);
+
+      // Agregar precios exactos a las tiendas
+      if (preciosData?.tiendas?.length > 0) {
+        tiendasResult.tiendas = preciosData.tiendas.map(t => ({
+          nombre: t.nombre,
+          distanciaKm: t.distanciaKm,
+          precio: t.precio,
+          reputacion: null,
+          googleMaps: t.maps,
+          whatsapp: t.whatsapp ? `https://wa.me/${t.whatsapp.replace(/[^0-9]/g, '')}` : null,
+        }));
+      }
 
       if (tiendasResult.tiendas?.length > 0) {
+        const precioRef = preciosData?.precioReferencia;
+        const promedio = preciosData?.promedio;
+        
+        let precioInfo = '';
+        if (precioRef) precioInfo += `Precio de referencia: S/ ${precioRef.precio} (${precioRef.fuente}). `;
+        if (promedio) precioInfo += `Promedio del mercado: S/ ${promedio}. `;
+
         const tiendasInfo = tiendasResult.tiendas.slice(0, 3).map(t => {
-          const precio = t.precios?.[producto.toLowerCase()] || t.precios?.[Object.keys(t.precios || {}).find(k => producto.toLowerCase().includes(k))] || null;
-          const precioStr = precio ? ` - S/ ${precio}` : '';
+          const precioStr = t.precio ? ` - S/ ${t.precio} el kg` : '';
           const links = [];
           if (t.googleMaps) links.push(`Maps: ${t.googleMaps}`);
           if (t.whatsapp) links.push(`WhatsApp: ${t.whatsapp}`);
-          if (t.facebook) links.push(`Facebook: ${t.facebook}`);
-          return `${t.nombre} (${t.distanciaKm}km, rating ${t.reputacion || 'N/A'})${precioStr}${links.length > 0 ? ' | Enlaces: ' + links.join(', ') : ''}`;
+          return `${t.nombre} (${t.distanciaKm}km)${precioStr}${links.length > 0 ? ' | ' + links.join(', ') : ''}`;
         }).join('\n');
-        contextoParts.push(`TIENDAS ENCONTRADAS PARA "${producto.toUpperCase()}":\n${tiendasInfo}`);
+        
+        contextoParts.push(`PRECIOS DE "${producto.toUpperCase()}": ${precioInfo}`);
+        contextoParts.push(`TIENDAS CERCA:\n${tiendasInfo}`);
       } else {
         contextoParts.push(`NO SE ENCONTRARON TIENDAS de "${producto}" en un radio de 30km. Sugiere buscar en Google Maps o Facebook Marketplace.`);
       }
