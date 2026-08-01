@@ -21,6 +21,46 @@ const ESTACIONES_SENAMHI = [
   { codigo:'A018', nombre:'Cañete', dept:'Lima', prov:'Cañete', lat:-13.07, lon:-76.35, alt:93 },
   { codigo:'A019', nombre:'Ilo', dept:'Moquegua', prov:'Ilo', lat:-17.64, lon:-71.34, alt:11 },
   { codigo:'A020', nombre:'Tacna', dept:'Tacna', prov:'Tacna', lat:-18.01, lon:-70.25, alt:441 },
+  // Lambayeque adicionales
+  { codigo:'A021', nombre:'Pomalca', dept:'Lambayeque', prov:'Chiclayo', lat:-6.81, lon:-79.77, alt:35 },
+  { codigo:'A022', nombre:'Tumán', dept:'Lambayeque', prov:'Chiclayo', lat:-6.75, lon:-79.82, alt:28 },
+  { codigo:'A023', nombre:'Zaña', dept:'Lambayeque', prov:'Chiclayo', lat:-6.82, lon:-79.62, alt:40 },
+  { codigo:'A024', nombre:'Pimentel', dept:'Lambayeque', prov:'Chiclayo', lat:-6.84, lon:-79.93, alt:8 },
+  { codigo:'A025', nombre:'Motupe', dept:'Lambayeque', prov:'Motupe', lat:-6.16, lon:-79.71, alt:130 },
+  { codigo:'A026', nombre:'Olmos', dept:'Lambayeque', prov:'Olmos', lat:-5.99, lon:-79.78, alt:200 },
+  { codigo:'A027', nombre:'Eten', dept:'Lambayeque', prov:'Chiclayo', lat:-6.90, lon:-79.87, alt:5 },
+  { codigo:'A028', nombre:'San José', dept:'Lambayeque', prov:'Chiclayo', lat:-6.73, lon:-79.88, alt:22 },
+  { codigo:'A029', nombre:'Illimo', dept:'Lambayeque', prov:'Chiclayo', lat:-6.64, lon:-79.86, alt:30 },
+  { codigo:'A030', nombre:'Jayanca', dept:'Lambayeque', prov:'Lambayeque', lat:-6.55, lon:-79.83, alt:35 },
+  { codigo:'A031', nombre:'Chongoyape', dept:'Lambayeque', prov:'Chongoyape', lat:-6.64, lon:-79.72, alt:55 },
+  { codigo:'A032', nombre:'Santiago de Cao', dept:'Lambayeque', prov:'Ascope', lat:-6.92, lon:-79.82, alt:10 },
+  // Cajamarca adicionales
+  { codigo:'A033', nombre:'Cutervo', dept:'Cajamarca', prov:'Cutervo', lat:-6.38, lon:-78.82, alt:2630 },
+  { codigo:'A034', nombre:'Chota', dept:'Cajamarca', prov:'Chota', lat:-6.56, lon:-78.65, alt:2370 },
+  { codigo:'A035', nombre:'Bambamarca', dept:'Cajamarca', prov:'Hualgayoc', lat:-6.68, lon:-78.52, alt:2450 },
+  { codigo:'A036', nombre:'Contumazá', dept:'Cajamarca', prov:'Contumazá', lat:-7.37, lon:-78.81, alt:2670 },
+  { codigo:'A037', nombre:'Celendín', dept:'Cajamarca', prov:'Celendín', lat:-6.88, lon:-78.15, alt:2630 },
+  // La Libertad adicionales
+  { codigo:'A038', nombre:'Pacasmayo', dept:'La Libertad', prov:'Pacasmayo', lat:-7.40, lon:-79.57, alt:8 },
+  { codigo:'A039', nombre:'Virú', dept:'La Libertad', prov:'Virú', lat:-8.42, lon:-78.75, alt:30 },
+  // Áncash
+  { codigo:'A040', nombre:'Casma', dept:'Áncash', prov:'Casma', lat:-9.43, lon:-78.27, alt:6 },
+  { codigo:'A041', nombre:'Huarmey', dept:'Áncash', prov:'Huarmey', lat:-10.07, lon:-78.17, alt:9 },
+  // Amazonas
+  { codigo:'A042', nombre:'Bagua Grande', dept:'Amazonas', prov:'Utcubamba', lat:-5.76, lon:-78.44, alt:450 },
+  { codigo:'A043', nombre:'Jaén', dept:'Cajamarca', prov:'Jaén', lat:-5.71, lon:-78.81, alt:730 },
+  // Junín
+  { codigo:'A044', nombre:'Satipo', dept:'Junín', prov:'Satipo', lat:-11.25, lon:-74.64, alt:620 },
+  { codigo:'A045', nombre:'Tarma', dept:'Junín', prov:'Tarma', lat:-11.42, lon:-75.69, alt:3058 },
+  // Huánuco
+  { codigo:'A046', nombre:'Tingo María', dept:'Huánuco', prov:'Leoncio Prado', lat:-9.30, lon:-76.01, alt:670 },
+  // San Martín
+  { codigo:'A047', nombre:'Tarapoto', dept:'San Martín', prov:'San Martín', lat:-6.48, lon:-76.36, alt:345 },
+  { codigo:'A048', nombre:'Moyobamba', dept:'San Martín', prov:'Moyobamba', lat:-6.03, lon:-76.97, alt:860 },
+  // Ucayali
+  { codigo:'A049', nombre:'Pucallpa', dept:'Ucayali', prov:'Coronel Portillo', lat:-8.38, lon:-74.55, alt:154 },
+  // Loreto
+  { codigo:'A050', nombre:'Iquitos', dept:'Loreto', prov:'Maynas', lat:-3.75, lon:-73.25, alt:126 },
 ];
 
 function findEstacion(lat, lon) {
