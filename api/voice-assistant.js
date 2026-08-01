@@ -260,6 +260,9 @@ REGLAS:
 - Usa TODOS los datos climáticos y de suelo que tengas para dar recomendaciones precisas
 - Si el usuario pregunta por el clima o SENAMHI, usa la información del pronóstico oficial
 - Usa emojis moderados para hacer la conversación amigable
+- SIEMPRE menciona el precio del producto cuando lo tengas (S/ XX por kg)
+- SIEMPRE menciona los enlaces directos cuando los tengas (WhatsApp, Maps, Facebook)
+- Cuando busque tiendas, menciona: nombre, distancia, precio y cómo contactarlos
 
 CULTIVOS QUE CONOCES BIEN: papa, maíz, palta, arándano, caña de azúcar, plátano, papaya.
 
@@ -270,8 +273,8 @@ CAPACIDADES ESPECIALES:
 - Monitoreo alertas de incendios de NASA
 - Puedo predecir riesgos de plagas y enfermedades ANTES de que aparezcan (diagnóstico preventivo)
 - Puedo recomendar productos agrícolas según las condiciones actuales
-- PUEDO BUSCAR TIENDAS DE INSUMOS AGRÍCOLAS CERCA: cuando el agricultor pregunte por tiendas, productos, precios, ofertas, dónde comprar, o mercados, busca automáticamente tiendas cercanas y muestra resultados con distancias y enlaces a redes sociales
-- Menciono tiendas con su nombre, distancia, rating y enlaces cuando las encuentro
+- PUEDO BUSCAR TIENDAS DE INSUMOS AGRÍCOLAS CERCA con PRECIOS y ENLACES: cuando el agricultor pregunte por tiendas, productos, precios, ofertas, dónde comprar, o mercados, busca automáticamente tiendas cercanas y muestra: nombre, distancia, precio en S/ por kg, y enlaces directos a WhatsApp, Google Maps y Facebook
+- Menciono tiendas con su nombre, distancia, precio y enlaces cuando las encuentro
 
 EJEMPLOS DE BUENAS RESPUESTAS:
 - "¿Hojas amarillas? Puede ser deficiencia de nitrógeno. Aplica urea a 200 kg/ha. ¿En qué cultura lo tienes?"
@@ -394,11 +397,16 @@ export default async function handler(req, res) {
       tiendasResult = await busquedaRes.json();
 
       if (tiendasResult.tiendas?.length > 0) {
-        const tiendasInfo = tiendasResult.tiendas.slice(0, 3).map(t => 
-          `${t.nombre} (${t.distanciaKm}km, rating ${t.rating || 'N/A'})`
-        ).join(', ');
-        contextoParts.push(`TIENDAS ENCONTRADAS PARA "${producto.toUpperCase()}": ${tiendasInfo}`);
-        contextoParts.push(`ENLACES DE BÚSQUEDA: Google Maps: ${tiendasResult.enlaces?.googleMaps || 'N/A'}, Facebook: ${tiendasResult.enlaces?.facebook || 'N/A'}, TikTok: ${tiendasResult.enlaces?.tiktok || 'N/A'}`);
+        const tiendasInfo = tiendasResult.tiendas.slice(0, 3).map(t => {
+          const precio = t.precios?.[producto.toLowerCase()] || t.precios?.[Object.keys(t.precios || {}).find(k => producto.toLowerCase().includes(k))] || null;
+          const precioStr = precio ? ` - S/ ${precio}` : '';
+          const links = [];
+          if (t.googleMaps) links.push(`Maps: ${t.googleMaps}`);
+          if (t.whatsapp) links.push(`WhatsApp: ${t.whatsapp}`);
+          if (t.facebook) links.push(`Facebook: ${t.facebook}`);
+          return `${t.nombre} (${t.distanciaKm}km, rating ${t.reputacion || 'N/A'})${precioStr}${links.length > 0 ? ' | Enlaces: ' + links.join(', ') : ''}`;
+        }).join('\n');
+        contextoParts.push(`TIENDAS ENCONTRADAS PARA "${producto.toUpperCase()}":\n${tiendasInfo}`);
       } else {
         contextoParts.push(`NO SE ENCONTRARON TIENDAS de "${producto}" en un radio de 30km. Sugiere buscar en Google Maps o Facebook Marketplace.`);
       }

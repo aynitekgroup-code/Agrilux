@@ -325,15 +325,44 @@ export default function VoiceAssistant({ disabled = false }) {
                   <Store size={14} className="text-green-600" />
                   <p className="text-xs font-bold text-green-700">Tiendas encontradas</p>
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {tiendasBusqueda.slice(0, 3).map((t, i) => (
-                    <div key={i} className="bg-white rounded-xl p-2 flex items-center gap-2 border border-green-100">
-                      <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white text-[10px] font-bold">
-                        {t.nombre?.charAt(0)}
+                    <div key={i} className="bg-white rounded-xl p-2.5 border border-green-100">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white text-[10px] font-bold">
+                          {t.nombre?.charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-gray-700 truncate">{t.nombre}</p>
+                          <p className="text-[10px] text-gray-400">{t.distanciaKm}km · ⭐ {t.reputacion || 'N/A'}</p>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-gray-700 truncate">{t.nombre}</p>
-                        <p className="text-[10px] text-gray-400">{t.distanciaKm}km · ⭐ {t.rating || 'N/A'}</p>
+                      {/* Precio si existe */}
+                      {t.precio && (
+                        <div className="bg-green-50 rounded-lg px-2 py-1 mb-1.5">
+                          <p className="text-[10px] text-green-700 font-bold">S/ {t.precio} por kg</p>
+                        </div>
+                      )}
+                      {/* Enlaces directos */}
+                      <div className="flex gap-1 flex-wrap">
+                        {t.googleMaps && (
+                          <a href={t.googleMaps} target="_blank" rel="noreferrer"
+                            className="text-[9px] bg-blue-500 text-white px-1.5 py-0.5 rounded-full hover:bg-blue-600">
+                            📍 Maps
+                          </a>
+                        )}
+                        {t.whatsapp && (
+                          <a href={t.whatsapp} target="_blank" rel="noreferrer"
+                            className="text-[9px] bg-green-500 text-white px-1.5 py-0.5 rounded-full hover:bg-green-600">
+                            💬 WhatsApp
+                          </a>
+                        )}
+                        {t.facebook && (
+                          <a href={t.facebook} target="_blank" rel="noreferrer"
+                            className="text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded-full hover:bg-blue-700">
+                            📘 Facebook
+                          </a>
+                        )}
                       </div>
                     </div>
                   ))}
