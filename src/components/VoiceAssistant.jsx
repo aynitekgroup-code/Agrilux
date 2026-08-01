@@ -25,7 +25,7 @@ import { guardarConversacion, getHistorialConversaciones } from '../lib/learning
 
 const WELCOME_MSG = '¡Hola! Soy tu asistente agrícola. Puedo darte información del clima de tu zona, recomendaciones para tus cultivos, o consultar el pronóstico del SENAMHI. ¿En qué te puedo ayudar?';
 
-export default function VoiceAssistant({ disabled = false }) {
+export default function VoiceAssistant({ disabled = false, fullPage = false }) {
   const { user } = useAuth();
   const { ubicacion, coords, productoRecomendado, problemaDetectado, tiendasCercanas } = useAgentes();
   const [abierto, setAbierto]             = useState(false);
@@ -275,11 +275,18 @@ export default function VoiceAssistant({ disabled = false }) {
 
   if (disabled) return null;
 
-  return (
-    <>
-      {/* ── Panel de chat (cuando está abierto) ── */}
-      {abierto && (
-        <div className="fixed bottom-40 right-4 z-50 w-[320px] max-h-[55vh] bg-white rounded-3xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
+  // Auto-abrir en modo fullPage
+  useEffect(() => {
+    if (fullPage && !abierto) {
+      setAbierto(true);
+    }
+  }, [fullPage]); // eslint-disable-line
+
+  // ── Panel de chat ──
+  const chatPanel = (
+    <div className={`bg-white rounded-3xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden ${
+      fullPage ? 'w-full h-[calc(100vh-280px)]' : 'w-[320px] max-h-[55vh]'
+    }`}>
           {/* Header */}
           <div className="bg-primary text-white px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -287,14 +294,16 @@ export default function VoiceAssistant({ disabled = false }) {
                 <MessageCircle size={16} />
               </div>
               <div>
-                <p className="text-sm font-bold">PlaguIA Asistente</p>
-                <p className="text-[10px] text-white/70">Agrónomo inteligente por voz</p>
+                <p className="text-sm font-bold">Agente de Ventas</p>
+                <p className="text-[10px] text-white/70">Asistente agrícola por voz</p>
               </div>
             </div>
-            <button onClick={() => { setAbierto(false); detenerVoz(); }}
-              className="text-white/70 hover:text-white p-1">
-              <X size={18} />
-            </button>
+            {!fullPage && (
+              <button onClick={() => { setAbierto(false); detenerVoz(); }}
+                className="text-white/70 hover:text-white p-1">
+                <X size={18} />
+              </button>
+            )}
           </div>
 
           {/* Mensajes */}
@@ -457,6 +466,61 @@ export default function VoiceAssistant({ disabled = false }) {
              procesando ? '⏳ Consultando al agrónomo IA...' :
              'Toca el micrófono para hablar'}
           </p>
+        </div>
+  );
+
+  // ── Modo fullPage (página dedicada) ──
+  if (fullPage) {
+    return (
+      <div className="flex flex-col h-full">
+        {chatPanel}
+        {/* Controles grandes para fullPage */}
+        <div className="flex items-center justify-center gap-6 py-6">
+          {leyendo && (
+            <button onClick={detenerVoz}
+              className="w-14 h-14 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center shadow-md">
+              <VolumeX size={24} />
+            </button>
+          )}
+          <button
+            onClick={escuchando ? detenerEscucha : iniciarEscucha}
+            disabled={procesando}
+            className={`
+              w-20 h-20 rounded-full shadow-xl flex items-center justify-center
+              transition-all duration-200 active:scale-95
+              ${escuchando
+                ? 'bg-red-500 text-white animate-pulse'
+                : procesando
+                  ? 'bg-amber-500 text-white'
+                  : 'bg-primary text-white hover:bg-primary/90'
+              }
+            `}
+          >
+            {procesando ? (
+              <Loader2 size={36} className="animate-spin" />
+            ) : escuchando ? (
+              <MicOff size={36} />
+            ) : (
+              <Mic size={36} />
+            )}
+          </button>
+          {leyendo && (
+            <button onClick={() => leerTexto(historial[historial.length - 1]?.texto || '')}
+              className="w-14 h-14 rounded-full bg-primary/10 text-primary flex items-center justify-center shadow-md">
+              <Volume2 size={24} />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Modo flotante (modal) ──
+  return (
+    <>
+      {abierto && (
+        <div className="fixed bottom-40 right-4 z-50 flex flex-col">
+          {chatPanel}
         </div>
       )}
 
