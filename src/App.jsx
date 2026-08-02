@@ -9,6 +9,7 @@ import Diagnostico from './pages/Diagnostico';
 import MiParcela from './pages/MiParcela';
 import CicloCultivo from './pages/CicloCultivo';
 import VozPage from './pages/VozPage';
+import OfertasPage from './pages/OfertasPage';
 import Admin from './pages/Admin';
 import { Clock, Mail, LogOut } from 'lucide-react';
 
@@ -119,6 +120,9 @@ function AppRoutes() {
 
             {/* Voz — asistente de ventas */}
             <Route path="/voz" element={<VozPage />} />
+
+            {/* Ofertas — descuentos en tiendas */}
+            <Route path="/ofertas" element={<OfertasPage />} />
 
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
