@@ -61,7 +61,9 @@ export default function Layout({ children }) {
             <button onClick={() => setMostrarUbicacion(true)}
               className="flex items-center gap-1 text-xs text-primary bg-primary/5 px-2 py-1 rounded-full hover:bg-primary/10 transition-colors shrink-0">
               <MapPin size={12} />
-              <span className="truncate max-w-[80px]">{user.ubicacion.split(',')[0]}</span>
+              <span className="truncate max-w-[120px]">
+                {user?.coords?.lat ? `${user.coords.lat.toFixed(4)}, ${user.coords.lon.toFixed(4)}` : user.ubicacion.split(',')[0]}
+              </span>
             </button>
           )}
         </div>

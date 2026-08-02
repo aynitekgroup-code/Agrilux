@@ -39,20 +39,32 @@ export function AgentProvider({ children }) {
     if (user?.ubicacion) {
       setUbicacion(user.ubicacion);
     }
-    // Intentar obtener GPS
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setCoords({
-            lat: pos.coords.latitude,
-            lon: pos.coords.longitude,
-          });
-        },
-        () => {},
-        { timeout: 5000 }
-      );
+    // Prioridad: 1) coords del perfil, 2) coords de localStorage, 3) GPS en tiempo real
+    if (user?.coords?.lat && user?.coords?.lon) {
+      setCoords({ lat: user.coords.lat, lon: user.coords.lon });
+    } else {
+      const savedCoords = localStorage.getItem('agrilux_coords');
+      if (savedCoords) {
+        try {
+          const parsed = JSON.parse(savedCoords);
+          if (parsed.lat && parsed.lon) setCoords(parsed);
+        } catch {}
+      }
+      // GPS en tiempo real como último fallback
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            setCoords({
+              lat: pos.coords.latitude,
+              lon: pos.coords.longitude,
+            });
+          },
+          () => {},
+          { enableHighAccuracy: true, timeout: 5000 }
+        );
+      }
     }
-  }, [user?.ubicacion]);
+  }, [user?.ubicacion, user?.coords]);
 
   // ── Funciones para sincronizar entre agentes ──
 

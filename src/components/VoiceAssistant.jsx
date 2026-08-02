@@ -44,15 +44,18 @@ export default function VoiceAssistant({ disabled = false, fullPage = false }) {
   const recognitionRef = useRef(null);
   const chatEndRef     = useRef(null);
 
-  // Obtener ubicación del navegador al montar
+  // Usar coordenadas guardadas del perfil o GPS como fallback
   useEffect(() => {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setCoordenadas({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-      () => {},
-      { timeout: 5000 }
-    );
-  }, []);
+    if (coords?.lat && coords?.lon) {
+      setCoordenadas({ lat: coords.lat, lon: coords.lon });
+    } else if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setCoordenadas({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+        () => {},
+        { timeout: 5000 }
+      );
+    }
+  }, [coords?.lat, coords?.lon]);
 
   // Guardar conversación cuando se cierra o hay 4+ mensajes
   const guardarConversacionActual = useCallback(async () => {

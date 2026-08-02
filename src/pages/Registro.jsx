@@ -40,12 +40,13 @@ export default function Registro() {
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState('');
   const [detectandoGPS, setDetectandoGPS] = useState(false);
+  const [coords, setCoords]       = useState(null);
 
   const submittingRef = useRef(false);
 
   const cambiarModo = (m) => {
     setModo(m); setError('');
-    setNombre(''); setEmail(''); setUbicacion(''); setPassword('');
+    setNombre(''); setEmail(''); setUbicacion(''); setPassword(''); setCoords(null);
   };
 
   const detectarGPS = () => {
@@ -57,15 +58,18 @@ export default function Registro() {
     setError('');
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        setCoords({ lat, lon });
         try {
-          const res = await fetch(`/api/geocode?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`);
+          const res = await fetch(`/api/geocode?lat=${lat}&lon=${lon}`);
           if (!res.ok) throw new Error();
           const data = await res.json();
           const nombreCorto = [data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
             .filter(Boolean).slice(0, 2).join(', ') || data.name.split(',')[0];
           setUbicacion(nombreCorto);
         } catch {
-          setUbicacion(`${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);
+          setUbicacion(`${lat.toFixed(4)}, ${lon.toFixed(4)}`);
         }
         setDetectandoGPS(false);
       },
@@ -98,7 +102,7 @@ export default function Registro() {
       if (modo === 'registro') {
         const nombreSanitizado = DOMPurify.sanitize(nombre).trim();
         const ubicacionSanitizada = DOMPurify.sanitize(ubicacion).trim();
-        await register({ nombre: nombreSanitizado, email, password, ubicacion: ubicacionSanitizada });
+        await register({ nombre: nombreSanitizado, email, password, ubicacion: ubicacionSanitizada, coords });
       } else {
         await login({ email, password });
       }

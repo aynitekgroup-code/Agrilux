@@ -29,12 +29,15 @@ export default function MiParcela() {
   const [poligono, setPoligono] = useState(null);
   const [riesgoParcela, setRiesgoParcela] = useState(null);
 
-  // Auto-fill GPS con ubicación del usuario al abrir modal
+  // Auto-fill GPS con coordenadas exactas del usuario al abrir modal
   useEffect(() => {
-    if (modalNuevo && user?.ubicacion && !form.gps) {
-      setForm(prev => ({ ...prev, gps: user.ubicacion }));
+    if (modalNuevo && !form.gps) {
+      const gpsStr = user?.coords?.lat && user?.coords?.lon
+        ? `${user.coords.lat}, ${user.coords.lon}`
+        : user?.ubicacion || '';
+      if (gpsStr) setForm(prev => ({ ...prev, gps: gpsStr }));
     }
-  }, [modalNuevo, user?.ubicacion]);
+  }, [modalNuevo, user?.coords, user?.ubicacion]);
 
   const cultivoObj = CULTIVOS.find(c => c.id === form.cultivo);
 

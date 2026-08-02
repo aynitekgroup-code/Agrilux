@@ -102,52 +102,46 @@ export default function Diagnostico({ onPlagaDetectada }) {
     }
   }, [ubicacionEfectiva]);
 
-  // ── Geolocalización silenciosa al montar ─────────────────────────────────────
-  // Intenta obtener ubicación del navegador en background, sin mostrar nada al usuario
+  // ── Cargar datos al montar: usar coords guardadas del perfil o GPS ─────────
   useEffect(() => {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude: lat, longitude: lon } = pos.coords;
+    const lat = coords?.lat;
+    const lon = coords?.lon;
+    if (!lat || !lon) return;
 
-        // Si offline, intentar usar datos cacheados
-        if (!isOnline()) {
-          const climaCache = await obtenerClimaCacheado(lat, lon).catch(() => null);
-          if (climaCache) setWeather(climaCache);
-          return;
+    const cargarDatos = async () => {
+      if (!isOnline()) {
+        const climaCache = await obtenerClimaCacheado(lat, lon).catch(() => null);
+        if (climaCache) setWeather(climaCache);
+        return;
+      }
+
+      try {
+        const [climaRes, soilRes, nasaRes] = await Promise.allSettled([
+          getWeather(lat, lon, ''),
+          getSoilData(lat, lon),
+          getNasaAlerts(lat, lon),
+        ]);
+        if (climaRes.status === 'fulfilled') {
+          setWeather(climaRes.value);
+          guardarClima(lat, lon, climaRes.value).catch(() => {});
         }
+        if (soilRes.status === 'fulfilled')  setSoilData(soilRes.value);
+        if (nasaRes.status === 'fulfilled')  setNasaAlerts(nasaRes.value);
+        getSentinelNDVI(lat, lon, 2)
+          .then(setSentinelNDVI)
+          .catch(() => {});
+        getPronosticoSENAMHI(lat, lon)
+          .then(setSenamhi)
+          .catch(() => {});
+        fetch(`/api/alertas-preventivas?lat=${lat}&lon=${lon}&cultivo=${cultivo.id}&diasDesdeSiembra=30`)
+          .then(r => r.json())
+          .then(setAlertasPreventivas)
+          .catch(() => {});
+      } catch (e) { /* silencioso */ }
+    };
 
-        try {
-          const [climaRes, soilRes, nasaRes] = await Promise.allSettled([
-            getWeather(lat, lon, ''),
-            getSoilData(lat, lon),
-            getNasaAlerts(lat, lon),
-          ]);
-          if (climaRes.status === 'fulfilled') {
-            setWeather(climaRes.value);
-            guardarClima(lat, lon, climaRes.value).catch(() => {});
-          }
-          if (soilRes.status === 'fulfilled')  setSoilData(soilRes.value);
-          if (nasaRes.status === 'fulfilled')  setNasaAlerts(nasaRes.value);
-          // NDVI más tarde, no bloquea
-          getSentinelNDVI(lat, lon, 2)
-            .then(setSentinelNDVI)
-            .catch(() => {});
-          // SENAMHI pronóstico oficial
-          getPronosticoSENAMHI(lat, lon)
-            .then(setSenamhi)
-            .catch(() => {});
-          // Alertas preventivas (diagnóstico predictivo)
-          fetch(`/api/alertas-preventivas?lat=${lat}&lon=${lon}&cultivo=${cultivo.id}&diasDesdeSiembra=30`)
-            .then(r => r.json())
-            .then(setAlertasPreventivas)
-            .catch(() => {});
-        } catch (e) { /* silencioso */ }
-      },
-      () => { /* sin permisos: no pasa nada */ },
-      { timeout: 8000 }
-    );
-  }, []);
+    cargarDatos();
+  }, [coords?.lat, coords?.lon]);
 
   // Prefill de ubicación visible (si el usuario la tiene en perfil)
   useEffect(() => {

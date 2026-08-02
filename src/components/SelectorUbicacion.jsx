@@ -82,15 +82,18 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
     setError('');
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        setCoordsSeleccionadas({ lat, lon });
         try {
-          const res = await fetch(`/api/geocode?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`);
+          const res = await fetch(`/api/geocode?lat=${lat}&lon=${lon}`);
           if (!res.ok) throw new Error();
           const data = await res.json();
           const nombreCorto = [data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
             .filter(Boolean).slice(0, 2).join(', ') || data.name.split(',')[0];
           setUbicacion(nombreCorto);
         } catch {
-          setUbicacion(`${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);
+          setUbicacion(`${lat.toFixed(4)}, ${lon.toFixed(4)}`);
         }
         setDetectando(false);
         setModo('confirmar');
@@ -132,9 +135,10 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
     setError('');
     try {
       if (user) {
-        await updateUbicacion(ubicacion.trim());
+        await updateUbicacion(ubicacion.trim(), coordsSeleccionadas);
       } else {
         localStorage.setItem('agrilux_ubicacion', ubicacion.trim());
+        if (coordsSeleccionadas) localStorage.setItem('agrilux_coords', JSON.stringify(coordsSeleccionadas));
       }
       onGuardar?.(ubicacion.trim());
       if (!esPrimeraVez) onClose?.();
@@ -264,7 +268,12 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
             <div className="bg-green-50 rounded-2xl p-5 mb-4">
               <Check size={28} className="text-green-500 mx-auto mb-2" />
               <p className="text-green-700 font-bold text-lg">{ubicacion}</p>
-              <p className="text-green-600 text-sm mt-1">¿Es correcta tu ubicación?</p>
+              {coordsSeleccionadas && (
+                <p className="text-green-600 text-xs mt-1 font-mono">
+                  📍 {coordsSeleccionadas.lat.toFixed(6)}, {coordsSeleccionadas.lon.toFixed(6)}
+                </p>
+              )}
+              <p className="text-green-600 text-sm mt-2">¿Es correcta tu ubicación?</p>
             </div>
           </div>
         )}

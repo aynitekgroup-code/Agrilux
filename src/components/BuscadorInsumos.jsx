@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Star, ExternalLink, Store, Tag, Search, Loader2, ChevronDown, ChevronUp, MessageCircle } from 'lucide-react';
+import { MapPin, Star, ExternalLink, Store, Tag, Search, Loader2, ChevronDown, ChevronUp, MessageCircle, ShoppingCart } from 'lucide-react';
 
 const ICONOS_REDES = {
   google: '🔍',
   googleMaps: '🗺️',
   facebook: '📘',
   facebookGrupos: '👥',
+  instagram: '📸',
   tiktok: '🎵',
-  youtube: '📺',
   whatsapp: '💬',
 };
 
@@ -16,8 +16,8 @@ const NOMBRES_REDES = {
   googleMaps: 'Google Maps',
   facebook: 'Facebook Marketplace',
   facebookGrupos: 'Grupos de Facebook',
+  instagram: 'Instagram',
   tiktok: 'TikTok',
-  youtube: 'YouTube',
   whatsapp: 'Compartir por WhatsApp',
 };
 
@@ -37,7 +37,7 @@ export default function BuscadorInsumos({ producto, cultivo, ubicacion, lat, lon
         producto,
         cultivo: cultivo || '',
         ubicacion: ubicacion || '',
-        radio: '30',
+        radio: '50',
       });
       const res = await fetch(`/api/buscar-insumos?${params}`);
       const data = await res.json();
@@ -63,7 +63,7 @@ export default function BuscadorInsumos({ producto, cultivo, ubicacion, lat, lon
           <Store size={18} className="text-white" />
           <div className="flex-1">
             <p className="text-white font-bold text-sm">¿Dónde comprar {producto}?</p>
-            <p className="text-white/70 text-xs">Tiendas cerca de ti + ofertas en redes</p>
+            <p className="text-white/70 text-xs">Precios reales + tiendas cercanas</p>
           </div>
           {cargando && <Loader2 size={18} className="text-white animate-spin" />}
         </div>
@@ -71,6 +71,35 @@ export default function BuscadorInsumos({ producto, cultivo, ubicacion, lat, lon
 
       {resultados && (
         <div className="p-4 space-y-4">
+
+          {/* Precios Fertisem */}
+          {resultados.precios?.fertisem?.length > 0 && (
+            <div className="bg-orange-50 rounded-xl p-3 border border-orange-200">
+              <div className="flex items-center gap-2 mb-2">
+                <ShoppingCart size={14} className="text-orange-600" />
+                <p className="text-xs font-bold text-orange-700">Precios en Fertisem.pe</p>
+              </div>
+              <div className="space-y-1.5">
+                {resultados.precios.fertisem.slice(0, 4).map((p, i) => (
+                  <div key={i} className="flex items-center justify-between bg-white rounded-lg px-2.5 py-1.5 border border-orange-100">
+                    <p className="text-xs text-gray-700 font-medium truncate flex-1">{p.nombre}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-orange-600">S/ {p.precio}</span>
+                      <a href={p.url} target="_blank" rel="noreferrer" className="text-[10px] text-blue-500 hover:underline">Ver →</a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Precio de referencia */}
+          {resultados.precios?.referencia && (
+            <div className="bg-blue-50 rounded-xl p-3 border border-blue-200">
+              <p className="text-xs font-bold text-blue-700 mb-1">📊 Precio de referencia ({resultados.precios.referencia.region})</p>
+              <p className="text-lg font-bold text-blue-800">S/ {resultados.precios.referencia.precio} <span className="text-xs font-normal text-blue-500">por kg</span></p>
+            </div>
+          )}
 
           {/* Enlaces de búsqueda rápida */}
           <div>
@@ -144,72 +173,85 @@ export default function BuscadorInsumos({ producto, cultivo, ubicacion, lat, lon
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-bold text-gray-800 truncate">{t.nombre}</p>
-                          {t.tieneProducto && (
-                            <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-bold flex-shrink-0">
-                              ✓ Producto
+                          {t.precio && (
+                            <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full flex-shrink-0">
+                              S/ {t.precio}
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-500 truncate">{t.direccion || `${t.prov}, ${t.dept}`}</p>
+                        <p className="text-xs text-gray-500 truncate">{t.direccion || `${t.prov || ''}, ${t.dept || ''}`}</p>
                         <div className="flex items-center gap-3 mt-1">
                           {t.rating > 0 && (
                             <div className="flex items-center gap-1">
                               <Star size={10} className="text-yellow-400 fill-yellow-400" />
                               <span className="text-[10px] text-gray-600 font-semibold">{t.rating}</span>
-                              {t.totalRatings > 0 && (
-                                <span className="text-[10px] text-gray-400">({t.totalRatings})</span>
-                              )}
                             </div>
                           )}
                           <span className="text-[10px] text-primary font-semibold">{t.distanciaKm} km</span>
-                          {t.abierto === true && (
-                            <span className="text-[10px] text-green-600 font-semibold">● Abierto</span>
-                          )}
-                          {t.abierto === false && (
-                            <span className="text-[10px] text-red-500 font-semibold">● Cerrado</span>
-                          )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Detalles expandidos */}
+                    {/* Detalles expandidos: Links directos */}
                     {tiendaSeleccionada?.nombre === t.nombre && (
                       <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
-                        {t.especialidades?.length > 0 && (
-                          <div>
-                            <p className="text-[10px] text-gray-400 mb-1">Especialidades:</p>
+                        {/* Links de contacto directo */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {t.whatsappLink && (
+                            <a href={t.whatsappLink} target="_blank" rel="noreferrer"
+                              className="flex items-center gap-1 text-[10px] font-bold bg-green-500 text-white px-2.5 py-1.5 rounded-full hover:bg-green-600 transition-colors">
+                              💬 WhatsApp
+                            </a>
+                          )}
+                          {t.facebookLink && (
+                            <a href={t.facebookLink} target="_blank" rel="noreferrer"
+                              className="flex items-center gap-1 text-[10px] font-bold bg-blue-600 text-white px-2.5 py-1.5 rounded-full hover:bg-blue-700 transition-colors">
+                              📘 Facebook
+                            </a>
+                          )}
+                          {t.instagramLink && (
+                            <a href={t.instagramLink} target="_blank" rel="noreferrer"
+                              className="flex items-center gap-1 text-[10px] font-bold bg-pink-500 text-white px-2.5 py-1.5 rounded-full hover:bg-pink-600 transition-colors">
+                              📸 Instagram
+                            </a>
+                          )}
+                          {t.googleMapsLink && (
+                            <a href={t.googleMapsLink} target="_blank" rel="noreferrer"
+                              className="flex items-center gap-1 text-[10px] font-bold bg-blue-500 text-white px-2.5 py-1.5 rounded-full hover:bg-blue-600 transition-colors">
+                              🗺️ Maps
+                            </a>
+                          )}
+                        </div>
+
+                        {/* Precios de la tienda */}
+                        {t.precios && Object.keys(t.precios).length > 0 && (
+                          <div className="bg-white rounded-lg p-2 border border-gray-100">
+                            <p className="text-[10px] text-gray-400 mb-1">Precios en esta tienda:</p>
                             <div className="flex flex-wrap gap-1">
-                              {t.especialidades.map((e, j) => (
-                                <span key={j} className="text-[10px] bg-white text-gray-600 px-2 py-0.5 rounded-full border border-gray-200">
-                                  {e}
+                              {Object.entries(t.precios).map(([prod, precio]) => (
+                                <span key={prod} className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                                  {prod}: S/ {precio}
                                 </span>
                               ))}
                             </div>
                           </div>
                         )}
+
+                        {/* Especialidades */}
+                        {t.especialidades?.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {t.especialidades.map((e, j) => (
+                              <span key={j} className="text-[10px] bg-white text-gray-600 px-2 py-0.5 rounded-full border border-gray-200">
+                                {e}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Llamar */}
                         {t.telefono && (
                           <a href={`tel:${t.telefono}`} className="flex items-center gap-1 text-xs text-primary font-semibold">
                             📞 Llamar: {t.telefono}
-                          </a>
-                        )}
-                        {t.placeId && (
-                          <a
-                            href={`https://www.google.com/maps/place/?place_id=${t.placeId}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-1 text-xs text-blue-600 font-semibold"
-                          >
-                            🗺️ Ver en Google Maps →
-                          </a>
-                        )}
-                        {t.source === 'comunidad' && (
-                          <a
-                            href={`https://www.google.com/maps/search/${encodeURIComponent(t.nombre + ' ' + t.prov)}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-1 text-xs text-blue-600 font-semibold"
-                          >
-                            🗺️ Cómo llegar →
                           </a>
                         )}
                       </div>

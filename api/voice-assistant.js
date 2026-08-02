@@ -304,11 +304,23 @@ export default async function handler(req, res) {
     contextoParts.push(`NOMBRE: ${nombre}`);
   }
 
-  // 2. Estación meteorológica más cercana
+  // 2. Estación meteorológica más cercana + altitud
   let estacionCercana = null;
+  let altitudUsuario = null;
   if (lat && lon) {
     estacionCercana = encontrarEstacionCercana(lat, lon);
     contextoParts.push(`ESTACIÓN METEREOLÓGICA MÁS CERCANA: ${estacionCercana.nombre} (${estacionCercana.dept}), a ${estacionCercana.distanciaKm}km, altitud ${estacionCercana.alt}m`);
+    // Obtener altitud real del terreno
+    try {
+      const altRes = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lon}`, { signal: AbortSignal.timeout(2000) });
+      const altData = await altRes.json();
+      altitudUsuario = altData.elevation?.[0] || null;
+      if (altitudUsuario) {
+        const diffAlt = altitudUsuario - (estacionCercana.alt || 0);
+        const ajusteTemp = Math.round((diffAlt / 1000) * -6.5 * 10) / 10;
+        contextoParts.push(`ALTITUD DEL LUGAR: ${Math.round(altitudUsuario)}m (estación: ${estacionCercana.alt}m). Ajuste de temperatura: ${ajusteTemp > 0 ? '+' : ''}${ajusteTemp}°C vs estación.`);
+      }
+    } catch {}
   }
 
   // 3. Clima en tiempo real (Open-Meteo)
@@ -316,7 +328,14 @@ export default async function handler(req, res) {
   if (lat && lon) {
     clima = await obtenerClimaOpenMeteo(lat, lon);
     if (clima) {
-      contextoParts.push(`CLIMA ACTUAL: ${clima.temp}°C, ${clima.descripcion}, humedad ${clima.humedad}%, viento ${clima.viento} km/h, nubosidad ${clima.nubes}%`);
+      // Ajustar temperatura por altitud
+      if (altitudUsuario && estacionCercana?.alt) {
+        const diffAlt = altitudUsuario - estacionCercana.alt;
+        const ajuste = Math.round((diffAlt / 1000) * -6.5 * 10) / 10;
+        clima.tempAjustada = Math.round((clima.temp + ajuste) * 10) / 10;
+      }
+      const tempMostrar = clima.tempAjustada || clima.temp;
+      contextoParts.push(`CLIMA ACTUAL (${Math.round(altitudUsuario || 0)}m): ${tempMostrar}°C, ${clima.descripcion}, humedad ${clima.humedad}%, viento ${clima.viento} km/h`);
       if (clima.lluvia > 0) contextoParts.push(`LLUVIA ACTIVA: ${clima.lluvia}mm`);
       if (clima.pronostico) {
         const maxHoy = clima.pronostico.tempMax[0];
@@ -393,25 +412,9 @@ export default async function handler(req, res) {
     }
     
     try {
-      // Buscar tiendas + precios exactos
-      const [busquedaRes, preciosRes] = await Promise.all([
-        fetch(`https://${req.headers.host || 'localhost'}/api/buscar-insumos?lat=${lat}&lon=${lon}&producto=${encodeURIComponent(producto)}&radio=30`),
-        fetch(`https://${req.headers.host || 'localhost'}/api/precios-insumos?producto=${encodeURIComponent(producto)}&lat=${lat}&lon=${lon}&ubicacion=${ubicacion || ''}`)
-      ]);
+      // Buscar tiendas + precios + Fertisem + redes sociales
+      const busquedaRes = await fetch(`https://${req.headers.host || 'localhost'}/api/buscar-insumos?lat=${lat}&lon=${lon}&producto=${encodeURIComponent(producto)}&radio=50&ubicacion=${encodeURIComponent(ubicacion || '')}`);
       tiendasResult = await busquedaRes.json();
-      const preciosData = await preciosRes.json().catch(() => null);
-
-      // Agregar precios exactos a las tiendas
-      if (preciosData?.tiendas?.length > 0) {
-        tiendasResult.tiendas = preciosData.tiendas.map(t => ({
-          nombre: t.nombre,
-          distanciaKm: t.distanciaKm,
-          precio: t.precio,
-          reputacion: null,
-          googleMaps: t.maps,
-          whatsapp: t.whatsapp ? `https://wa.me/${t.whatsapp.replace(/[^0-9]/g, '')}` : null,
-        }));
-      }
 
       if (tiendasResult.tiendas?.length > 0) {
         const precioRef = preciosData?.precioReferencia;

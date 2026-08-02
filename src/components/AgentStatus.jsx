@@ -39,7 +39,7 @@ export default function AgentStatus() {
         <div>
           <p className="text-sm font-bold text-gray-800">Agentes Sincronizados</p>
           <p className="text-[10px] text-gray-500">
-            {cultivoActivo?.emoji} {cultivoActivo?.nombre || 'Sin cultivo'} · {ubicacion || 'Sin ubicación'}
+            {cultivoActivo?.emoji} {cultivoActivo?.nombre || 'Sin cultivo'} · {coords?.lat ? `${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}` : ubicacion || 'Sin ubicación'}
           </p>
         </div>
       </div>

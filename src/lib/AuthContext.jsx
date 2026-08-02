@@ -45,7 +45,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // ── Registro: status = 'aprobado' (acceso inmediato) ──────
-  const register = async ({ nombre, email, password, ubicacion }) => {
+  const register = async ({ nombre, email, password, ubicacion, coords }) => {
     const cred = await createUserWithEmailAndPassword(
       auth,
       email.trim().toLowerCase(),
@@ -56,6 +56,7 @@ export const AuthProvider = ({ children }) => {
       nombre:    nombre.trim(),
       email:     email.trim().toLowerCase(),
       ubicacion: ubicacion || '',
+      coords:    coords || null,
       rol:       'agricultor',
       status:    'aprobado',
       creadoPor: 'self',
@@ -66,6 +67,7 @@ export const AuthProvider = ({ children }) => {
       email:  email.trim().toLowerCase(),
       nombre: nombre.trim(),
       ubicacion: ubicacion || '',
+      coords:    coords || null,
       rol:    'agricultor',
       status: 'aprobado',
     });
@@ -82,10 +84,12 @@ export const AuthProvider = ({ children }) => {
     return cred.user;
   };
 
-  const updateUbicacion = async (ubicacion) => {
+  const updateUbicacion = async (ubicacion, coords = null) => {
     if (!user?.uid) throw new Error('No hay sesión');
-    await setDoc(doc(db, 'usuarios', user.uid), { ubicacion }, { merge: true });
-    setUser(prev => ({ ...prev, ubicacion }));
+    const data = { ubicacion };
+    if (coords) data.coords = coords;
+    await setDoc(doc(db, 'usuarios', user.uid), data, { merge: true });
+    setUser(prev => ({ ...prev, ubicacion, coords: coords || prev.coords }));
   };
 
   const logout = async () => {

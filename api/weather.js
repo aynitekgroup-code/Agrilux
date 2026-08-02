@@ -82,6 +82,23 @@ function codClima(c) {
   }[c] || 'Desconocido';
 }
 
+// ── Obtener altitud real del terreno (Open-Meteo DEM) ──
+async function obtenerAltitud(lat, lon) {
+  try {
+    const r = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lon}`, { signal: AbortSignal.timeout(3000) });
+    const data = await r.json();
+    return data.elevation?.[0] || null;
+  } catch { return null; }
+}
+
+// ── Ajustar temperatura por altitud (lapso adiabático: -6.5°C/1000m) ──
+function ajustarTemperaturaPorAltitud(tempEstacion, altEstacion, altUsuario) {
+  if (!altEstacion || !altUsuario) return tempEstacion;
+  const diffMetros = altUsuario - altEstacion;
+  const ajuste = (diffMetros / 1000) * -6.5; // Negativo = más frío arriba
+  return Math.round((tempEstacion + ajuste) * 10) / 10;
+}
+
 function indicadoresAgricolas(daily) {
   if (!daily) return null;
   let precip=0, tMax=-999, tMin=999, et0=0;
@@ -150,6 +167,17 @@ export default async function handler(req, res) {
     const om = await omRes.json();
 
     const estacion = findEstacion(la, lo);
+
+    // Obtener altitud real del terreno
+    const altitudUsuario = await obtenerAltitud(la, lo);
+    const altitudEstacion = estacion.alt || null;
+
+    // Ajustar temperatura por altitud
+    const tempOriginal = om.current?.temperature_2m;
+    const tempAjustada = (altitudUsuario && altitudEstacion)
+      ? ajustarTemperaturaPorAltitud(tempOriginal, altitudEstacion, altitudUsuario)
+      : tempOriginal;
+
     const actual = om.current;
     const ind = indicadoresAgricolas(om.daily);
     const pronostico = pronosticoCana(ind);
@@ -157,9 +185,19 @@ export default async function handler(req, res) {
     const base = {
       source: 'SENAMHI+Open-Meteo',
       location: { name: name||estacion.nombre, lat:la, lon:lo },
+      altitud: altitudUsuario ? {
+        metros: Math.round(altitudUsuario),
+        ajusteTemperatura: (altitudUsuario && altitudEstacion)
+          ? `${ajustarTemperaturaPorAltitud(0, altitudEstacion, altitudUsuario) > 0 ? '+' : ''}${ajustarTemperaturaPorAltitud(0, altitudEstacion, altitudUsuario)}°C vs estación`
+          : null,
+        estacion: estacion.nombre,
+        altitudEstacion: altitudEstacion,
+      } : null,
       estacion: { codigo:estacion.codigo, nombre:estacion.nombre, departamento:estacion.dept, provincia:estacion.prov, altitud:estacion.alt, distanciaKm:estacion.distanciaKm },
       current: actual ? {
-        temp: actual.temperature_2m, humidity: actual.relative_humidity_2m,
+        temp: tempAjustada,
+        tempOriginal: tempAjustada !== tempOriginal ? tempOriginal : undefined,
+        humidity: actual.relative_humidity_2m,
         precip: actual.precipitation, wind: actual.wind_speed_10m,
         windDir: actual.wind_direction_10m, clouds: actual.cloud_cover,
         radiation: actual.shortwave_radiation, description: codClima(actual.weather_code),
