@@ -1375,8 +1375,8 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
         </div>
       )}
 
-      {/* Voice Assistant — flotante (asistente agrícola independiente) */}
-      <VoiceAssistant />
+      {/* Voice Assistant — flotante (asistente de plagas) */}
+      <VoiceAssistant agentType="plagas" />
     </div>
   );
 }

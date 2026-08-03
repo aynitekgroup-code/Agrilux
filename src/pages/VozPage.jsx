@@ -13,7 +13,7 @@ export default function VozPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold">Agente de Ventas</h1>
-            <p className="text-green-100 text-sm">Tu asistente agrícola por voz</p>
+            <p className="text-green-100 text-sm">Asistente agrícola por voz</p>
           </div>
         </div>
       </div>
@@ -38,7 +38,7 @@ export default function VozPage() {
       </div>
 
       {/* Asistente de voz */}
-      <VoiceAssistant fullPage={true} />
+      <VoiceAssistant fullPage={true} agentType="ventas" />
     </div>
   );
 }
