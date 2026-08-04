@@ -262,6 +262,35 @@ async function scrapingCompleto() {
   return tiendasConCoords;
 }
 
+// ── Cargar tiendas del admin desde Firestore ──
+async function cargarTiendasAdmin() {
+  try {
+    const { initializeApp, cert, getApps } = await import('firebase-admin/app');
+    const { getFirestore } = await import('firebase-admin/firestore');
+
+    if (!getApps().length) {
+      initializeApp({
+        credential: cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        }),
+      });
+    }
+
+    const db = getFirestore();
+    const snap = await db.collection('tiendas').get();
+    return snap.docs.map(d => ({
+      id: d.id,
+      ...d.data(),
+      fuente: 'admin',
+    }));
+  } catch (e) {
+    console.warn('⚠️ No se pudieron cargar tiendas admin:', e.message);
+    return [];
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method !== 'GET') return res.status(405).end();
@@ -271,17 +300,24 @@ export default async function handler(req, res) {
   const lon = parseFloat(url.searchParams.get('lon')) || null;
   const radio = Math.min(parseInt(url.searchParams.get('radio')) || 100, 500);
   const refresh = url.searchParams.get('refresh') === 'true';
+  const soloAdmin = url.searchParams.get('admin') === 'true';
 
   try {
     const ahora = Date.now();
-    
-    // Refresh o cache
-    if (refresh || !cacheTiendas || !cacheTimestamp || (ahora - cacheTimestamp) > CACHE_DURATION) {
-      cacheTiendas = await scrapingCompleto();
+
+    // Cargar tiendas del admin (siempre, son pocas)
+    const tiendasAdmin = soloAdmin ? [] : await cargarTiendasAdmin();
+
+    // Refresh o cache del scraping
+    if (soloAdmin || refresh || !cacheTiendas || !cacheTimestamp || (ahora - cacheTimestamp) > CACHE_DURATION) {
+      cacheTiendas = soloAdmin ? [] : await scrapingCompleto();
       cacheTimestamp = ahora;
     }
 
-    let tiendas = cacheTiendas;
+    // Combinar: admin + scraping (sin duplicados por nombre)
+    const todosNombres = new Set(tiendasAdmin.map(t => t.nombre?.toLowerCase()));
+    const tiendasScraping = cacheTiendas.filter(t => !todosNombres.has(t.nombre?.toLowerCase()));
+    let tiendas = [...tiendasAdmin, ...tiendasScraping];
 
     // Filtrar por distancia si hay coordenadas
     if (lat && lon) {
@@ -298,7 +334,9 @@ export default async function handler(req, res) {
       tiendas,
       total: tiendas.length,
       totalBase: cacheTiendas.length,
+      totalAdmin: tiendasAdmin.length,
       fuentes: {
+        admin: tiendasAdmin.length,
         diproagro: cacheTiendas.filter(t => t.fuente === 'diproagro').length,
         peruyello: cacheTiendas.filter(t => t.fuente === 'peruyello').length,
         agrotiena: cacheTiendas.filter(t => t.fuente === 'agrotiena').length,

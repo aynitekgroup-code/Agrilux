@@ -13,7 +13,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../lib/firebase';
-import { collection, getDocs, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, updateDoc, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, updateDoc, where } from 'firebase/firestore';
 import { useAuth } from '../lib/AuthContext';
 import JSZip from 'jszip';
 import {
@@ -475,6 +475,242 @@ function SolicitudesPendientes({ usuarios, diagnosticos, onActualizar }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// MODAL AGREGAR/EDITAR TIENDA
+// ═══════════════════════════════════════════════════════════════════════════════
+function ModalTienda({ tienda, onCerrar, onGuardado }) {
+  const [form, setForm] = useState({
+    nombre:      tienda?.nombre || '',
+    direccion:   tienda?.direccion || '',
+    region:      tienda?.region || '',
+    lat:         tienda?.lat || '',
+    lon:         tienda?.lon || '',
+    whatsapp:    tienda?.whatsapp || '',
+    facebook:    tienda?.facebook || '',
+    instagram:   tienda?.instagram || '',
+    web:         tienda?.web || '',
+    productos:   tienda?.productos || '',
+    horario:     tienda?.horario || '',
+    notas:       tienda?.notas || '',
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState('');
+  const [buscandoCoord, setBuscandoCoord] = useState(false);
+
+  const esEdicion = tienda?.id;
+
+  const buscarCoordenadas = async () => {
+    if (!form.direccion && !form.region) { setError('Escribe una dirección o región primero'); return; }
+    setBuscandoCoord(true);
+    setError('');
+    try {
+      const query = [form.direccion, form.region, 'Perú'].filter(Boolean).join(', ');
+      const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      if (data.lat && data.lon) {
+        setForm(f => ({ ...f, lat: data.lat, lon: data.lon }));
+      } else {
+        setError('No se encontraron coordenadas para esa dirección');
+      }
+    } catch {
+      setError('Error al buscar coordenadas');
+    }
+    setBuscandoCoord(false);
+  };
+
+  const guardar = async () => {
+    if (!form.nombre.trim()) { setError('El nombre es obligatorio'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      const datos = {
+        nombre:    form.nombre.trim(),
+        direccion: form.direccion.trim() || null,
+        region:    form.region.trim() || null,
+        lat:       form.lat ? parseFloat(form.lat) : null,
+        lon:       form.lon ? parseFloat(form.lon) : null,
+        whatsapp:  form.whatsapp.trim() || null,
+        facebook:  form.facebook.trim() || null,
+        instagram: form.instagram.trim() || null,
+        web:       form.web.trim() || null,
+        productos: form.productos.trim() || null,
+        horario:   form.horario.trim() || null,
+        notas:     form.notas.trim() || null,
+        actualizadoEn: new Date().toISOString(),
+      };
+
+      if (esEdicion) {
+        const ref = doc(db, 'tiendas', tienda.id);
+        await updateDoc(ref, datos);
+        onGuardado({ id: tienda.id, ...datos, createdAt: tienda.createdAt });
+      } else {
+        datos.createdAt = new Date().toISOString();
+        datos.creadoPor = 'admin';
+        const ref = await addDoc(collection(db, 'tiendas'), datos);
+        onGuardado({ id: ref.id, ...datos });
+      }
+    } catch (e) {
+      setError('Error al guardar: ' + e.message);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end justify-center">
+      <div className="bg-white rounded-t-3xl w-full max-w-[430px] max-h-[90vh] overflow-y-auto p-6 space-y-4">
+        <div className="flex items-center justify-between mb-1 sticky top-0 bg-white pb-2">
+          <h3 className="font-bold text-gray-800 text-lg">{esEdicion ? 'Editar tienda' : 'Agregar tienda'}</h3>
+          <button onClick={onCerrar} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+            <X size={15} className="text-gray-500" />
+          </button>
+        </div>
+
+        {error && <div className="bg-red-50 border border-red-200 rounded-xl p-3"><p className="text-red-600 text-sm">{error}</p></div>}
+
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Nombre de la tienda *</label>
+          <input
+            value={form.nombre}
+            onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
+            placeholder="Ej: AgroCutervo"
+            className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Dirección / Distrito</label>
+          <input
+            value={form.direccion}
+            onChange={e => setForm(f => ({ ...f, direccion: e.target.value }))}
+            placeholder="Ej: Av. Principal s/n, Cutervo"
+            className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Región / Departamento</label>
+          <input
+            value={form.region}
+            onChange={e => setForm(f => ({ ...f, region: e.target.value }))}
+            placeholder="Ej: Cajamarca"
+            className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
+          />
+        </div>
+
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <label className="text-xs font-semibold text-gray-600 block mb-1">Latitud</label>
+            <input
+              value={form.lat}
+              onChange={e => setForm(f => ({ ...f, lat: e.target.value }))}
+              placeholder="-6.381234"
+              type="number"
+              step="any"
+              className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="text-xs font-semibold text-gray-600 block mb-1">Longitud</label>
+            <input
+              value={form.lon}
+              onChange={e => setForm(f => ({ ...f, lon: e.target.value }))}
+              placeholder="-78.821567"
+              type="number"
+              step="any"
+              className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
+            />
+          </div>
+          <button
+            onClick={buscarCoordenadas}
+            disabled={buscandoCoord || (!form.direccion && !form.region)}
+            className="self-end bg-gray-900 text-white rounded-xl px-3 py-2.5 text-sm font-semibold disabled:opacity-40 flex items-center gap-1">
+            {buscandoCoord ? <Loader2 size={14} className="animate-spin" /> : <MapPin size={14} />}
+            GPS
+          </button>
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">WhatsApp</label>
+          <input
+            value={form.whatsapp}
+            onChange={e => setForm(f => ({ ...f, whatsapp: e.target.value }))}
+            placeholder="Ej: 51941234567"
+            className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Facebook</label>
+          <input
+            value={form.facebook}
+            onChange={e => setForm(f => ({ ...f, facebook: e.target.value }))}
+            placeholder="Ej: agrocutervo"
+            className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Instagram</label>
+          <input
+            value={form.instagram}
+            onChange={e => setForm(f => ({ ...f, instagram: e.target.value }))}
+            placeholder="Ej: @agrocutervo"
+            className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Sitio web</label>
+          <input
+            value={form.web}
+            onChange={e => setForm(f => ({ ...f, web: e.target.value }))}
+            placeholder="Ej: https://agrocutervo.com"
+            className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Productos principales</label>
+          <input
+            value={form.productos}
+            onChange={e => setForm(f => ({ ...f, productos: e.target.value }))}
+            placeholder="Ej: Fertilizantes, semillas, agroquímicos"
+            className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Horario</label>
+          <input
+            value={form.horario}
+            onChange={e => setForm(f => ({ ...f, horario: e.target.value }))}
+            placeholder="Ej: Lun-Sáb 8am-6pm"
+            className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Notas internas</label>
+          <textarea
+            value={form.notas}
+            onChange={e => setForm(f => ({ ...f, notas: e.target.value }))}
+            placeholder="Notas privadas sobre esta tienda..."
+            rows={2}
+            className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary resize-none"
+          />
+        </div>
+
+        <button
+          onClick={guardar}
+          disabled={loading || !form.nombre.trim()}
+          className="w-full bg-green-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-40">
+          {loading ? <span className="flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" /> Guardando...</span> : esEdicion ? 'Guardar cambios' : 'Agregar tienda'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // PANEL ADMIN PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function Admin() {
@@ -486,6 +722,8 @@ export default function Admin() {
   const [busqueda, setBusqueda]     = useState('');
   const [expandido, setExpandido]   = useState(null);
   const [modalAgregar, setModalAgregar] = useState(false);
+  const [modalTienda, setModalTienda] = useState(null); // null = cerrado, 'nueva' = agregar, objeto = editar
+  const [tiendas, setTiendas] = useState([]);
 
   // Exportar
   const [exportState, setExportState]     = useState('idle');
@@ -531,6 +769,7 @@ export default function Admin() {
 
     cargar('usuarios', setUsuarios);
     cargar('diagnosticos', setDiagnosticos);
+    cargar('tiendas', setTiendas);
     return () => unsubs.forEach(u => u());
   }, [autorizado]);
 
@@ -654,6 +893,7 @@ export default function Admin() {
             {[
               { id: 'solicitudes', label: 'Solicitudes', icon: Bell },
               { id: 'usuarios', label: 'Usuarios', icon: Users },
+              { id: 'tiendas', label: 'Tiendas', icon: Truck },
               { id: 'marketing', label: 'Marketing', icon: Megaphone },
               { id: 'diagnosticos', label: 'Diagnósticos', icon: Camera },
               { id: 'exportar', label: 'Exportar', icon: Download },
@@ -784,6 +1024,99 @@ export default function Admin() {
                 </div>
               ))}
             </div>
+          </>
+        )}
+
+        {/* ── TIENDAS ──────────────────────────────────────────────────────── */}
+        {tab === 'tiendas' && (
+          <>
+            <div className="flex gap-2">
+              <div className="flex-1 flex items-center bg-white rounded-xl px-3 gap-2 shadow-sm border border-gray-100">
+                <Search size={14} className="text-gray-400" />
+                <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
+                  placeholder="Buscar tienda por nombre o región..."
+                  className="flex-1 py-2.5 text-sm outline-none" />
+                {busqueda && <button onClick={() => setBusqueda('')}><X size={14} className="text-gray-400" /></button>}
+              </div>
+              <button
+                onClick={() => setModalTienda('nueva')}
+                className="bg-primary text-white rounded-xl px-4 flex items-center gap-1.5 text-sm font-bold shadow-sm">
+                <Plus size={16} /> Agregar
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-400">{tiendas.filter(t => !busqueda || t.nombre?.toLowerCase().includes(busqueda.toLowerCase()) || t.region?.toLowerCase().includes(busqueda.toLowerCase())).length} tiendas registradas</p>
+
+            <div className="space-y-2">
+              {tiendas.filter(t => !busqueda || t.nombre?.toLowerCase().includes(busqueda.toLowerCase()) || t.region?.toLowerCase().includes(busqueda.toLowerCase())).length === 0 && (
+                <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
+                  <p className="text-4xl mb-3">🏪</p>
+                  <p className="text-gray-500 text-sm">No hay tiendas registradas.</p>
+                  <button onClick={() => setModalTienda('nueva')}
+                    className="mt-4 bg-primary text-white font-bold px-6 py-2.5 rounded-xl text-sm">
+                    + Agregar la primera
+                  </button>
+                </div>
+              )}
+              {tiendas
+                .filter(t => !busqueda || t.nombre?.toLowerCase().includes(busqueda.toLowerCase()) || t.region?.toLowerCase().includes(busqueda.toLowerCase()))
+                .map(t => (
+                <div key={t.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-3 p-4">
+                    <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-base font-bold text-orange-700 flex-shrink-0">
+                      🏪
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm text-gray-800 truncate">{t.nombre}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {t.region && <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{t.region}</span>}
+                        {t.lat && t.lon && <span className="text-xs text-gray-400">📍 {t.lat?.toFixed(2)}, {t.lon?.toFixed(2)}</span>}
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setModalTienda(t)}
+                        className="p-2 bg-gray-100 rounded-lg text-gray-500 hover:bg-gray-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`¿Eliminar tienda "${t.nombre}"?`)) return;
+                          await deleteDoc(doc(db, 'tiendas', t.id));
+                          setTiendas(prev => prev.filter(x => x.id !== t.id));
+                        }}
+                        className="p-2 bg-red-50 rounded-lg text-red-500 hover:bg-red-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                  {t.whatsapp && (
+                    <div className="px-4 pb-3">
+                      <a href={`https://wa.me/51${t.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noreferrer"
+                        className="flex items-center justify-center gap-2 bg-green-500 text-white rounded-xl py-2 text-xs font-semibold">
+                        💬 WhatsApp
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Modal agregar/editar tienda */}
+            {modalTienda && (
+              <ModalTienda
+                tienda={modalTienda === 'nueva' ? null : modalTienda}
+                onCerrar={() => setModalTienda(null)}
+                onGuardado={(tienda) => {
+                  if (modalTienda === 'nueva') {
+                    setTiendas(prev => [tienda, ...prev]);
+                  } else {
+                    setTiendas(prev => prev.map(t => t.id === tienda.id ? tienda : t));
+                  }
+                  setModalTienda(null);
+                }}
+              />
+            )}
           </>
         )}
 
