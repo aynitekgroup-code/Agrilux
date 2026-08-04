@@ -8,57 +8,30 @@
  * Returns: { ofertas: [...], tiendas: [...], ultimaActualizacion }
  */
 
-// ── Tiendas agrícolas conocidas con URLs de ofertas ──
-const TIENDAS_FONT = [
-  {
-    nombre: 'AgroInsumos Sullana',
-    url: 'https://www.google.com/search?q=agroinsumos+sullana+ofertas+descuentos+insumos+agricolas',
-    whatsapp: '51945123456',
-    facebook: 'agroinsumossullana',
-    region: 'Piura',
-    lat: -4.88, lon: -80.69,
-  },
-  {
-    nombre: 'La Favorita Chiclayo',
-    url: 'https://www.google.com/search?q=la+favorita+chiclayo+ofertas+fertilizantes+insumos',
-    whatsapp: '51944789123',
-    facebook: 'lafavoritachiclayo',
-    region: 'Lambayeque',
-    lat: -6.76, lon: -79.84,
-  },
-  {
-    nombre: 'AgroCajamarca',
-    url: 'https://www.google.com/search?q=agrocajamarca+ofertas+descuentos+semillas+fertilizantes',
-    whatsapp: '51941234567',
-    facebook: 'agrocajamarca',
-    region: 'Cajamarca',
-    lat: -7.15, lon: -78.52,
-  },
-  {
-    nombre: 'AgroCutervo',
-    url: 'https://www.google.com/search?q=agrocutervo+ofertas+mancozeb+urea+descuento',
-    whatsapp: '51941345678',
-    facebook: 'agrocutervo',
-    region: 'Cajamarca',
-    lat: -6.37, lon: -78.82,
-  },
-  {
-    nombre: 'AgroIca',
-    url: 'https://www.google.com/search?q=agroica+ofertas+fertilizantes+semillas+ica+descuento',
-    whatsapp: '51943123456',
-    facebook: 'agroica',
-    region: 'Ica',
-    lat: -14.07, lon: -75.73,
-  },
-  {
-    nombre: 'AgroHuancayo',
-    url: 'https://www.google.com/search?q=agrohuancayo+ofertas+fertilizantes+papa+descuento',
-    whatsapp: '51942234567',
-    facebook: 'agrohuancayo',
-    region: 'Junín',
-    lat: -12.07, lon: -75.22,
-  },
-];
+// ── Cargar tiendas desde tiendas-scraper ──
+async function cargarTiendas() {
+  try {
+    const res = await fetch(`https://${process.env.VERCEL_URL || 'localhost'}/api/tiendas-scraper?radio=500`);
+    if (res.ok) {
+      const data = await res.json();
+      return (data.tiendas || []).map(t => ({
+        nombre: t.nombre,
+        url: `https://www.google.com/search?q=${encodeURIComponent(t.nombre + ' ofertas descuentos')}`,
+        whatsapp: t.whatsapp,
+        facebook: t.facebook,
+        region: t.region || t.direccion?.split(',')[0] || '',
+        lat: t.lat,
+        lon: t.lon,
+      }));
+    }
+  } catch {}
+  // Fallback: tiendas básicas
+  return [
+    { nombre: 'AgroInsumos Sullana', url: 'https://www.google.com/search?q=agroinsumos+sullana+ofertas', whatsapp: '51945123456', facebook: 'agroinsumossullana', region: 'Piura', lat: -4.88, lon: -80.69 },
+    { nombre: 'La Favorita Chiclayo', url: 'https://www.google.com/search?q=la+favorita+chiclayo+ofertas', whatsapp: '51944789123', facebook: 'lafavoritachiclayo', region: 'Lambayeque', lat: -6.76, lon: -79.84 },
+    { nombre: 'AgroCajamarca', url: 'https://www.google.com/search?q=agrocajamarca+ofertas', whatsapp: '51941234567', facebook: 'agrocajamarca', region: 'Cajamarca', lat: -7.15, lon: -78.52 },
+  ];
+}
 
 // ── Productos comunes agrícolas ──
 const PRODUCTOS_AGRICOLAS = [
@@ -207,9 +180,12 @@ async function scrapingFacebook(tienda) {
 // ── Scraping principal: todas las tiendas ──
 async function scrapingCompleto() {
   console.log('🔄 Iniciando scraping de ofertas...');
+  const tiendas = await cargarTiendas();
+  console.log(`📋 Tiendas en base de datos: ${tiendas.length}`);
   const todasLasOfertas = [];
 
-  for (const tienda of TIENDAS_FONT) {
+  // Scraping limitado a 20 tiendas por ciclo (para no sobrecargar)
+  for (const tienda of tiendas.slice(0, 20)) {
     try {
       const [ofertasGoogle, ofertasFB] = await Promise.all([
         scrapingGoogle(tienda),
@@ -295,15 +271,17 @@ export default async function handler(req, res) {
       );
     }
 
+    const tiendasDB = await cargarTiendas();
     return res.status(200).json({
       ofertas,
       total: ofertas.length,
-      tiendas: TIENDAS_FONT.map(t => ({
+      tiendas: tiendasDB.slice(0, 50).map(t => ({
         nombre: t.nombre,
         region: t.region,
         whatsapp: t.whatsapp,
         facebook: t.facebook,
       })),
+      totalTiendas: tiendasDB.length,
       ultimaActualizacion: cacheTimestamp ? new Date(cacheTimestamp).toISOString() : null,
       cacheHoras: Math.round((ahora - (cacheTimestamp || 0)) / (60 * 60 * 1000) * 10) / 10,
       timestamp: new Date().toISOString(),
