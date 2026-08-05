@@ -52,6 +52,50 @@ let cacheTiendas = null;
 let cacheTimestamp = null;
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 horas
 
+// ── Búsqueda en Google Maps por ciudad ──
+async function buscarGoogleMaps(ciudad, dept) {
+  const API_KEY = process.env.GOOGLE_PLACES_API_KEY;
+  if (!API_KEY) return [];
+
+  const queries = [
+    `tienda agrícola ${ciudad} ${dept}`,
+    `insumos agrícolas ${ciudad}`,
+    `agropecuaria ${ciudad}`,
+    `fertilizantes ${ciudad}`,
+    `semillas ${ciudad}`,
+    `agroquímicos ${ciudad}`,
+  ];
+
+  const tiendas = [];
+
+  for (const query of queries.slice(0, 2)) { // Máximo 2 queries por ciudad
+    try {
+      const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${API_KEY}&language=es`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) continue;
+      const data = await res.json();
+
+      for (const place of data.results || []) {
+        if (place.business_status !== 'OPERATIONAL') continue;
+        tiendas.push({
+          nombre: place.name,
+          direccion: place.formatted_address,
+          lat: place.geometry?.location?.lat,
+          lon: place.geometry?.location?.lng,
+          rating: place.rating,
+          totalRatings: place.user_ratings_total,
+          placeId: place.place_id,
+          fuente: 'google_maps',
+        });
+      }
+    } catch (e) {
+      console.warn(`Google Maps error para ${ciudad}:`, e.message);
+    }
+  }
+
+  return tiendas;
+}
+
 // ── Haversine ──
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -224,8 +268,23 @@ async function scrapingCompleto() {
 
   console.log(`📊 Diproagro: ${dipro.length}, PeruYello: ${peruyello.length}, Agrotiena: ${agrotiena.length}`);
 
+  // Buscar en Google Maps para ciudades principales
+  const googleMapsTiendas = [];
+  if (process.env.GOOGLE_PLACES_API_KEY) {
+    console.log('🔍 Buscando tiendas en Google Maps...');
+    for (const ciudad of CIUDES_AGRICOLAS.slice(0, 10)) { // Top 10 ciudades
+      try {
+        const tiendas = await buscarGoogleMaps(ciudad.ciudad, ciudad.dept);
+        googleMapsTiendas.push(...tiendas);
+        console.log(`  ✅ ${ciudad.ciudad}: ${tiendas.length} tiendas`);
+      } catch (e) {
+        console.warn(`  ⚠️ ${ciudad.ciudad}: error`);
+      }
+    }
+  }
+
   // Combinar y deduplicar
-  const todas = [...dipro, ...peruyello, ...agrotiena];
+  const todas = [...dipro, ...peruyello, ...agrotiena, ...googleMapsTiendas];
   const seen = new Set();
   const unicas = [];
 
