@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Tag, Store, MapPin, Phone, ExternalLink, Loader2, Filter, RefreshCw } from 'lucide-react';
+import { Tag, Store, MapPin, Phone, ExternalLink, Loader2, Filter, RefreshCw, Plus, Clock } from 'lucide-react';
 import { useAgentes } from '../lib/AgentContext';
+import { db } from '../lib/firebase';
+import { collection, query, orderBy, onSnapshot, where, limit } from 'firebase/firestore';
 
 export default function OfertasPage() {
   const { coords, ubicacion } = useAgentes();
   const [ofertas, setOfertas] = useState([]);
+  const [preciosReales, setPreciosReales] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [filtro, setFiltro] = useState('todas');
   const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
+  const [tab, setTab] = useState('ofertas'); // ofertas | precios
 
+  // Cargar ofertas del scraper
   const cargarOfertas = async (forzar = false) => {
     setCargando(true);
     try {
@@ -27,11 +32,50 @@ export default function OfertasPage() {
     setCargando(false);
   };
 
+  // Cargar precios reales de Firestore
+  useEffect(() => {
+    const q = query(
+      collection(db, 'precios_historicos'),
+      orderBy('fecha', 'desc'),
+      limit(100)
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      const precios = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setPreciosReales(precios);
+    }, (error) => {
+      console.warn('Error cargando precios:', error);
+    });
+
+    return () => unsub();
+  }, []);
+
   useEffect(() => { cargarOfertas(); }, [coords]);
 
+  // Combinar ofertas del scraper + precios reales
+  const todasLasOfertas = [
+    ...ofertas.map(o => ({
+      ...o,
+      fuente: 'scraper',
+    })),
+    ...preciosReales.map(p => ({
+      producto: p.productoNombre || p.producto,
+      precio: p.precio,
+      tienda: p.tiendaNombre || 'Tienda',
+      region: p.departamento || p.distrito || '',
+      whatsapp: p.tienda?.whatsapp || null,
+      facebook: p.tienda?.facebook || null,
+      lat: p.lat,
+      lon: p.lon,
+      fecha: p.fecha,
+      fuente: 'comunidad',
+      distanciaKm: null,
+    })),
+  ];
+
   const ofertasFiltradas = filtro === 'todas'
-    ? ofertas
-    : ofertas.filter(o => o.region?.toLowerCase().includes(filtro));
+    ? todasLasOfertas
+    : todasLasOfertas.filter(o => o.region?.toLowerCase().includes(filtro));
 
   return (
     <div className="min-h-[calc(100vh-120px)]">
@@ -43,8 +87,8 @@ export default function OfertasPage() {
               <Tag size={24} />
             </div>
             <div>
-              <h1 className="text-xl font-bold">Ofertas del Día</h1>
-              <p className="text-orange-100 text-sm">Descuentos en tiendas agrícolas</p>
+              <h1 className="text-xl font-bold">Precios Agrícolas</h1>
+              <p className="text-orange-100 text-sm">Ofertas e historial de precios</p>
             </div>
           </div>
           <button onClick={() => cargarOfertas(true)}
@@ -52,6 +96,28 @@ export default function OfertasPage() {
             <RefreshCw size={18} className={cargando ? 'animate-spin' : ''} />
           </button>
         </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 bg-gray-100 rounded-xl p-1 mb-4">
+        <button
+          onClick={() => setTab('ofertas')}
+          className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
+            tab === 'ofertas' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500'
+          }`}
+        >
+          <Tag size={14} className="inline mr-1" />
+          Ofertas
+        </button>
+        <button
+          onClick={() => setTab('precios')}
+          className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
+            tab === 'precios' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500'
+          }`}
+        >
+          <Clock size={14} className="inline mr-1" />
+          Historial
+        </button>
       </div>
 
       {/* Filtros */}
@@ -69,13 +135,13 @@ export default function OfertasPage() {
       {cargando ? (
         <div className="flex flex-col items-center justify-center py-12">
           <Loader2 size={32} className="animate-spin text-primary mb-3" />
-          <p className="text-gray-500 text-sm">Buscando ofertas en tiendas...</p>
+          <p className="text-gray-500 text-sm">Buscando precios...</p>
         </div>
       ) : ofertasFiltradas.length === 0 ? (
         <div className="text-center py-12">
           <Tag size={40} className="text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500 font-medium">No hay ofertas disponibles</p>
-          <p className="text-gray-400 text-xs mt-1">Intenta recambiar o cambiar el filtro</p>
+          <p className="text-gray-500 font-medium">No hay precios disponibles</p>
+          <p className="text-gray-400 text-xs mt-1">Registra una tienda para agregar precios</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -94,17 +160,29 @@ export default function OfertasPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-orange-600 font-semibold mt-0.5">{o.descuento}</p>
+                  {o.descuento && (
+                    <p className="text-xs text-orange-600 font-semibold mt-0.5">{o.descuento}</p>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">
                     📍 {o.tienda} · {o.region} {o.distanciaKm ? `· ${o.distanciaKm}km` : ''}
                   </p>
+                  {o.fecha && (
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      📅 {new Date(o.fecha).toLocaleDateString('es-PE')}
+                    </p>
+                  )}
+                  {o.fuente === 'comunidad' && (
+                    <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full mt-1 inline-block">
+                      ✓ Precio verificado
+                    </span>
+                  )}
                 </div>
               </div>
 
               {/* Links de contacto */}
               <div className="flex gap-2 mt-3">
                 {o.whatsapp && (
-                  <a href={`https://wa.me/${o.whatsapp}?text=Hola, ¿tienen ${o.producto} en oferta?`}
+                  <a href={`https://wa.me/${o.whatsapp}?text=Hola, ¿cuánto cuesta ${o.producto}?`}
                     target="_blank" rel="noreferrer"
                     className="flex items-center gap-1 text-[10px] font-bold bg-green-500 text-white px-2.5 py-1.5 rounded-full hover:bg-green-600">
                     💬 WhatsApp
@@ -134,6 +212,21 @@ export default function OfertasPage() {
           Última actualización: {new Date(ultimaActualizacion).toLocaleString('es-PE')}
         </p>
       )}
+
+      {/* Stats */}
+      <div className="mt-6 bg-gray-50 rounded-2xl p-4">
+        <p className="text-xs font-bold text-gray-400 uppercase mb-2">📊 Estadísticas</p>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-white rounded-xl p-3 text-center">
+            <p className="text-lg font-bold text-orange-600">{ofertas.length}</p>
+            <p className="text-[10px] text-gray-400">Ofertas del día</p>
+          </div>
+          <div className="bg-white rounded-xl p-3 text-center">
+            <p className="text-lg font-bold text-green-600">{preciosReales.length}</p>
+            <p className="text-[10px] text-gray-400">Precios guardados</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
