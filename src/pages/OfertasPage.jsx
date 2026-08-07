@@ -22,7 +22,7 @@ export default function OfertasPage() {
       if (coords?.lon) params.append('lon', coords.lon);
       if (forzar) params.append('forzar', 'true');
 
-      const res = await fetch(`/api/ofertas-scraper?${params}`);
+      const res = await fetch(`/api/tiendas?type=ofertas&${params}`);
       const data = await res.json();
       setOfertas(data.ofertas || []);
       setUltimaActualizacion(data.ultimaActualizacion);

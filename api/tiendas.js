@@ -1,12 +1,13 @@
 /**
  * api/tiendas.js — API unificada de tiendas agrícolas
  *
- * Combina: scraper + comunidad + precios
+ * Combina: scraper + comunidad + precios + ofertas
  *
  * Endpoints:
  *   GET  /api/tiendas?type=scraper     → Scraping de tiendas
  *   GET  /api/tiendas?type=comunidad   → Tiendas de la comunidad
  *   GET  /api/tiendas?type=precios     → Precios históricos
+ *   GET  /api/tiendas?type=ofertas     → Ofertas del día
  *   POST /api/tiendas?type=comunidad   → Registrar tienda
  *   POST /api/tiendas?type=precios     → Guardar precio
  */
@@ -359,7 +360,65 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(400).json({ error: 'type inválido. Usa: scraper, comunidad, precios' });
+    // ── OFERTAS ──
+    if (type === 'ofertas') {
+      const lat = parseFloat(url.searchParams.get('lat'));
+      const lon = parseFloat(url.searchParams.get('lon'));
+      const cultivo = url.searchParams.get('cultivo') || '';
+
+      // Buscar precios recientes de tiendas cercanas
+      let query = db.collection('precios_historicos')
+        .orderBy('fecha', 'desc')
+        .limit(100);
+
+      const snap = await query.get();
+      let precios = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // Obtener info de tiendas
+      const tiendaIds = [...new Set(precios.map(p => p.tiendaId))];
+      const tiendasMap = {};
+      for (const id of tiendaIds) {
+        const doc = await db.collection('tiendas_comunidad').doc(id).get();
+        if (doc.exists) tiendasMap[id] = { id: doc.id, ...doc.data() };
+      }
+
+      // Formatear como ofertas
+      let ofertas = precios.map(p => ({
+        tienda: p.tiendaNombre || tiendasMap[p.tiendaId]?.nombre || 'Tienda',
+        producto: p.productoNombre || p.producto,
+        precio: p.precio,
+        region: p.departamento || tiendasMap[p.tiendaId]?.departamento || '',
+        whatsapp: tiendasMap[p.tiendaId]?.whatsapp || null,
+        facebook: tiendasMap[p.tiendaId]?.facebook || null,
+        lat: p.lat || tiendasMap[p.tiendaId]?.lat || null,
+        lon: p.lon || tiendasMap[p.tiendaId]?.lon || null,
+        fecha: p.fecha,
+        descuento: null,
+      }));
+
+      // Filtrar por distancia
+      if (lat && lon) {
+        ofertas = ofertas
+          .map(o => ({ ...o, distanciaKm: o.lat && o.lon ? Math.round(haversine(lat, lon, o.lat, o.lon) * 10) / 10 : null }))
+          .filter(o => o.distanciaKm === null || o.distanciaKm <= 100)
+          .sort((a, b) => (a.distanciaKm || 999) - (b.distanciaKm || 999));
+      }
+
+      // Filtrar por cultivo
+      if (cultivo) {
+        ofertas = ofertas.filter(o =>
+          o.producto?.toLowerCase().includes(cultivo.toLowerCase())
+        );
+      }
+
+      return res.status(200).json({
+        ofertas,
+        total: ofertas.length,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    return res.status(400).json({ error: 'type inválido. Usa: scraper, comunidad, precios, ofertas' });
   } catch (error) {
     console.error('Tiendas error:', error);
     return res.status(500).json({ error: error.message });
