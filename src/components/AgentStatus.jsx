@@ -17,6 +17,7 @@ import { AlertTriangle, CheckCircle, Store, Calendar, Bell, MapPin } from 'lucid
 export default function AgentStatus() {
   const {
     ubicacion,
+    coords,
     cultivoActivo,
     productoRecomendado,
     problemaDetectado,
