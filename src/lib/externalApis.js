@@ -41,7 +41,7 @@ export async function getWeather(lat, lon, label = '') {
 // ─── Pronóstico SENAMHI (scraping del sitio oficial) ────────────────────────
 export async function getPronosticoSENAMHI(lat, lon) {
   const params = new URLSearchParams({ lat: lat.toString(), lon: lon.toString() });
-  const res = await fetch(`/api/senamhi-scraper?${params}`);
+  const res = await fetch(`/api/senamhi?${params}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Error obteniendo pronóstico SENAMHI');
@@ -51,10 +51,13 @@ export async function getPronosticoSENAMHI(lat, lon) {
 
 // ─── Diagnóstico visual de plantas (crop.health → plant.id → HuggingFace) ────
 export async function identifyPlantDisease(compressedUrls) {
-  const res = await fetch('/api/plant-disease', {
+  const res = await fetch('/api/analizar-imagen', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ images: compressedUrls }),
+    body: JSON.stringify({
+      images: compressedUrls,
+      prompt: 'Identifica la enfermedad o plaga de esta planta. Diagnóstico específico.',
+    }),
   });
 
   // 204 = ningún proveedor configurado, no es error crítico

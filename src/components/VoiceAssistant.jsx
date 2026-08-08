@@ -55,7 +55,7 @@ export default function VoiceAssistant({ disabled = false, fullPage = false, age
   const enviarAI = useCallback(async (mensaje, hist) => {
     setProcesando(true);
     setError('');
-    const endpoint = agentType === 'ventas' ? '/api/voice-sales' : '/api/voice-assistant';
+    const endpoint = '/api/voice-assistant';
     try {
       const r = await fetch(endpoint, {
         method: 'POST',
@@ -67,6 +67,7 @@ export default function VoiceAssistant({ disabled = false, fullPage = false, age
           lon: coordenadas?.lon || coords?.lon || null,
           ubicacion: ubicacion || user?.ubicacion || null,
           nombre: user?.nombre || null,
+          agentType,
         }),
       });
       const data = await r.json();

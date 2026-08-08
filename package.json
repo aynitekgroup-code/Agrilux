@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "clean-api": "cmd /c cleanup-api.bat",
+    "deploy": "npm run build && git add -A && git commit -m \"deploy\" && git push"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",

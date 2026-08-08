@@ -249,6 +249,14 @@ async function obtenerAlertasNASA(lat, lon) {
   }
 }
 
+const SYSTEM_PROMPT_VENTAS = `Eres el asistente de ventas de Agrilux. Ayudas a los agricultores a encontrar productos agrícolas, comparar precios y tiendas cercanas.
+REGLAS:
+- Responde SIEMPRE en español peruano, tono cálido y campesino
+- Máximo 4 oraciones por respuesta
+- Cuando busque tiendas, menciona: nombre, distancia, precio y cómo contactarlos
+- Si no sabes algo, di "No tengo esa información, consulta con una tienda local"
+- Usa emojis moderados para hacer la conversación amigable`;
+
 const SYSTEM_PROMPT_BASE = `Eres PlaguIA, el asistente agrícola inteligente de Agrilux. Hablas como un agrónomo experto peruano, amigable y directo.
 
 REGLAS:
@@ -290,7 +298,7 @@ export default async function handler(req, res) {
   const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
   const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
-  const { mensaje, historial = [], lat, lon, ubicacion, nombre } = req.body;
+  const { mensaje, historial = [], lat, lon, ubicacion, nombre, agentType } = req.body;
   if (!mensaje) return res.status(400).json({ error: 'Falta el campo mensaje' });
 
   // ── Recopilar TODA la información disponible ──
@@ -445,7 +453,8 @@ export default async function handler(req, res) {
     ? `\n\nINFORMACIÓN EN TIEMPO REAL DEL AGRICULTOR:\n${contextoParts.join('\n')}\n\nUsa TODOS estos datos para tus recomendaciones. Si hay lluvia, prioriza fungicidas sistémicos. Si hay humedad alta, alerta sobre hongos. Si está frío, sugiere preventivos. Si el suelo es ácido, ajusta dosis. Menciona el pronóstico SENAMHI si el usuario pregunta por el clima.`
     : '';
 
-  const systemPrompt = SYSTEM_PROMPT_BASE + contextoCompleto;
+  const basePrompt = agentType === 'ventas' ? SYSTEM_PROMPT_VENTAS : SYSTEM_PROMPT_BASE;
+  const systemPrompt = basePrompt + contextoCompleto;
 
   // ── Construir historial de conversación ──
   const messages = [
