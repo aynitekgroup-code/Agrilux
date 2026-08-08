@@ -42,13 +42,23 @@ export default function Layout({ children }) {
     setAdminModal(true);
   };
 
-  const handleAdminLogin = () => {
-    if (adminClave === import.meta.env.VITE_ADMIN_KEY) {
-      sessionStorage.setItem('agrilux_admin', 'ok');
-      setAdminModal(false);
-      navigate('/admin');
-    } else {
-      setAdminError('Clave incorrecta');
+  const handleAdminLogin = async () => {
+    try {
+      const res = await fetch('/api/admin-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clave: adminClave }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        sessionStorage.setItem('agrilux_admin', 'ok');
+        setAdminModal(false);
+        navigate('/admin');
+      } else {
+        setAdminError('Clave incorrecta');
+      }
+    } catch {
+      setAdminError('Error de conexión');
     }
   };
 

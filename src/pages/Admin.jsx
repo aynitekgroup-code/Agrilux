@@ -131,14 +131,21 @@ function LoginAdmin({ onAcceso }) {
 
   const intentar = async () => {
     setError('');
-    const claveCorrecta = import.meta.env.VITE_ADMIN_KEY;
-    if (!claveCorrecta) { setError('VITE_ADMIN_KEY no está configurada en .env'); return; }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 400));
-    if (clave === claveCorrecta) {
-      onAcceso();
-    } else {
-      setError('Clave incorrecta. Intenta de nuevo.');
+    try {
+      const res = await fetch('/api/admin-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clave }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        onAcceso();
+      } else {
+        setError('Clave incorrecta. Intenta de nuevo.');
+      }
+    } catch {
+      setError('Error de conexión. Intenta de nuevo.');
     }
     setLoading(false);
   };
@@ -224,7 +231,6 @@ function LoginAdmin({ onAcceso }) {
 // MODAL AGREGAR USUARIO
 // ═══════════════════════════════════════════════════════════════════════════════
 function ModalAgregarUsuario({ onCerrar, onAgregado }) {
-  const { nombreToEmail } = useAuth();
   const [form, setForm]   = useState({ nombre: '', rol: 'agricultor', celular: '', ubicacion: '' });
   const [pass, setPass]   = useState('agrilux2024');
   const [verPass, setVer] = useState(false);

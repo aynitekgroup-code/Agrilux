@@ -1,0 +1,20 @@
+{
+  "appId": "com.agrilux.app",
+  "appName": "Agrilux",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "url": "https://www.vitalfarmbright.store",
+    "cleartext": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#22C55E",
+      "showSpinner": false
+    },
+    "Geolocation": {
+      "highAccuracy": true
+    }
+  }
+}

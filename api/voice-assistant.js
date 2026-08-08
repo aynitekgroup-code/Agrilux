@@ -237,7 +237,7 @@ async function obtenerSuelo(lat, lon) {
 async function obtenerAlertasNASA(lat, lon) {
   try {
     const r = await fetch(
-      `https://firms.modaps.eosdis.nasa.gov/api/area/csv/OPENKEY/VIIRS_SNPP_NRT/${lon - 0.1},${lat - 0.1},${lon + 0.1},${lat + 0.1}/1`,
+      `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${process.env.NASA_EARTHDATA_KEY || 'OPENKEY'}/VIIRS_SNPP_NRT/${lon - 0.1},${lat - 0.1},${lon + 0.1},${lat + 0.1}/1`,
       { signal: AbortSignal.timeout(5000) }
     );
     if (!r.ok) return null;
@@ -417,8 +417,8 @@ export default async function handler(req, res) {
       tiendasResult = await busquedaRes.json();
 
       if (tiendasResult.tiendas?.length > 0) {
-        const precioRef = preciosData?.precioReferencia;
-        const promedio = preciosData?.promedio;
+        const precioRef = tiendasResult?.precioReferencia;
+        const promedio = tiendasResult?.promedio;
         
         let precioInfo = '';
         if (precioRef) precioInfo += `Precio de referencia: S/ ${precioRef.precio} (${precioRef.fuente}). `;
