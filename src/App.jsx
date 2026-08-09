@@ -11,6 +11,7 @@ import CicloCultivo from './pages/CicloCultivo';
 import VozPage from './pages/VozPage';
 import OfertasPage from './pages/OfertasPage';
 import Admin from './pages/Admin';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import { Clock, Mail, LogOut } from 'lucide-react';
 
 function PantallaPendiente() {
@@ -80,11 +81,12 @@ function AppRoutes() {
     </div>
   );
 
-  // Admin routes — always accessible
-  if (window.location.pathname === '/admin') {
+  // Public routes — always accessible
+  if (window.location.pathname === '/admin' || window.location.pathname === '/privacy') {
     return (
       <Routes>
         <Route path="/admin" element={<Admin />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
       </Routes>
     );
   }
@@ -100,6 +102,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/admin" element={<Admin />} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/registro" element={<Registro />} />
 
       <Route path="*" element={

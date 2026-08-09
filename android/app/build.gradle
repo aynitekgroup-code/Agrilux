@@ -36,11 +36,18 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled true
-            shrinkResources true
+            minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
         }
+    }
+}
+
+configurations.all {
+    resolutionStrategy {
+        force 'org.jetbrains.kotlin:kotlin-stdlib:2.0.21'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.0.21'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.0.21'
     }
 }
 
