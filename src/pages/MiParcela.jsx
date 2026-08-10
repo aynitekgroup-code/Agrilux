@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Camera, Leaf, Calendar, TrendingUp, Loader2, Map, Download } from 'lucide-react';
+import { Plus, Camera, Leaf, Calendar, TrendingUp, Loader2, Map, Download, Volume2, VolumeX, Satellite } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { CULTIVOS } from '../lib/constants';
 import { db } from '../lib/firebase';
@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import MapaParcela from '../components/MapaParcela';
 import { exportarParcelasExcel } from '../lib/exportExcel';
 import { GraficoMonitoreo } from '../components/GraficosCultivo';
+import NdviParcela from '../components/NdviParcela';
 
 export default function MiParcela() {
   const { user } = useAuth();
@@ -28,6 +29,8 @@ export default function MiParcela() {
   const [abrirMapa, setAbrirMapa] = useState(false);
   const [poligono, setPoligono] = useState(null);
   const [riesgoParcela, setRiesgoParcela] = useState(null);
+  const [hablando, setHablando] = useState(false);
+  const [mostrarNdvi, setMostrarNdvi] = useState(false);
 
   // Auto-fill GPS con coordenadas exactas del usuario al abrir modal
   useEffect(() => {
@@ -180,6 +183,42 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
     return Math.floor((new Date() - new Date(fecha)) / (1000 * 60 * 60 * 24));
   };
 
+  const hablarParcela = () => {
+    if (!parcelaActiva) return;
+    if (hablando) {
+      window.speechSynthesis?.cancel();
+      setHablando(false);
+      return;
+    }
+    const dias = diasDesdeSiembra(parcelaActiva.fechaSiembra);
+    const texto = `Parcela ${parcelaActiva.nombre}. 
+      Cultivo: ${parcelaActiva.cultivoNombre}. 
+      ${parcelaActiva.variedad ? `Variedad: ${parcelaActiva.variedad}.` : ''}
+      Días desde siembra: ${dias} días.
+      Área: ${parcelaActiva.area || 'no especificada'} hectáreas.
+      ${riesgoParcela ? `Nivel de riesgo: ${riesgoParcela.riesgo?.nivel || 'bajo'}.` : ''}
+      ${riesgoParcela?.alertas?.length > 0 ? `Alertas: ${riesgoParcela.alertas.map(a => a.nombre).join(', ')}.` : ''}`;
+    
+    const utter = new SpeechSynthesisUtterance(texto);
+    utter.lang = 'es-PE';
+    utter.rate = 0.9;
+    utter.pitch = 1;
+    utter.onstart = () => setHablando(true);
+    utter.onend = () => setHablando(false);
+    utter.onerror = () => setHablando(false);
+    window.speechSynthesis?.speak(utter);
+  };
+
+  const obtenerCoordenadas = () => {
+    if (parcelaActiva?.gps) {
+      const parts = String(parcelaActiva.gps).split(',').map(s => parseFloat(s.trim()));
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        return { lat: parts[0], lon: parts[1] };
+      }
+    }
+    return { lat: user?.coords?.lat || -12.05, lon: user?.coords?.lon || -77.04 };
+  };
+
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen">
       <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
@@ -327,6 +366,30 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                   </div>
                   <span className="text-amber-400">›</span>
                 </button>
+
+                {/* Agente de voz + NDVI */}
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={hablarParcela}
+                    className={`rounded-2xl p-4 flex flex-col items-center gap-2 transition-all ${
+                      hablando ? 'bg-primary text-white shadow-lg' : 'bg-white border border-gray-100 text-gray-700 hover:border-primary'
+                    }`}>
+                    {hablando ? <VolumeX size={24} /> : <Volume2 size={24} />}
+                    <p className="text-xs font-bold">{hablando ? 'Detener' : 'Escuchar parcela'}</p>
+                  </button>
+                  <button onClick={() => setMostrarNdvi(!mostrarNdvi)}
+                    className={`rounded-2xl p-4 flex flex-col items-center gap-2 transition-all ${
+                      mostrarNdvi ? 'bg-green-600 text-white shadow-lg' : 'bg-white border border-gray-100 text-gray-700 hover:border-green-500'
+                    }`}>
+                    <Satellite size={24} />
+                    <p className="text-xs font-bold">{mostrarNdvi ? 'Ocultar NDVI' : 'Ver NDVI'}</p>
+                  </button>
+                </div>
+
+                {/* NDVI satelital */}
+                {mostrarNdvi && (() => {
+                  const coords = obtenerCoordenadas();
+                  return <NdviParcela lat={coords.lat} lon={coords.lon} cultivo={parcelaActiva.cultivoNombre} nombre={parcelaActiva.nombre} />;
+                })()}
 
                 {/* Monitoreo */}
                 <div className="bg-white rounded-2xl p-4 shadow-sm">
