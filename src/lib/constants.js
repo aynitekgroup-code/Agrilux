@@ -120,10 +120,12 @@ export const CULTIVOS = [
     nombre: 'Caña de azúcar',
     emoji: '🎋',
     categoria: 'industrial',
-    variedades: ['H32-8560', 'RB72-454', 'H57-5174', 'NA56', 'CC01-941', 'SP71-6949', 'CP52-43', 'H59-3774'],
+    variedades: ['H32-8560', 'RB72-454', 'RB86', 'RB96', 'H57-5174', 'NA56', 'CC01-941', 'SP71-6949', 'CP52-43', 'H59-3774'],
     infoVariedades: [
       { nombre: 'H32-8560', descripcion: 'Variedad dominante en Costa Norte. Alta sacarosa, tolera salinidad moderada. Ciclo 12-16 meses.', rendimiento: '120-180 ton/ha', sacarosa: '14-16%' },
       { nombre: 'RB72-454', descripcion: 'Alta productividad, resistente a plagas comunes. Ideal para zonas de riego intensivo.', rendimiento: '130-200 ton/ha', sacarosa: '13-15%' },
+      { nombre: 'RB86', descripcion: 'Variedad brasileña de alto rendimiento. Tolerante a enfermedades comunes. Excelente para zonas costeras.', rendimiento: '140-200 ton/ha', sacarosa: '14-16%' },
+      { nombre: 'RB96', descripcion: 'Variedad mejorada con alta sacarosa. Resistente a roya y mosaico. Adaptada a diferentes climas.', rendimiento: '150-210 ton/ha', sacarosa: '15-17%' },
       { nombre: 'H57-5174', descripcion: 'Tolerante a alta salinidad. Usada en campos con problemas de salitre. Demostrada resistencia.', rendimiento: '100-160 ton/ha', sacarosa: '13-14%' },
       { nombre: 'NA56', descripcion: 'Tolerante a sequía. Adaptada a zonas marginales.', rendimiento: '80-120 ton/ha', sacarosa: '12-14%' },
       { nombre: 'CC01-941', descripcion: 'Alta germinación, crecimiento rápido.', rendimiento: '100-150 ton/ha', sacarosa: '13-15%' },
