@@ -249,12 +249,14 @@ async function obtenerAlertasNASA(lat, lon) {
   }
 }
 
-const SYSTEM_PROMPT_VENTAS = `Eres el asistente de ventas de Agrilux. Ayudas a los agricultores a encontrar productos agrícolas, comparar precios y tiendas cercanas.
+const SYSTEM_PROMPT_VENTAS = `Eres el agente de ventas de Agrilux. Ayudas a los agricultores a encontrar productos agrícolas en TIENDAS REGISTRADAS EN AGRILUX únicamente.
 REGLAS:
 - Responde SIEMPRE en español peruano, tono cálido y campesino
 - Máximo 4 oraciones por respuesta
-- Cuando busque tiendas, menciona: nombre, distancia, precio y cómo contactarlos
-- Si no sabes algo, di "No tengo esa información, consulta con una tienda local"
+- SOLO menciona tiendas y ofertas que aparezcan en "OFERTAS DE TIENDAS REGISTRADAS" del contexto
+- NUNCA inventes tiendas, precios ni ofertas que no estén en el contexto
+- Cuando recomiendes, menciona: producto, tienda, precio en S/, distancia y WhatsApp si está disponible
+- Si no hay ofertas registradas para lo que busca, di que no hay tiendas registradas con ese producto y sugiere registrar una tienda en Agrilux
 - Usa emojis moderados para hacer la conversación amigable`;
 
 const SYSTEM_PROMPT_BASE = `Eres PlaguIA, el asistente agrícola inteligente de Agrilux. Hablas como un agrónomo experto peruano, amigable y directo.
@@ -298,7 +300,7 @@ export default async function handler(req, res) {
   const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
   const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
-  const { mensaje, historial = [], lat, lon, ubicacion, nombre, agentType } = req.body;
+  const { mensaje, historial = [], lat, lon, ubicacion, nombre, agentType, ofertasRegistradas = [], productoRecomendado } = req.body;
   if (!mensaje) return res.status(400).json({ error: 'Falta el campo mensaje' });
 
   // ── Recopilar TODA la información disponible ──
@@ -401,11 +403,53 @@ export default async function handler(req, res) {
     } catch (e) { /* silencioso */ }
   }
 
+  // ── Ofertas de tiendas registradas (siempre para agente ventas) ──
+  let ofertasActivas = ofertasRegistradas;
+  if (agentType === 'ventas' && ofertasActivas.length === 0 && lat && lon) {
+    try {
+      const host = req.headers.host || 'localhost';
+      const ofRes = await fetch(`https://${host}/api/tiendas?type=ofertas&lat=${lat}&lon=${lon}`);
+      const ofData = await ofRes.json();
+      ofertasActivas = ofData.ofertas || [];
+    } catch { /* silencioso */ }
+  }
+
+  if (ofertasActivas.length > 0) {
+    const lista = ofertasActivas.slice(0, 10).map((o, i) => {
+      const dist = o.distanciaKm != null ? `, ${o.distanciaKm}km` : '';
+      const precio = o.precio != null ? `S/ ${o.precio}` : 'consultar';
+      const wa = o.whatsapp ? `, WhatsApp: 51${String(o.whatsapp).replace(/\D/g, '')}` : '';
+      return `${i + 1}. ${o.producto} — ${o.tienda} (${o.region || 'Perú'})${dist} — ${precio}${wa}`;
+    }).join('\n');
+    contextoParts.push(`OFERTAS DE TIENDAS REGISTRADAS EN AGRILUX (${ofertasActivas.length}):\n${lista}`);
+  } else if (agentType === 'ventas') {
+    contextoParts.push('OFERTAS DE TIENDAS REGISTRADAS: ninguna disponible en este momento.');
+  }
+
+  if (productoRecomendado) {
+    contextoParts.push(`PRODUCTO RECOMENDADO POR DIAGNÓSTICO: ${productoRecomendado}`);
+  }
+
   // ── Detectar si el usuario busca tiendas o productos ──
-  const buscaTienda = /comprar|tienda|tiendas|dónde|donde|conseguir|adquirir|mercado|ferretería|agro|insumo|producto|oferta|ofertas|descuento|precio|precios|vende|comercio|minimarket|bodega/i.test(mensaje);
+  const buscaTienda = /comprar|tienda|tiendas|dónde|donde|conseguir|adquirir|mercado|oferta|ofertas|descuento|precio|precios|vende|comercio|insumo|producto/i.test(mensaje);
   let tiendasResult = null;
-  
-  if (buscaTienda && lat && lon) {
+
+  if (buscaTienda && agentType === 'ventas' && ofertasActivas.length > 0) {
+    const termino = mensaje.toLowerCase();
+    const coinciden = ofertasActivas.filter(o =>
+      termino.includes((o.producto || '').toLowerCase().slice(0, 4)) ||
+      (o.producto || '').toLowerCase().split(/\s+/).some(p => p.length > 3 && termino.includes(p))
+    );
+    if (coinciden.length > 0) {
+      tiendasResult = { tiendas: coinciden.map(o => ({
+        nombre: o.tienda,
+        producto: o.producto,
+        precio: o.precio,
+        distanciaKm: o.distanciaKm,
+        whatsapp: o.whatsapp ? `https://wa.me/51${String(o.whatsapp).replace(/\D/g, '')}` : null,
+      })) };
+    }
+  } else if (buscaTienda && agentType !== 'ventas' && lat && lon) {
     // Extraer nombre del producto del mensaje
     const productoMatch = mensaje.match(/comprar\s+(.+?)(?:\s+en|\s+cerca|\s+de|\s+por|\s+para|\?|$)/i)
       || mensaje.match(/tienda\s+(?:de\s+)?(.+?)(?:\s+en|\s+cerca|\s+de|\s+por|\s+para|\?|$)/i)

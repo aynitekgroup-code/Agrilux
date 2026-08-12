@@ -4,12 +4,12 @@ import { useAuth } from '../lib/AuthContext';
 import { useAgentes } from '../lib/AgentContext';
 import { guardarConversacion } from '../lib/learningSystem';
 
-const WELCOME_VENTAS = '¡Hola! Soy tu asistente de ventas agrícolas. Puedo ayudarte a encontrar productos, comparar precios y tiendas cercanas. ¿Qué necesitas?';
+const WELCOME_VENTAS = '¡Hola! Soy tu agente de ventas Agrilux. Conozco las ofertas de tiendas registradas en la app. Pregúntame por productos, precios o dónde comprar cerca. ¿Qué necesitas?';
 const WELCOME_PLAGAS = '¡Hola! Soy tu asistente técnico. Puedo ayudarte con diagnóstico de plagas, recomendaciones de productos y consejos para tus cultivos. ¿En qué te puedo ayudar?';
 
 export default function VoiceAssistant({ disabled = false, fullPage = false, agentType = 'ventas' }) {
   const { user } = useAuth();
-  const { ubicacion, coords } = useAgentes();
+  const { ubicacion, coords, ofertasRegistradas, productoRecomendado } = useAgentes();
   const [escuchando, setEscuchando]       = useState(false);
   const [procesando, setProcesando]       = useState(false);
   const [transcripcion, setTranscripcion] = useState('');
@@ -68,6 +68,8 @@ export default function VoiceAssistant({ disabled = false, fullPage = false, age
           ubicacion: ubicacion || user?.ubicacion || null,
           nombre: user?.nombre || null,
           agentType,
+          ofertasRegistradas: ofertasRegistradas.slice(0, 12),
+          productoRecomendado: productoRecomendado?.nombre || null,
         }),
       });
       const data = await r.json();
@@ -83,7 +85,7 @@ export default function VoiceAssistant({ disabled = false, fullPage = false, age
     } finally {
       setProcesando(false);
     }
-  }, [coordenadas, user, agentType, ubicacion, coords, leerTexto]);
+  }, [coordenadas, user, agentType, ubicacion, coords, leerTexto, ofertasRegistradas, productoRecomendado]);
 
   const iniciarEscucha = useCallback(() => {
     setError('');

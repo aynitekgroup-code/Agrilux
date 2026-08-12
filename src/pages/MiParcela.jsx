@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Camera, Leaf, Calendar, TrendingUp, Loader2, Map, Download, Volume2, VolumeX, Satellite } from 'lucide-react';
+import { Plus, Camera, Leaf, Calendar, TrendingUp, Loader2, Map, Download, Volume2, VolumeX, Satellite, Trash2 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { CULTIVOS } from '../lib/constants';
 import { db } from '../lib/firebase';
-import { collection, addDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { invokeGemini } from '../lib/gemini';
 import { useNavigate } from 'react-router-dom';
 import MapaParcela from '../components/MapaParcela';
 import { exportarParcelasExcel } from '../lib/exportExcel';
 import { GraficoMonitoreo } from '../components/GraficosCultivo';
 import NdviParcela from '../components/NdviParcela';
+import VistaMapaParcela from '../components/VistaMapaParcela';
 
 export default function MiParcela() {
   const { user } = useAuth();
@@ -31,6 +32,7 @@ export default function MiParcela() {
   const [riesgoParcela, setRiesgoParcela] = useState(null);
   const [hablando, setHablando] = useState(false);
   const [mostrarNdvi, setMostrarNdvi] = useState(false);
+  const [mostrarMapa, setMostrarMapa] = useState(false);
 
   // Auto-fill GPS con coordenadas exactas del usuario al abrir modal
   useEffect(() => {
@@ -120,6 +122,26 @@ export default function MiParcela() {
       alert('Error al crear parcela: ' + e.message); 
     }
     setGuardando(false);
+  };
+
+  const eliminarParcela = async () => {
+    if (!parcelaActiva) return;
+    if (!confirm(`¿Eliminar la parcela "${parcelaActiva.nombre}"? Se borrarán también sus registros de monitoreo.`)) return;
+    try {
+      const regQ = query(collection(db, 'registrosParcela'), where('parcelaId', '==', parcelaActiva.id));
+      const regSnap = await getDocs(regQ);
+      await Promise.all(regSnap.docs.map(d => deleteDoc(d.ref)));
+      await deleteDoc(doc(db, 'parcelas', parcelaActiva.id));
+      const restantes = parcelas.filter(p => p.id !== parcelaActiva.id);
+      setParcelas(restantes);
+      setParcelaActiva(restantes[0] || null);
+      setRegistros([]);
+      setRecomendacion('');
+      if (restantes[0]) cargarRegistros(restantes[0].id);
+    } catch (e) {
+      console.error('Error eliminar parcela:', e);
+      alert('Error al eliminar parcela: ' + e.message);
+    }
   };
 
   const registrarMonitoreo = async (e) => {
@@ -282,6 +304,12 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                     </div>
                     <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-full">Activa</span>
                   </div>
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={eliminarParcela}
+                      className="flex items-center gap-1.5 bg-red-50 text-red-600 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-red-100 transition-colors">
+                      <Trash2 size={14} /> Eliminar parcela
+                    </button>
+                  </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div className="bg-gray-50 rounded-xl p-2.5 text-center">
                       <Calendar size={16} className="mx-auto text-primary mb-1" />
@@ -367,23 +395,35 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                   <span className="text-amber-400">›</span>
                 </button>
 
-                {/* Agente de voz + NDVI */}
-                <div className="grid grid-cols-2 gap-3">
+                {/* Agente de voz + Mapa + NDVI */}
+                <div className="grid grid-cols-3 gap-2">
                   <button onClick={hablarParcela}
                     className={`rounded-2xl p-4 flex flex-col items-center gap-2 transition-all ${
                       hablando ? 'bg-primary text-white shadow-lg' : 'bg-white border border-gray-100 text-gray-700 hover:border-primary'
                     }`}>
-                    {hablando ? <VolumeX size={24} /> : <Volume2 size={24} />}
-                    <p className="text-xs font-bold">{hablando ? 'Detener' : 'Escuchar parcela'}</p>
+                    {hablando ? <VolumeX size={22} /> : <Volume2 size={22} />}
+                    <p className="text-xs font-bold text-center">{hablando ? 'Detener' : 'Escuchar'}</p>
+                  </button>
+                  <button onClick={() => setMostrarMapa(!mostrarMapa)}
+                    className={`rounded-2xl p-4 flex flex-col items-center gap-2 transition-all ${
+                      mostrarMapa ? 'bg-blue-600 text-white shadow-lg' : 'bg-white border border-gray-100 text-gray-700 hover:border-blue-500'
+                    }`}>
+                    <Map size={22} />
+                    <p className="text-xs font-bold text-center">{mostrarMapa ? 'Ocultar mapa' : 'Ver mapa'}</p>
                   </button>
                   <button onClick={() => setMostrarNdvi(!mostrarNdvi)}
                     className={`rounded-2xl p-4 flex flex-col items-center gap-2 transition-all ${
                       mostrarNdvi ? 'bg-green-600 text-white shadow-lg' : 'bg-white border border-gray-100 text-gray-700 hover:border-green-500'
                     }`}>
-                    <Satellite size={24} />
-                    <p className="text-xs font-bold">{mostrarNdvi ? 'Ocultar NDVI' : 'Ver NDVI'}</p>
+                    <Satellite size={22} />
+                    <p className="text-xs font-bold text-center">{mostrarNdvi ? 'Ocultar NDVI' : 'Ver NDVI'}</p>
                   </button>
                 </div>
+
+                {/* Mapa de la parcela */}
+                {mostrarMapa && parcelaActiva.coordenadas?.length >= 3 && (
+                  <VistaMapaParcela coordenadas={parcelaActiva.coordenadas} nombre={parcelaActiva.nombre} />
+                )}
 
                 {/* NDVI satelital */}
                 {mostrarNdvi && (() => {

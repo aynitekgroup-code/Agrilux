@@ -1,18 +1,16 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, Leaf, Calendar, Mic, Tag, LogOut, Menu, X, MapPin, Shield, User, Store } from 'lucide-react';
+import { Camera, Leaf, Calendar, Store, LogOut, Menu, X, MapPin, Shield, User } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import SelectorUbicacion from './SelectorUbicacion';
 import OnlineStatus from './OnlineStatus';
 import AgentStatus from './AgentStatus';
-import RegistroTienda from './RegistroTienda';
 
 const navItems = [
   { path: '/',        icon: Camera,  label: 'Diagnóstico' },
   { path: '/ciclo',   icon: Calendar, label: 'Ciclo' },
   { path: '/parcela', icon: Leaf,    label: 'Parcela' },
-  { path: '/ofertas', icon: Tag,     label: 'Ofertas' },
-  { path: '/voz',     icon: Mic,     label: 'Voz' },
+  { path: '/mercado', icon: Store,   label: 'Mercado' },
 ];
 
 export default function Layout({ children }) {
@@ -24,7 +22,6 @@ export default function Layout({ children }) {
   const [adminModal, setAdminModal] = useState(false);
   const [adminClave, setAdminClave] = useState('');
   const [adminError, setAdminError] = useState('');
-  const [mostrarRegistroTienda, setMostrarRegistroTienda] = useState(false);
 
   const ADMIN_EMAIL = 'jose.llanos.d@uni.pe';
   const esAdmin = user?.email === ADMIN_EMAIL;
@@ -95,10 +92,10 @@ export default function Layout({ children }) {
                 Cambiar ubicación
               </button>
               <button
-                onClick={() => { setMenuOpen(false); setMostrarRegistroTienda(true); }}
+                onClick={() => { setMenuOpen(false); navigate('/mercado?tab=mitienda'); }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-green-50 hover:text-green-700 transition-colors text-sm font-medium rounded-lg">
                 <Store size={18} />
-                Registrar mi tienda
+                Mi tienda / Ofertas
               </button>
               {user ? (
                 <>
@@ -190,15 +187,6 @@ export default function Layout({ children }) {
         </div>
       )}
 
-      {mostrarRegistroTienda && (
-        <RegistroTienda
-          onCerrado={() => setMostrarRegistroTienda(false)}
-          onRegistrada={(tienda) => {
-            console.log('Tienda registrada:', tienda);
-            setMostrarRegistroTienda(false);
-          }}
-        />
-      )}
     </div>
   );
 }

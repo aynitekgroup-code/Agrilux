@@ -18,6 +18,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
+import { cargarOfertasRegistradas } from './ofertasRegistradas';
 
 const AgentContext = createContext();
 
@@ -31,6 +32,7 @@ export function AgentProvider({ children }) {
   const [productoRecomendado, setProductoRecomendado] = useState(null);
   const [problemaDetectado, setProblemaDetectado] = useState(null);
   const [tiendasCercanas, setTiendasCercanas] = useState([]);
+  const [ofertasRegistradas, setOfertasRegistradas] = useState([]);
   const [alertasActivas, setAlertasActivas] = useState([]);
   const [historial, setHistorial] = useState([]);
 
@@ -65,6 +67,24 @@ export function AgentProvider({ children }) {
       }
     }
   }, [user?.ubicacion, user?.coords]);
+
+  // ── Cargar ofertas de tiendas registradas ──
+  const recargarOfertas = useCallback(async () => {
+    try {
+      const data = await cargarOfertasRegistradas({
+        lat: coords?.lat,
+        lon: coords?.lon,
+        cultivo: cultivoActivo?.id || '',
+      });
+      setOfertasRegistradas(data.ofertas || []);
+    } catch {
+      setOfertasRegistradas([]);
+    }
+  }, [coords?.lat, coords?.lon, cultivoActivo?.id]);
+
+  useEffect(() => {
+    recargarOfertas();
+  }, [recargarOfertas]);
 
   // ── Funciones para sincronizar entre agentes ──
 
@@ -158,10 +178,11 @@ export function AgentProvider({ children }) {
       productoRecomendado: productoRecomendado?.nombre,
       problemaDetectado: problemaDetectado?.nombre,
       tiendasCercanas: tiendasCercanas.length,
+      ofertasRegistradas: ofertasRegistradas.length,
       alertasActivas: alertasActivas.length,
       historial: historial.slice(-5), // Últimos 5 eventos
     };
-  }, [ubicacion, coords, cultivoActivo, productoRecomendado, problemaDetectado, tiendasCercanas, alertasActivas, historial]);
+  }, [ubicacion, coords, cultivoActivo, productoRecomendado, problemaDetectado, tiendasCercanas, ofertasRegistradas, alertasActivas, historial]);
 
   const value = {
     // Estado
@@ -171,6 +192,7 @@ export function AgentProvider({ children }) {
     productoRecomendado,
     problemaDetectado,
     tiendasCercanas,
+    ofertasRegistradas,
     alertasActivas,
     historial,
     
@@ -179,6 +201,7 @@ export function AgentProvider({ children }) {
     reportarRecomendacionCiclo,
     buscarProducto,
     tiendasEncontradas,
+    recargarOfertas,
     actualizarUbicacion,
     seleccionarCultivo,
     agregarAlerta,

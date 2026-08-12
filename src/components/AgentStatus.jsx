@@ -22,12 +22,13 @@ export default function AgentStatus() {
     productoRecomendado,
     problemaDetectado,
     tiendasCercanas,
+    ofertasRegistradas,
     alertasActivas,
     historial,
   } = useAgentes();
 
   // No mostrar si no hay nada relevante
-  const tieneActividad = problemaDetectado || productoRecomendado || tiendasCercanas.length > 0 || alertasActivas.length > 0;
+  const tieneActividad = problemaDetectado || productoRecomendado || tiendasCercanas.length > 0 || ofertasRegistradas.length > 0 || alertasActivas.length > 0;
   if (!tieneActividad) return null;
 
   return (
@@ -81,6 +82,22 @@ export default function AgentStatus() {
             </div>
             <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">
               Producto
+            </span>
+          </div>
+        )}
+
+        {/* Ofertas registradas */}
+        {ofertasRegistradas.length > 0 && (
+          <div className="flex items-center gap-2 bg-white rounded-xl px-3 py-2 border border-gray-100">
+            <Store size={14} className="text-emerald-500 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-gray-700">
+                {ofertasRegistradas.length} ofertas de tiendas registradas
+              </p>
+              <p className="text-[10px] text-gray-400">Mercado Agrilux</p>
+            </div>
+            <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">
+              Ofertas
             </span>
           </div>
         )}

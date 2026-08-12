@@ -8,6 +8,7 @@
  *   GET  /api/tiendas?type=comunidad   → Tiendas de la comunidad
  *   GET  /api/tiendas?type=precios     → Precios históricos
  *   GET  /api/tiendas?type=ofertas     → Ofertas del día
+ *   GET  /api/tiendas?type=admin&key=X → Ver tiendas (admin)
  *   POST /api/tiendas?type=comunidad   → Registrar tienda
  *   POST /api/tiendas?type=precios     → Guardar precio
  */
@@ -418,7 +419,23 @@ export default async function handler(req, res) {
       });
     }
 
-    return res.status(400).json({ error: 'type inválido. Usa: scraper, comunidad, precios, ofertas' });
+    // ── ADMIN: Ver tiendas registradas ──
+    if (type === 'admin') {
+      const key = url.searchParams.get('key');
+      if (key !== process.env.ADMIN_KEY) {
+        return res.status(403).json({ error: 'Clave incorrecta' });
+      }
+
+      const snap = await db.collection('tiendas_comunidad').orderBy('createdAt', 'desc').get();
+      const tiendas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      return res.status(200).json({
+        tiendas,
+        total: tiendas.length,
+      });
+    }
+
+    return res.status(400).json({ error: 'type inválido. Usa: scraper, comunidad, precios, ofertas, admin' });
   } catch (error) {
     console.error('Tiendas error:', error);
     return res.status(500).json({ error: error.message });
