@@ -24,6 +24,7 @@ import { SISTEMA_PROMPT, CHAT_SYSTEM, ANALISIS_SCHEMA } from './diagnostico/diag
 import SelectorUbicacion  from '../components/SelectorUbicacion';
 import VoiceAssistant     from '../components/VoiceAssistant';
 import BuscadorInsumos    from '../components/BuscadorInsumos';
+import IndicesSatelitalesPanel from '../components/IndicesSatelitalesPanel';
 import { isOnline, guardarDiagnosticoOffline, guardarClima, obtenerClimaCacheado } from '../lib/offlineStorage';
 import { 
   guardarHistorialClinico, 
@@ -127,7 +128,7 @@ export default function Diagnostico({ onPlagaDetectada }) {
         }
         if (soilRes.status === 'fulfilled')  setSoilData(soilRes.value);
         if (nasaRes.status === 'fulfilled')  setNasaAlerts(nasaRes.value);
-        getSentinelNDVI(lat, lon, 2)
+        getSentinelNDVI(lat, lon, 2, cultivo?.id || cultivo?.nombre || '')
           .then(setSentinelNDVI)
           .catch(() => {});
         getPronosticoSENAMHI(lat, lon)
@@ -141,7 +142,7 @@ export default function Diagnostico({ onPlagaDetectada }) {
     };
 
     cargarDatos();
-  }, [coords?.lat, coords?.lon]);
+  }, [coords?.lat, coords?.lon, cultivo?.id]);
 
   // Prefill de ubicación visible (si el usuario la tiene en perfil)
   useEffect(() => {
@@ -579,41 +580,12 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
         )}
       </div>
 
-      {/* NDVI satelital */}
+      {/* Índices satelitales (NDVI, MSAVI2, NDRE) */}
       {(sentinelNDVI?.ndvi_image || sentinelNDVI?.satellite_image || sentinelNDVI?.ndvi_promedio != null) && (
         <div className="px-4 py-4">
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">🛰 Análisis satelital de tu parcela</p>
-            {(sentinelNDVI?.ndvi_image || sentinelNDVI?.satellite_image) && (
-              <img src={sentinelNDVI.ndvi_image || sentinelNDVI.satellite_image} alt="Satélite"
-                className="w-full rounded-xl border border-gray-100 mb-3" />
-            )}
-            {sentinelNDVI?.ndvi_promedio != null && (
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold"
-                     style={{ backgroundColor: sentinelNDVI.color || '#22C55E' }}>
-                  {(sentinelNDVI.ndvi_promedio * 100).toFixed(0)}
-                </div>
-                <div>
-                  <p className="font-bold text-sm text-gray-800">
-                    NDVI: {sentinelNDVI.ndvi_promedio.toFixed(2)} — {sentinelNDVI.nivel_salud || 'Sin datos'}
-                  </p>
-                  {sentinelNDVI?.recomendacion && (
-                    <p className="text-xs text-gray-500">{sentinelNDVI.recomendacion}</p>
-                  )}
-                </div>
-              </div>
-            )}
-            <div className="flex justify-between mt-3 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-green-500 rounded-sm" /> Sano</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-yellow-400 rounded-sm" /> Estrés leve</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-red-500 rounded-sm" /> Estrés severo</span>
-            </div>
-            <p className="text-xs text-gray-400 mt-2 text-center">
-              {sentinelNDVI.source === 'sentinel-hub-wms' ? 'Sentinel-2 ESA · Resolución 10m' :
-                sentinelNDVI.source === 'esri-world-imagery' ? 'Satélite ESRI · NDVI estimado' :
-               'NDVI estimado por ubicación'}
-            </p>
+            <IndicesSatelitalesPanel data={sentinelNDVI} cultivo={cultivo?.nombre || cultivo?.id || ''} compact />
           </div>
         </div>
       )}

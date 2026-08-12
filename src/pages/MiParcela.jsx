@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Camera, Leaf, Calendar, TrendingUp, Loader2, Map, Download, Volume2, VolumeX, Satellite, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Camera, Leaf, Calendar, TrendingUp, Loader2, Map, Download, Mic, Satellite, Trash2 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
+import { useAgentes } from '../lib/AgentContext';
 import { CULTIVOS } from '../lib/constants';
+import { getSentinelNDVI } from '../lib/externalApis';
 import { db } from '../lib/firebase';
 import { collection, addDoc, deleteDoc, doc, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { invokeGemini } from '../lib/gemini';
@@ -11,9 +13,11 @@ import { exportarParcelasExcel } from '../lib/exportExcel';
 import { GraficoMonitoreo } from '../components/GraficosCultivo';
 import NdviParcela from '../components/NdviParcela';
 import VistaMapaParcela from '../components/VistaMapaParcela';
+import VoiceAssistant from '../components/VoiceAssistant';
 
 export default function MiParcela() {
   const { user } = useAuth();
+  const { seleccionarCultivo, actualizarUbicacion } = useAgentes();
   const navigate = useNavigate();
   const [parcelas, setParcelas] = useState([]);
   const [modalNuevo, setModalNuevo] = useState(false);
@@ -30,9 +34,10 @@ export default function MiParcela() {
   const [abrirMapa, setAbrirMapa] = useState(false);
   const [poligono, setPoligono] = useState(null);
   const [riesgoParcela, setRiesgoParcela] = useState(null);
-  const [hablando, setHablando] = useState(false);
+  const [mostrarAgente, setMostrarAgente] = useState(false);
   const [mostrarNdvi, setMostrarNdvi] = useState(false);
   const [mostrarMapa, setMostrarMapa] = useState(false);
+  const [indicesParcela, setIndicesParcela] = useState(null);
 
   // Auto-fill GPS con coordenadas exactas del usuario al abrir modal
   useEffect(() => {
@@ -46,19 +51,82 @@ export default function MiParcela() {
 
   const cultivoObj = CULTIVOS.find(c => c.id === form.cultivo);
 
+  const diasDesdeSiembra = (fecha) => {
+    if (!fecha) return 0;
+    return Math.floor((new Date() - new Date(fecha)) / (1000 * 60 * 60 * 24));
+  };
+
   useEffect(() => { cargarParcelas(); }, []);
+
+  const obtenerCoordenadas = () => {
+    if (parcelaActiva?.gps) {
+      const parts = String(parcelaActiva.gps).split(',').map(s => parseFloat(s.trim()));
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        return { lat: parts[0], lon: parts[1] };
+      }
+    }
+    return { lat: user?.coords?.lat || -12.05, lon: user?.coords?.lon || -77.04 };
+  };
 
   // Cargar alertas preventivas cuando cambia la parcela activa
   useEffect(() => {
-    if (!parcelaActiva?.gps || !parcelaActiva?.cultivo) return;
-    const lat = parcelaActiva.lat || -12.05;
-    const lon = parcelaActiva.lon || -77.04;
+    if (!parcelaActiva?.cultivo) return;
+    const coords = obtenerCoordenadas();
     const dias = diasDesdeSiembra(parcelaActiva.fechaSiembra);
-    fetch(`/api/alertas-preventivas?lat=${lat}&lon=${lon}&cultivo=${parcelaActiva.cultivo}&diasDesdeSiembra=${dias}`)
+    fetch(`/api/alertas-preventivas?lat=${coords.lat}&lon=${coords.lon}&cultivo=${parcelaActiva.cultivo}&diasDesdeSiembra=${dias}`)
       .then(r => r.json())
       .then(setRiesgoParcela)
       .catch(() => setRiesgoParcela(null));
   }, [parcelaActiva?.id]);
+
+  // Sincronizar parcela activa con AgentContext
+  useEffect(() => {
+    if (!parcelaActiva) return;
+    const cultObj = CULTIVOS.find(c => c.id === parcelaActiva.cultivo);
+    if (cultObj) seleccionarCultivo(cultObj);
+    const coords = obtenerCoordenadas();
+    actualizarUbicacion(parcelaActiva.gps || user?.ubicacion || '', coords);
+  }, [parcelaActiva?.id]);
+
+  // Cargar índices satelitales cuando se abre el agente
+  useEffect(() => {
+    if (!mostrarAgente || !parcelaActiva) return;
+    const coords = obtenerCoordenadas();
+    getSentinelNDVI(coords.lat, coords.lon, 2, parcelaActiva.cultivo || '')
+      .then(d => setIndicesParcela({
+        ndvi: d.ndvi_promedio,
+        msavi2: d.msavi2_promedio,
+        ndre: d.ndre_promedio,
+        indice_recomendado: d.indice_recomendado,
+        nota_etapa: d.nota_etapa,
+      }))
+      .catch(() => setIndicesParcela(null));
+  }, [mostrarAgente, parcelaActiva?.id]);
+
+  const parcelaContext = useMemo(() => {
+    if (!parcelaActiva) return null;
+    const coords = obtenerCoordenadas();
+    return {
+      nombre: parcelaActiva.nombre,
+      cultivo: parcelaActiva.cultivo,
+      cultivoNombre: parcelaActiva.cultivoNombre,
+      variedad: parcelaActiva.variedad,
+      area: parcelaActiva.area,
+      fechaSiembra: parcelaActiva.fechaSiembra,
+      diasDesdeSiembra: diasDesdeSiembra(parcelaActiva.fechaSiembra),
+      lat: coords.lat,
+      lon: coords.lon,
+      gps: parcelaActiva.gps || user?.ubicacion,
+      registrosCount: registros.length,
+      ultimaRecomendacion: registros[0]?.recomendacion || recomendacion || null,
+      riesgo: riesgoParcela ? {
+        nivel: riesgoParcela.riesgo?.nivel,
+        puntos: riesgoParcela.riesgo?.puntos,
+        alertas: riesgoParcela.alertas?.slice(0, 3) || [],
+      } : null,
+      indices: indicesParcela,
+    };
+  }, [parcelaActiva, registros, recomendacion, riesgoParcela, indicesParcela, user?.ubicacion]);
 
   const cargarParcelas = async () => {
     try {
@@ -198,47 +266,6 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
       setAnalizandoIA(false);
     };
     reader.readAsDataURL(file);
-  };
-
-  const diasDesdeSiembra = (fecha) => {
-    if (!fecha) return 0;
-    return Math.floor((new Date() - new Date(fecha)) / (1000 * 60 * 60 * 24));
-  };
-
-  const hablarParcela = () => {
-    if (!parcelaActiva) return;
-    if (hablando) {
-      window.speechSynthesis?.cancel();
-      setHablando(false);
-      return;
-    }
-    const dias = diasDesdeSiembra(parcelaActiva.fechaSiembra);
-    const texto = `Parcela ${parcelaActiva.nombre}. 
-      Cultivo: ${parcelaActiva.cultivoNombre}. 
-      ${parcelaActiva.variedad ? `Variedad: ${parcelaActiva.variedad}.` : ''}
-      Días desde siembra: ${dias} días.
-      Área: ${parcelaActiva.area || 'no especificada'} hectáreas.
-      ${riesgoParcela ? `Nivel de riesgo: ${riesgoParcela.riesgo?.nivel || 'bajo'}.` : ''}
-      ${riesgoParcela?.alertas?.length > 0 ? `Alertas: ${riesgoParcela.alertas.map(a => a.nombre).join(', ')}.` : ''}`;
-    
-    const utter = new SpeechSynthesisUtterance(texto);
-    utter.lang = 'es-PE';
-    utter.rate = 0.9;
-    utter.pitch = 1;
-    utter.onstart = () => setHablando(true);
-    utter.onend = () => setHablando(false);
-    utter.onerror = () => setHablando(false);
-    window.speechSynthesis?.speak(utter);
-  };
-
-  const obtenerCoordenadas = () => {
-    if (parcelaActiva?.gps) {
-      const parts = String(parcelaActiva.gps).split(',').map(s => parseFloat(s.trim()));
-      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-        return { lat: parts[0], lon: parts[1] };
-      }
-    }
-    return { lat: user?.coords?.lat || -12.05, lon: user?.coords?.lon || -77.04 };
   };
 
   if (loading) return (
@@ -395,14 +422,14 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                   <span className="text-amber-400">›</span>
                 </button>
 
-                {/* Agente de voz + Mapa + NDVI */}
+                {/* Agente + Mapa + Satélite */}
                 <div className="grid grid-cols-3 gap-2">
-                  <button onClick={hablarParcela}
+                  <button onClick={() => setMostrarAgente(!mostrarAgente)}
                     className={`rounded-2xl p-4 flex flex-col items-center gap-2 transition-all ${
-                      hablando ? 'bg-primary text-white shadow-lg' : 'bg-white border border-gray-100 text-gray-700 hover:border-primary'
+                      mostrarAgente ? 'bg-primary text-white shadow-lg' : 'bg-white border border-gray-100 text-gray-700 hover:border-primary'
                     }`}>
-                    {hablando ? <VolumeX size={22} /> : <Volume2 size={22} />}
-                    <p className="text-xs font-bold text-center">{hablando ? 'Detener' : 'Escuchar'}</p>
+                    <Mic size={22} />
+                    <p className="text-xs font-bold text-center">{mostrarAgente ? 'Ocultar' : 'Agente'}</p>
                   </button>
                   <button onClick={() => setMostrarMapa(!mostrarMapa)}
                     className={`rounded-2xl p-4 flex flex-col items-center gap-2 transition-all ${
@@ -416,9 +443,33 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                       mostrarNdvi ? 'bg-green-600 text-white shadow-lg' : 'bg-white border border-gray-100 text-gray-700 hover:border-green-500'
                     }`}>
                     <Satellite size={22} />
-                    <p className="text-xs font-bold text-center">{mostrarNdvi ? 'Ocultar NDVI' : 'Ver NDVI'}</p>
+                    <p className="text-xs font-bold text-center">{mostrarNdvi ? 'Ocultar' : 'Satélite'}</p>
                   </button>
                 </div>
+
+                {/* Agente de parcela */}
+                {mostrarAgente && parcelaContext && (
+                  <div className="bg-white rounded-2xl p-4 shadow-sm border border-primary/20">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <Mic size={18} className="text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-800">Agente de parcela</p>
+                        <p className="text-[10px] text-gray-500">
+                          Conoce {parcelaActiva.cultivoNombre} · día {parcelaContext.diasDesdeSiembra}
+                          {indicesParcela ? ' · MSAVI2, NDVI, NDRE' : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <VoiceAssistant
+                      key={parcelaActiva.id}
+                      embedded
+                      agentType="parcela"
+                      parcelaContext={parcelaContext}
+                    />
+                  </div>
+                )}
 
                 {/* Mapa de la parcela */}
                 {mostrarMapa && parcelaActiva.coordenadas?.length >= 3 && (
@@ -428,7 +479,7 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                 {/* NDVI satelital */}
                 {mostrarNdvi && (() => {
                   const coords = obtenerCoordenadas();
-                  return <NdviParcela lat={coords.lat} lon={coords.lon} cultivo={parcelaActiva.cultivoNombre} nombre={parcelaActiva.nombre} />;
+                  return <NdviParcela lat={coords.lat} lon={coords.lon} cultivo={parcelaActiva.cultivo || parcelaActiva.cultivoNombre} nombre={parcelaActiva.nombre} />;
                 })()}
 
                 {/* Monitoreo */}

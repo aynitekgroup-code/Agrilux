@@ -94,11 +94,15 @@ export async function getNasaAlerts(lat, lon) {
   return res.json();
 }
 
-// ─── Imagen NDVI satelital (Sentinel Hub ESA) ─────────────────────────────────
-export async function getSentinelNDVI(lat, lon, radiusKm = 2) {
-  const res = await fetch(
-    `/api/sentinel?lat=${lat}&lon=${lon}&radius=${radiusKm}`
-  );
+// ─── Índices satelitales: NDVI, MSAVI2, NDRE (Sentinel Hub ESA) ───────────────
+export async function getSentinelNDVI(lat, lon, radiusKm = 2, cultivo = '') {
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lon: String(lon),
+    radius: String(radiusKm),
+  });
+  if (cultivo) params.set('cultivo', cultivo);
+  const res = await fetch(`/api/sentinel?${params}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Error obteniendo imagen satelital');
