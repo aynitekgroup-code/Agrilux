@@ -1,35 +1,72 @@
 /**
  * api/sentinel.js — NDVI + MSAVI2 + NDRE + mapa de calor (estilo NAX)
  *
- * Corregido: cada parcela obtiene valores únicos según ubicación exacta,
- * edad del cultivo y polígono mapeado (no el mismo NDVI para todos).
+ * Con OAuth Copernicus: índices espectrales reales Sentinel-2 L2A vía Process API.
+ * Sin OAuth: fallback estimado por ubicación, edad del cultivo y polígono.
  */
 
-const SENTINEL_WMS_LEGACY = 'https://services.sentinel-hub.com/ogc/wms';
+import zlib from 'zlib';
+
 const SENTINEL_WMS_CDSE = 'https://sh.dataspace.copernicus.eu/ogc/wms';
+const SENTINEL_PROCESS_URL = 'https://sh.dataspace.copernicus.eu/api/v1/process';
 const CDSE_TOKEN_URL = 'https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token';
+const GRID_SIZE = 10;
 
 /** Capas habituales en configs Sentinel Hub / Simple WMS */
 const WMS_LAYERS_DEFAULT = ['TRUE_COLOR', 'FALSE_COLOR', 'NDVI', 'EVI', 'NATURAL-COLOR'];
 
 let tokenCache = { token: null, expiresAt: 0 };
 
+function latLonTo3857(la, lo) {
+  const x = (lo * 20037508.34) / 180;
+  const y = Math.log(Math.tan(((90 + la) * Math.PI) / 360)) / (Math.PI / 180);
+  return [x, (y * 20037508.34) / 180];
+}
+
 function bboxWebMercator(lat, lon, radiusKm) {
   const delta = radiusKm / 111;
-  const to3857 = (la, lo) => {
-    const x = (lo * 20037508.34) / 180;
-    const y = Math.log(Math.tan(((90 + la) * Math.PI) / 360)) / (Math.PI / 180);
-    return [x, (y * 20037508.34) / 180];
-  };
   const corners = [
-    to3857(lat - delta, lon - delta),
-    to3857(lat - delta, lon + delta),
-    to3857(lat + delta, lon - delta),
-    to3857(lat + delta, lon + delta),
+    latLonTo3857(lat - delta, lon - delta),
+    latLonTo3857(lat - delta, lon + delta),
+    latLonTo3857(lat + delta, lon - delta),
+    latLonTo3857(lat + delta, lon + delta),
   ];
   const xs = corners.map((c) => c[0]);
   const ys = corners.map((c) => c[1]);
   return `${Math.min(...xs)},${Math.min(...ys)},${Math.max(...xs)},${Math.max(...ys)}`;
+}
+
+function bboxLatLon(lat, lon, radiusKm, coordenadas) {
+  if (coordenadas?.length >= 3) {
+    const bb = calcularBBox(coordenadas);
+    const pad = 0.00008;
+    return {
+      minLat: bb.minLat - pad,
+      maxLat: bb.maxLat + pad,
+      minLon: bb.minLon - pad,
+      maxLon: bb.maxLon + pad,
+    };
+  }
+  const delta = radiusKm / 111;
+  return {
+    minLat: lat - delta,
+    maxLat: lat + delta,
+    minLon: lon - delta,
+    maxLon: lon + delta,
+  };
+}
+
+function bbox3857FromLatLonBox(box) {
+  const sw = latLonTo3857(box.minLat, box.minLon);
+  const ne = latLonTo3857(box.maxLat, box.maxLon);
+  return [sw[0], sw[1], ne[0], ne[1]];
+}
+
+function rangoTiempoProcess() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 120);
+  return { from: start.toISOString(), to: end.toISOString() };
 }
 
 function rangoTiempoWMS() {
@@ -103,14 +140,7 @@ function extraerServiceException(xml) {
   return m ? m[1].trim() : xml.slice(0, 220);
 }
 
-async function fetchImagenSentinelProcess(lat, lon, radiusKm, accessToken) {
-  const bbox3857 = bboxWebMercator(lat, lon, radiusKm);
-  const [minX, minY, maxX, maxY] = bbox3857.split(',').map(Number);
-  const end = new Date();
-  const start = new Date(end);
-  start.setDate(start.getDate() - 120);
-
-  const evalscript = `//VERSION=3
+const EVALSCRIPT_TRUE_COLOR = `//VERSION=3
 function setup() {
   return { input: ["B02", "B03", "B04", "dataMask"], output: { bands: 3 } };
 }
@@ -119,49 +149,313 @@ function evaluatePixel(sample) {
   return [2.5 * sample.B04, 2.5 * sample.B03, 2.5 * sample.B02];
 }`;
 
-  try {
-    const res = await fetch('https://sh.dataspace.copernicus.eu/api/v1/process', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        Accept: 'image/jpeg',
-      },
-      body: JSON.stringify({
-        input: {
-          bounds: {
-            bbox: [minX, minY, maxX, maxY],
-            properties: { crs: 'http://www.opengis.net/def/crs/EPSG/0/3857' },
-          },
-          data: [{
-            type: 'sentinel-2-l2a',
-            dataFilter: {
-              timeRange: { from: start.toISOString(), to: end.toISOString() },
-              maxCloudCoverage: 80,
-            },
-          }],
+const EVALSCRIPT_INDICES = `//VERSION=3
+function setup() {
+  return {
+    input: [{ bands: ["B04", "B05", "B08"], units: "REFLECTANCE" }, "dataMask"],
+    output: { bands: 3, sampleType: "UINT8" },
+  };
+}
+function evaluatePixel(samples) {
+  if (samples[1] === 0) return [0, 0, 0];
+  const s = samples[0];
+  const ndvi = (s.B08 - s.B04) / (s.B08 + s.B04 + 1e-6);
+  const msavi2 = (2 * s.B08 + 1 - Math.sqrt(Math.pow(2 * s.B08 + 1, 2) - 8 * (s.B08 - s.B04) + 1e-6)) / 2;
+  const ndre = (s.B08 - s.B05) / (s.B08 + s.B05 + 1e-6);
+  const c = (v) => Math.max(0, Math.min(1, isNaN(v) ? 0 : v));
+  return [Math.round(c(ndvi) * 255), Math.round(c(msavi2) * 255), Math.round(c(ndre) * 255)];
+}`;
+
+function decodePngRgb(buffer) {
+  if (buffer.length < 24 || buffer.toString('hex', 0, 8) !== '89504e470d0a1a0a') {
+    throw new Error('invalid_png');
+  }
+
+  let offset = 8;
+  let width = 0;
+  let height = 0;
+  const idatParts = [];
+
+  while (offset + 8 <= buffer.length) {
+    const len = buffer.readUInt32BE(offset);
+    const type = buffer.toString('ascii', offset + 4, offset + 8);
+    const data = buffer.subarray(offset + 8, offset + 8 + len);
+
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      const bitDepth = data[8];
+      const colorType = data[9];
+      if (bitDepth !== 8 || colorType !== 2) throw new Error('unsupported_png_format');
+    } else if (type === 'IDAT') {
+      idatParts.push(data);
+    } else if (type === 'IEND') {
+      break;
+    }
+
+    offset += 12 + len;
+  }
+
+  if (!width || !height || idatParts.length === 0) throw new Error('png_parse_failed');
+
+  const raw = zlib.inflateSync(Buffer.concat(idatParts));
+  const bpp = 3;
+  const stride = 1 + width * bpp;
+  const prev = new Uint8Array(width * bpp);
+  const out = new Uint8Array(width * height * bpp);
+  let rawOff = 0;
+
+  for (let y = 0; y < height; y++) {
+    const filter = raw[rawOff++];
+    for (let x = 0; x < width * bpp; x++) {
+      const cur = raw[rawOff++];
+      let val = cur;
+      const left = x >= bpp ? out[y * width * bpp + x - bpp] : 0;
+      const up = prev[x];
+      const upLeft = x >= bpp ? prev[x - bpp] : 0;
+
+      if (filter === 1) val = (cur + left) & 0xff;
+      else if (filter === 2) val = (cur + up) & 0xff;
+      else if (filter === 3) val = (cur + Math.floor((left + up) / 2)) & 0xff;
+      else if (filter === 4) {
+        const p = left + up - upLeft;
+        const pa = Math.abs(p - left);
+        const pb = Math.abs(p - up);
+        const pc = Math.abs(p - upLeft);
+        const pr = pa <= pb && pa <= pc ? left : pb <= pc ? up : upLeft;
+        val = (cur + pr) & 0xff;
+      }
+
+      out[y * width * bpp + x] = val;
+      prev[x] = val;
+    }
+  }
+
+  return { width, height, data: out };
+}
+
+async function callProcessApi(accessToken, bboxArr, width, height, evalscript, accept = 'image/jpeg') {
+  const timeRange = rangoTiempoProcess();
+  const res = await fetch(SENTINEL_PROCESS_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      Accept: accept,
+    },
+    body: JSON.stringify({
+      input: {
+        bounds: {
+          bbox: bboxArr,
+          properties: { crs: 'http://www.opengis.net/def/crs/EPSG/0/3857' },
         },
-        output: { width: 512, height: 512 },
-        evalscript,
-      }),
-      signal: AbortSignal.timeout(30_000),
-    });
+        data: [{
+          type: 'sentinel-2-l2a',
+          dataFilter: { timeRange, maxCloudCoverage: 80 },
+        }],
+      },
+      output: { width, height },
+      evalscript,
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
 
-    if (!res.ok) {
-      const errText = await res.text();
-      return { failed: true, error: extraerServiceException(errText), status: res.status };
-    }
+  if (!res.ok) {
+    const errText = await res.text();
+    return { failed: true, error: extraerServiceException(errText), status: res.status };
+  }
 
-    const arrayBuffer = await res.arrayBuffer();
-    if (arrayBuffer.byteLength < 500) {
-      return { failed: true, error: 'process_response_too_small', bytes: arrayBuffer.byteLength };
-    }
+  const arrayBuffer = await res.arrayBuffer();
+  if (arrayBuffer.byteLength < 100) {
+    return { failed: true, error: 'process_response_too_small', bytes: arrayBuffer.byteLength };
+  }
+
+  return { buffer: Buffer.from(arrayBuffer) };
+}
+
+async function fetchImagenSentinelProcess(lat, lon, radiusKm, accessToken, coordenadas) {
+  const latLonBox = bboxLatLon(lat, lon, radiusKm, coordenadas);
+  const bboxArr = bbox3857FromLatLonBox(latLonBox);
+
+  try {
+    const result = await callProcessApi(
+      accessToken,
+      bboxArr,
+      512,
+      512,
+      EVALSCRIPT_TRUE_COLOR,
+      'image/jpeg',
+    );
+    if (result.failed) return result;
 
     return {
-      base64: Buffer.from(arrayBuffer).toString('base64'),
+      base64: result.buffer.toString('base64'),
       mime: 'jpeg',
       endpoint: 'process-api',
       layer: 'TRUE_COLOR',
+    };
+  } catch (e) {
+    return { failed: true, error: e.message };
+  }
+}
+
+function construirMapaCalorEspectral(grid, latLonBox, coordenadas, etapa, indicePrincipal = 'ndvi') {
+  const { width, height, celdasRaw } = grid;
+  const celdas = [];
+
+  for (let gy = 0; gy < height; gy++) {
+    for (let gx = 0; gx < width; gx++) {
+      const cellLat = latLonBox.minLat + (gy + 0.5) * (latLonBox.maxLat - latLonBox.minLat) / height;
+      const cellLon = latLonBox.minLon + (gx + 0.5) * (latLonBox.maxLon - latLonBox.minLon) / width;
+
+      if (coordenadas?.length >= 3 && !puntoEnPoligono(cellLon, cellLat, coordenadas)) continue;
+
+      const cell = celdasRaw[gy * width + gx];
+      if (!cell?.valid) continue;
+
+      const valor = indicePrincipal === 'msavi2' ? cell.msavi2
+        : indicePrincipal === 'ndre' ? cell.ndre
+          : cell.ndvi;
+
+      celdas.push({
+        gx,
+        gy,
+        lat: parseFloat(cellLat.toFixed(6)),
+        lon: parseFloat(cellLon.toFixed(6)),
+        valor: parseFloat(valor.toFixed(3)),
+        ndvi: parseFloat(cell.ndvi.toFixed(3)),
+        msavi2: parseFloat(cell.msavi2.toFixed(3)),
+        ndre: parseFloat(cell.ndre.toFixed(3)),
+        color: valorAHeatmapColor(valor),
+      });
+    }
+  }
+
+  if (celdas.length === 0) return null;
+
+  const ndviVals = celdas.map((c) => c.ndvi);
+  const msavi2Vals = celdas.map((c) => c.msavi2);
+  const ndreVals = celdas.map((c) => c.ndre);
+  const valores = celdas.map((c) => c.valor);
+  const promedio = valores.reduce((a, b) => a + b, 0) / valores.length;
+  const min = Math.min(...valores);
+  const max = Math.max(...valores);
+  const varianza = valores.reduce((s, v) => s + (v - promedio) ** 2, 0) / valores.length;
+  const desviacion = Math.sqrt(varianza);
+  const uniforme = desviacion < 0.07;
+  const umbralProblema = promedio - desviacion * 0.45;
+
+  const zonas_problema = celdas
+    .filter((c) => c.valor < umbralProblema || c.valor < 0.22)
+    .sort((a, b) => a.valor - b.valor)
+    .slice(0, 8)
+    .map((c, i) => ({
+      id: i + 1,
+      lat: c.lat,
+      lon: c.lon,
+      indice: c.valor,
+      severidad: c.valor < 0.12 ? 'alta' : c.valor < 0.22 ? 'media' : 'leve',
+      color: c.color,
+      causa_probable: inferirCausaProbable(c.valor, promedio, etapa),
+    }));
+
+  let alerta_uniformidad = null;
+  if (!uniforme && zonas_problema.length > 0) {
+    alerta_uniformidad = `Colores no uniformes en la chacra: ${zonas_problema.length} zona(s) con posible problema detectada. Revisa las manchas rojas/amarillas del mapa.`;
+  } else if (uniforme) {
+    alerta_uniformidad = 'Vegetación relativamente uniforme en toda la parcela.';
+  }
+
+  const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+
+  return {
+    celdas,
+    grid_size: GRID_SIZE,
+    min: parseFloat(min.toFixed(3)),
+    max: parseFloat(max.toFixed(3)),
+    promedio: parseFloat(promedio.toFixed(3)),
+    desviacion: parseFloat(desviacion.toFixed(3)),
+    uniforme,
+    zonas_problema,
+    alerta_uniformidad,
+    promedios_espectrales: {
+      ndvi: parseFloat(avg(ndviVals).toFixed(3)),
+      msavi2: parseFloat(avg(msavi2Vals).toFixed(3)),
+      ndre: parseFloat(avg(ndreVals).toFixed(3)),
+    },
+  };
+}
+
+async function fetchIndicesEspectralesSentinel(lat, lon, radiusKm, coordenadas, cultivo, dias, accessToken) {
+  const etapaInfo = determinarEtapaCarlos(cultivo, dias);
+  const latLonBox = bboxLatLon(lat, lon, radiusKm, coordenadas);
+  const bboxArr = bbox3857FromLatLonBox(latLonBox);
+
+  try {
+    const result = await callProcessApi(
+      accessToken,
+      bboxArr,
+      GRID_SIZE,
+      GRID_SIZE,
+      EVALSCRIPT_INDICES,
+      'image/png',
+    );
+    if (result.failed) return { failed: true, ...result };
+
+    const png = decodePngRgb(result.buffer);
+    if (png.width !== GRID_SIZE || png.height !== GRID_SIZE) {
+      return { failed: true, error: 'unexpected_grid_size' };
+    }
+
+    const celdasRaw = [];
+    let validCount = 0;
+    for (let gy = 0; gy < GRID_SIZE; gy++) {
+      for (let gx = 0; gx < GRID_SIZE; gx++) {
+        const i = (gy * GRID_SIZE + gx) * 3;
+        const r = png.data[i];
+        const g = png.data[i + 1];
+        const b = png.data[i + 2];
+        const valid = r + g + b > 0;
+        if (valid) validCount++;
+        celdasRaw.push({
+          valid,
+          ndvi: r / 255,
+          msavi2: g / 255,
+          ndre: b / 255,
+        });
+      }
+    }
+
+    if (validCount < 3) {
+      return { failed: true, error: 'insufficient_valid_pixels', validCount };
+    }
+
+    const indicePrincipal = etapaInfo.indice_recomendado || 'ndvi';
+    const mapaCalor = construirMapaCalorEspectral(
+      { width: GRID_SIZE, height: GRID_SIZE, celdasRaw },
+      latLonBox,
+      coordenadas,
+      etapaInfo.etapa,
+      indicePrincipal,
+    );
+    if (!mapaCalor) return { failed: true, error: 'empty_heatmap' };
+
+    const { ndvi, msavi2, ndre } = mapaCalor.promedios_espectrales;
+
+    return {
+      source: 'sentinel-2-l2a',
+      ndvi,
+      msavi2,
+      ndre,
+      ndvi_promedio: parseFloat(ndvi.toFixed(2)),
+      msavi2_promedio: parseFloat(msavi2.toFixed(2)),
+      ndre_promedio: parseFloat(ndre.toFixed(2)),
+      ...etapaInfo,
+      indices_disponibles: ['msavi2', 'ndvi', 'ndre'],
+      mapa_calor: mapaCalor,
+      dias_desde_siembra: Number(dias) || 0,
+      coords_usadas: { lat, lon },
+      valid_pixels: validCount,
     };
   } catch (e) {
     return { failed: true, error: e.message };
@@ -528,6 +822,7 @@ function generarAnalisisCompleto(lat, lon, radiusKm, ndviValues, indicesExtra = 
     ndre_promedio: indicesExtra.ndre_promedio ?? null,
     indice_recomendado: indicesExtra.indice_recomendado || 'ndvi',
     indices_recomendados: indicesExtra.indices_recomendados || ['ndvi'],
+    indices_source: indicesExtra.indices_source || 'estimated',
     etapa_cultivo: indicesExtra.etapa_cultivo || 'crecimiento',
     etapa: indicesExtra.etapa || null,
     nota_etapa: indicesExtra.nota_etapa || null,
@@ -594,7 +889,86 @@ export default async function handler(req, res) {
 
   const coordsFuente = coordenadas?.length >= 3 ? 'poligono' : 'gps';
 
-  const indicesCompletos = calcularIndicesCompletos(lat, lon, cultivo, dias, parcelaId, coordenadas);
+  const hasSentinelAuth = !!(process.env.SENTINEL_CLIENT_ID && process.env.SENTINEL_CLIENT_SECRET);
+  let indicesCompletos = null;
+  let indicesSource = 'estimated';
+
+  const SENTINEL_INSTANCE_ID = process.env.SENTINEL_INSTANCE_ID;
+  const sentinelDebug = {
+    instance_id_set: !!SENTINEL_INSTANCE_ID,
+    oauth_configured: hasSentinelAuth,
+  };
+
+  let cachedToken = null;
+
+  if (hasSentinelAuth) {
+    const tokenResult = await obtenerTokenCDSE();
+    cachedToken = tokenResult.token;
+    sentinelDebug.oauth_ok = !!cachedToken;
+    if (tokenResult.error) sentinelDebug.oauth_error = tokenResult.error;
+
+    if (cachedToken) {
+      const [espectrales, processImg] = await Promise.all([
+        fetchIndicesEspectralesSentinel(
+          lat, lon, radiusKm, coordenadas, cultivo, dias, cachedToken,
+        ),
+        fetchImagenSentinelProcess(lat, lon, radiusKm, cachedToken, coordenadas),
+      ]);
+
+      if (espectrales && !espectrales.failed) {
+        indicesCompletos = espectrales;
+        indicesSource = 'sentinel-2-l2a';
+        sentinelDebug.indices = { ok: true, valid_pixels: espectrales.valid_pixels };
+      } else {
+        sentinelDebug.indices = espectrales || { failed: true };
+      }
+
+      if (processImg && !processImg.failed) {
+        if (!indicesCompletos) {
+          indicesCompletos = calcularIndicesCompletos(lat, lon, cultivo, dias, parcelaId, coordenadas);
+        }
+
+        const extra = {
+          msavi2_promedio: indicesCompletos.msavi2_promedio,
+          ndre_promedio: indicesCompletos.ndre_promedio,
+          indice_recomendado: indicesCompletos.indice_recomendado,
+          indices_recomendados: indicesCompletos.indices_recomendados,
+          etapa_cultivo: indicesCompletos.etapa_cultivo,
+          etapa: indicesCompletos.etapa,
+          nota_etapa: indicesCompletos.nota_etapa,
+          es_maiz_o_cana: indicesCompletos.es_maiz_o_cana,
+          indices_disponibles: indicesCompletos.indices_disponibles,
+          mapa_calor: indicesCompletos.mapa_calor,
+          dias_desde_siembra: indicesCompletos.dias_desde_siembra,
+          coords_usadas: indicesCompletos.coords_usadas,
+          coords_fuente: coordsFuente,
+          resolucion_m: 10,
+          indices_source: indicesSource,
+        };
+        const analisis = generarAnalisisCompleto(lat, lon, radiusKm, [indicesCompletos.ndvi], extra);
+
+        return res.status(200).json({
+          source: 'sentinel-hub-process',
+          indices_source: indicesSource,
+          sentinel_endpoint: processImg.endpoint,
+          sentinel_layer: processImg.layer,
+          satellite_image: `data:image/${processImg.mime || 'jpeg'};base64,${processImg.base64}`,
+          ...analisis,
+          generated_at: new Date().toISOString(),
+          note: indicesSource === 'sentinel-2-l2a'
+            ? 'Imagen e índices NDVI/MSAVI2/NDRE calculados desde bandas Sentinel-2 L2A (10 m).'
+            : undefined,
+        });
+      }
+      sentinelDebug.process = processImg;
+    }
+  }
+
+  if (!indicesCompletos) {
+    indicesCompletos = calcularIndicesCompletos(lat, lon, cultivo, dias, parcelaId, coordenadas);
+    indicesSource = 'estimated';
+  }
+
   const indicesExtra = {
     msavi2_promedio: indicesCompletos.msavi2_promedio,
     ndre_promedio: indicesCompletos.ndre_promedio,
@@ -610,25 +984,16 @@ export default async function handler(req, res) {
     coords_usadas: indicesCompletos.coords_usadas,
     coords_fuente: coordsFuente,
     resolucion_m: null,
+    indices_source: indicesSource,
   };
 
-  const SENTINEL_INSTANCE_ID = process.env.SENTINEL_INSTANCE_ID;
-  const sentinelDebug = {
-    instance_id_set: !!SENTINEL_INSTANCE_ID,
-    oauth_configured: !!(process.env.SENTINEL_CLIENT_ID && process.env.SENTINEL_CLIENT_SECRET),
-  };
-
-  if (SENTINEL_INSTANCE_ID) {
-    const tokenResult = await obtenerTokenCDSE();
-    sentinelDebug.oauth_ok = !!tokenResult.token;
-    if (tokenResult.error) sentinelDebug.oauth_error = tokenResult.error;
-
+  if (hasSentinelAuth && cachedToken && SENTINEL_INSTANCE_ID) {
     const wms = await fetchImagenSentinelWMS(
       SENTINEL_INSTANCE_ID,
       lat,
       lon,
       radiusKm,
-      tokenResult.token,
+      cachedToken,
     );
 
     if (wms && !wms.failed) {
@@ -637,6 +1002,7 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         source: 'sentinel-hub-wms',
+        indices_source: indicesSource,
         sentinel_endpoint: wms.endpoint,
         sentinel_layer: wms.layer,
         satellite_image: `data:image/${wms.mime || 'jpeg'};base64,${wms.base64}`,
@@ -646,28 +1012,8 @@ export default async function handler(req, res) {
     }
 
     sentinelDebug.wms = wms?.debug || { failed: true };
-
-    if (tokenResult.token) {
-      const processImg = await fetchImagenSentinelProcess(lat, lon, radiusKm, tokenResult.token);
-      if (processImg && !processImg.failed) {
-        indicesExtra.resolucion_m = 10;
-        const analisis = generarAnalisisCompleto(lat, lon, radiusKm, [indicesCompletos.ndvi], indicesExtra);
-
-        return res.status(200).json({
-          source: 'sentinel-hub-process',
-          sentinel_endpoint: processImg.endpoint,
-          sentinel_layer: processImg.layer,
-          satellite_image: `data:image/${processImg.mime || 'jpeg'};base64,${processImg.base64}`,
-          ...analisis,
-          generated_at: new Date().toISOString(),
-        });
-      }
-      sentinelDebug.process = processImg;
-    }
-
-    console.warn('Sentinel WMS falló:', JSON.stringify(sentinelDebug));
-  } else {
-    sentinelDebug.hint = 'Agrega SENTINEL_INSTANCE_ID en Vercel (Production)';
+  } else if (!hasSentinelAuth) {
+    sentinelDebug.hint = 'Agrega SENTINEL_CLIENT_ID + SENTINEL_CLIENT_SECRET en Vercel (Production)';
   }
 
   try {
@@ -686,11 +1032,14 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         source: 'esri-world-imagery',
+        indices_source: indicesSource,
         satellite_image: `data:image/png;base64,${base64}`,
         ...analisis,
         generated_at: new Date().toISOString(),
         sentinel_debug: sentinelDebug,
-        note: `Vista aérea ~${indicesExtra.resolucion_m}m/píxel. Índices estimados por ubicación y edad del cultivo. Para Sentinel-2 (10m): SENTINEL_INSTANCE_ID + SENTINEL_CLIENT_ID + SENTINEL_CLIENT_SECRET en Vercel.`,
+        note: indicesSource === 'sentinel-2-l2a'
+          ? `Vista aérea ESRI (~${indicesExtra.resolucion_m}m/píxel). Índices NDVI/MSAVI2/NDRE reales Sentinel-2 L2A.`
+          : `Vista aérea ~${indicesExtra.resolucion_m}m/píxel. Índices estimados — revisa OAuth Copernicus.`,
       });
     }
   } catch (e) {
@@ -701,9 +1050,12 @@ export default async function handler(req, res) {
 
   return res.status(200).json({
     source: 'estimated',
+    indices_source: indicesSource,
     satellite_image: null,
     ...analisis,
     generated_at: new Date().toISOString(),
-    note: 'Índices calculados por ubicación exacta, edad del cultivo y polígono. Mapea la parcela para mayor precisión.',
+    note: indicesSource === 'sentinel-2-l2a'
+      ? 'Índices Sentinel-2 disponibles; imagen satelital no disponible en este momento.'
+      : 'Índices calculados por ubicación exacta, edad del cultivo y polígono. Mapea la parcela para mayor precisión.',
   });
 }
