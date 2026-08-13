@@ -95,13 +95,26 @@ export async function getNasaAlerts(lat, lon) {
 }
 
 // ─── Índices satelitales: NDVI, MSAVI2, NDRE (Sentinel Hub ESA) ───────────────
-export async function getSentinelNDVI(lat, lon, radiusKm = 2, cultivo = '') {
+export async function getSentinelNDVI(lat, lon, radiusKm = 2, opts = {}) {
+  const options = typeof opts === 'string' ? { cultivo: opts } : opts;
+  const {
+    cultivo = '',
+    dias = 0,
+    parcelaId = '',
+    coordenadas = null,
+  } = options;
+
   const params = new URLSearchParams({
     lat: String(lat),
     lon: String(lon),
     radius: String(radiusKm),
+    dias: String(dias),
   });
   if (cultivo) params.set('cultivo', cultivo);
+  if (parcelaId) params.set('parcelaId', parcelaId);
+  if (coordenadas?.length >= 3) {
+    params.set('coordenadas', JSON.stringify(coordenadas));
+  }
   const res = await fetch(`/api/sentinel?${params}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

@@ -264,11 +264,10 @@ const SYSTEM_PROMPT_PARCELA = `Eres el agente de parcela de Agrilux. Eres agrón
 REGLAS:
 - Responde SIEMPRE en español peruano, tono cálido y directo
 - Máximo 4 oraciones por respuesta (optimizado para voz)
-- Conoces la parcela activa del agricultor: cultivo, días desde siembra, área, riesgos y índices satelitales
-- Explica MSAVI2 (siembra/emergencia), NDVI (crecimiento) y NDRE (nitrógeno/maduración) cuando pregunten
-- Para caña y maíz en costa: recomienda el índice según la etapa del cultivo
-- Da consejos prácticos de riego, fertilización y monitoreo según días desde siembra
-- Si hay alertas preventivas activas, menciónalas con prioridad
+- Conoces la parcela activa: cultivo, días desde siembra, área, riesgos e índices satelitales
+- ÍNDICES POR ETAPA (Carlos Pérez): MSAVI2 en poco cultivo y agoste/cosecha; NDVI + NDRE en pleno crecimiento
+- Si hay mapa de calor con colores NO uniformes, alerta sobre zonas con problema (manchas rojas/amarillas = estrés, exceso humedad, etc.)
+- Identifica zonas_problema del contexto y sugiere inspección en campo en esas áreas específicas
 - Si preguntan por comprar productos, sugiere ir a Mercado en Agrilux
 - Usa emojis moderados`;
 
@@ -341,14 +340,24 @@ export default async function handler(req, res) {
       }
     }
     if (p.indices) {
-      const { ndvi, msavi2, ndre, indice_recomendado, nota_etapa } = p.indices;
+      const { ndvi, msavi2, ndre, indice_recomendado, indices_recomendados, nota_etapa, mapa_calor } = p.indices;
       let idxText = 'ÍNDICES SATELITALES:';
       if (ndvi != null) idxText += ` NDVI ${ndvi}`;
       if (msavi2 != null) idxText += `, MSAVI2 ${msavi2}`;
       if (ndre != null) idxText += `, NDRE ${ndre}`;
-      if (indice_recomendado) idxText += `. Índice recomendado ahora: ${indice_recomendado.toUpperCase()}`;
+      if (indice_recomendado) idxText += `. Principal: ${indice_recomendado.toUpperCase()}`;
+      if (indices_recomendados?.length > 1) idxText += ` (también: ${indices_recomendados.filter(i => i !== indice_recomendado).join(', ').toUpperCase()})`;
       contextoParts.push(idxText);
       if (nota_etapa) contextoParts.push(`NOTA ETAPA: ${nota_etapa}`);
+      if (mapa_calor) {
+        contextoParts.push(`MAPA DE CALOR: uniforme=${mapa_calor.uniforme ? 'sí' : 'NO'}. ${mapa_calor.alerta_uniformidad || ''}`);
+        if (mapa_calor.zonas_problema?.length) {
+          const zonas = mapa_calor.zonas_problema.slice(0, 3).map(z =>
+            `Zona ${z.id}: índice ${z.indice} (${z.severidad}) — ${z.causa_probable}`
+          ).join('; ');
+          contextoParts.push(`ZONAS CON PROBLEMA: ${zonas}`);
+        }
+      }
     }
   }
 

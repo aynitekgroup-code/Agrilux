@@ -4,6 +4,7 @@ import { useAuth } from '../lib/AuthContext';
 import { useAgentes } from '../lib/AgentContext';
 import { CULTIVOS } from '../lib/constants';
 import { getSentinelNDVI } from '../lib/externalApis';
+import { obtenerCoordsParcela } from '../lib/parcelaCoords';
 import { db } from '../lib/firebase';
 import { collection, addDoc, deleteDoc, doc, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { invokeGemini } from '../lib/gemini';
@@ -59,13 +60,8 @@ export default function MiParcela() {
   useEffect(() => { cargarParcelas(); }, []);
 
   const obtenerCoordenadas = () => {
-    if (parcelaActiva?.gps) {
-      const parts = String(parcelaActiva.gps).split(',').map(s => parseFloat(s.trim()));
-      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-        return { lat: parts[0], lon: parts[1] };
-      }
-    }
-    return { lat: user?.coords?.lat || -12.05, lon: user?.coords?.lon || -77.04 };
+    const c = obtenerCoordsParcela(parcelaActiva, user?.coords);
+    return { lat: c.lat, lon: c.lon, fuente: c.fuente };
   };
 
   // Cargar alertas preventivas cuando cambia la parcela activa
@@ -92,13 +88,20 @@ export default function MiParcela() {
   useEffect(() => {
     if (!mostrarAgente || !parcelaActiva) return;
     const coords = obtenerCoordenadas();
-    getSentinelNDVI(coords.lat, coords.lon, 2, parcelaActiva.cultivo || '')
+    getSentinelNDVI(coords.lat, coords.lon, 2, {
+      cultivo: parcelaActiva.cultivo || '',
+      dias: diasDesdeSiembra(parcelaActiva.fechaSiembra),
+      parcelaId: parcelaActiva.id,
+      coordenadas: parcelaActiva.coordenadas,
+    })
       .then(d => setIndicesParcela({
         ndvi: d.ndvi_promedio,
         msavi2: d.msavi2_promedio,
         ndre: d.ndre_promedio,
         indice_recomendado: d.indice_recomendado,
+        indices_recomendados: d.indices_recomendados,
         nota_etapa: d.nota_etapa,
+        mapa_calor: d.mapa_calor,
       }))
       .catch(() => setIndicesParcela(null));
   }, [mostrarAgente, parcelaActiva?.id]);
@@ -125,6 +128,7 @@ export default function MiParcela() {
         alertas: riesgoParcela.alertas?.slice(0, 3) || [],
       } : null,
       indices: indicesParcela,
+      coords_fuente: obtenerCoordenadas().fuente,
     };
   }, [parcelaActiva, registros, recomendacion, riesgoParcela, indicesParcela, user?.ubicacion]);
 
@@ -358,7 +362,14 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                     <div className="mt-3 bg-blue-50 rounded-xl p-2.5 flex items-center gap-2">
                       <Map size={14} className="text-blue-600" />
                       <p className="text-xs text-blue-700 font-semibold">
-                        {parcelaActiva.coordenadas.length} puntos mapeados · {parcelaActiva.area} ha
+                        {parcelaActiva.coordenadas.length} puntos mapeados · {parcelaActiva.area} ha · índices por polígono
+                      </p>
+                    </div>
+                  )}
+                  {(!parcelaActiva.coordenadas?.length || parcelaActiva.coordenadas.length < 3) && (
+                    <div className="mt-3 bg-amber-50 rounded-xl p-2.5">
+                      <p className="text-[10px] text-amber-700">
+                        ⚠️ Sin polígono mapeado: los índices usan GPS aproximado. Mapea la parcela para precisión por chacra (como NAX).
                       </p>
                     </div>
                   )}
@@ -479,7 +490,17 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                 {/* NDVI satelital */}
                 {mostrarNdvi && (() => {
                   const coords = obtenerCoordenadas();
-                  return <NdviParcela lat={coords.lat} lon={coords.lon} cultivo={parcelaActiva.cultivo || parcelaActiva.cultivoNombre} nombre={parcelaActiva.nombre} />;
+                  return (
+                    <NdviParcela
+                      lat={coords.lat}
+                      lon={coords.lon}
+                      cultivo={parcelaActiva.cultivo || parcelaActiva.cultivoNombre}
+                      nombre={parcelaActiva.nombre}
+                      diasDesdeSiembra={diasDesdeSiembra(parcelaActiva.fechaSiembra)}
+                      parcelaId={parcelaActiva.id}
+                      coordenadas={parcelaActiva.coordenadas}
+                    />
+                  );
                 })()}
 
                 {/* Monitoreo */}

@@ -1,6 +1,8 @@
 /**
- * Utilidades compartidas para índices de vegetación (NDVI, MSAVI2, NDRE).
- * MSAVI2 → siembra/emergencia | NDVI → crecimiento | NDRE → maduración/nitrógeno
+ * Índices de vegetación — lógica según Carlos Pérez (Agrilux):
+ * MSAVI2 → poco cultivo / agoste-cosecha
+ * NDVI + NDRE → pleno crecimiento
+ * Mapa de calor → detectar zonas no uniformes (estilo NAX)
  */
 
 export const INDICES_INFO = {
@@ -8,24 +10,24 @@ export const INDICES_INFO = {
     id: 'msavi2',
     nombre: 'MSAVI2',
     titulo: 'Índice de vegetación modificado',
-    etapa: 'Siembra y emergencia',
-    descripcion: 'Mejor con poca cobertura vegetal y suelo visible. Ideal para caña y maíz al inicio.',
+    etapa: 'Poco cultivo · Agoste y cosecha',
+    descripcion: 'Ideal con suelo visible, siembra, emergencia y etapa de agoste. Detecta manchas de estrés.',
     color: '#3B82F6',
   },
   ndvi: {
     id: 'ndvi',
     nombre: 'NDVI',
     titulo: 'Índice de vegetación normalizado',
-    etapa: 'Crecimiento activo',
-    descripcion: 'Mide biomasa y vigor en el pico vegetativo del cultivo.',
+    etapa: 'Pleno crecimiento',
+    descripcion: 'Mide biomasa y vigor en el pico vegetativo. Junto con NDRE en pleno crecimiento.',
     color: '#22C55E',
   },
   ndre: {
     id: 'ndre',
     nombre: 'NDRE',
-    titulo: 'Índice de borde rojo',
-    etapa: 'Maduración / nitrógeno',
-    descripcion: 'Detecta estrés de clorofila y nitrógeno antes de cosecha. Clave en caña y maíz.',
+    titulo: 'NDRE / NDRED (borde rojo)',
+    etapa: 'Pleno crecimiento',
+    descripcion: 'Clorofila y nitrógeno en pleno crecimiento. Complementa al NDVI en caña y maíz.',
     color: '#A855F7',
   },
 };
@@ -50,16 +52,62 @@ export function esCultivoMaizOCana(cultivo = '') {
   return c.includes('maíz') || c.includes('maiz') || c.includes('caña') || c.includes('cana') || c === 'maiz' || c === 'cana';
 }
 
-export function recomendarIndice(cultivo = '', mes = new Date().getMonth() + 1, ndvi = 0.4) {
-  if (!esCultivoMaizOCana(cultivo)) {
-    return { id: 'ndvi', ...INDICES_INFO.ndvi, nota: 'NDVI es el índice principal para este cultivo.' };
+/** Etapa e índices recomendados según Carlos Pérez */
+export function determinarEtapaCarlos(cultivo = '', diasDesdeSiembra = 0) {
+  const dias = Number(diasDesdeSiembra) || 0;
+  const esMaizOCana = esCultivoMaizOCana(cultivo);
+
+  if (!esMaizOCana) {
+    return {
+      etapa: 'crecimiento',
+      etapa_cultivo: 'crecimiento',
+      indice_recomendado: 'ndvi',
+      indices_recomendados: ['ndvi'],
+      nota_etapa: 'NDVI es el índice principal para este cultivo.',
+    };
   }
-  // Costa Perú: siembra maíz Sep-Dic; caña todo el año
-  if ((mes >= 9 && mes <= 12) || ndvi < 0.35) {
-    return { id: 'msavi2', ...INDICES_INFO.msavi2, nota: 'Recomendado ahora: etapa temprana en costa.' };
+
+  // Caña: ciclos más largos; maíz: ~120-150 días
+  const umbralTemprano = cultivo.toLowerCase().includes('cana') ? 60 : 45;
+  const umbralCosecha = cultivo.toLowerCase().includes('cana') ? 300 : 130;
+
+  if (dias < umbralTemprano) {
+    return {
+      etapa: 'poco_cultivo',
+      etapa_cultivo: 'siembra_emergencia',
+      indice_recomendado: 'msavi2',
+      indices_recomendados: ['msavi2'],
+      nota_etapa: 'Poco cultivo: usa MSAVI2. Ideal para detectar emergencia irregular.',
+    };
   }
-  if ((mes >= 1 && mes <= 5) || ndvi >= 0.5) {
-    return { id: 'ndre', ...INDICES_INFO.ndre, nota: 'Recomendado ahora: monitorear nitrógeno y maduración.' };
+  if (dias < umbralCosecha) {
+    return {
+      etapa: 'pleno_crecimiento',
+      etapa_cultivo: 'crecimiento',
+      indice_recomendado: 'ndvi',
+      indices_recomendados: ['ndvi', 'ndre'],
+      nota_etapa: 'Pleno crecimiento: usa NDVI y NDRE (NDRED). Revisa mapa de calor para manchas.',
+    };
   }
-  return { id: 'ndvi', ...INDICES_INFO.ndvi, nota: 'Recomendado ahora: pico de crecimiento vegetativo.' };
+  return {
+    etapa: 'agoste_cosecha',
+    etapa_cultivo: 'maduracion',
+    indice_recomendado: 'msavi2',
+    indices_recomendados: ['msavi2'],
+    nota_etapa: 'Agoste y cosecha: vuelve a MSAVI2. Las manchas rojas indican zonas con problemas.',
+  };
+}
+
+export function valorAHeatmapColor(valor) {
+  if (valor >= 0.55) return '#22C55E';
+  if (valor >= 0.4) return '#84CC16';
+  if (valor >= 0.28) return '#EAB308';
+  if (valor >= 0.15) return '#F97316';
+  return '#EF4444';
+}
+
+export function recomendarIndice(cultivo = '', mes = new Date().getMonth() + 1, ndvi = 0.4, dias = 0) {
+  const etapa = determinarEtapaCarlos(cultivo, dias);
+  const info = INDICES_INFO[etapa.indice_recomendado];
+  return { id: etapa.indice_recomendado, ...info, nota: etapa.nota_etapa };
 }

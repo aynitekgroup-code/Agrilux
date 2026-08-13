@@ -1,17 +1,25 @@
 import React from 'react';
 import { Satellite, Leaf, Sprout, FlaskConical } from 'lucide-react';
 import { INDICES_INFO, getNivelIndice, esCultivoMaizOCana } from '../lib/indicesVegetacion';
+import MapaCalorIndice from './MapaCalorIndice';
 
 const ICONOS = { msavi2: Sprout, ndvi: Leaf, ndre: FlaskConical };
 
-function TarjetaIndice({ id, valor, recomendado }) {
+const ETAPAS_GUIA = [
+  { indices: 'MSAVI2', etapa: 'Poco cultivo', color: 'text-blue-600' },
+  { indices: 'NDVI + NDRE', etapa: 'Pleno crecimiento', color: 'text-green-600' },
+  { indices: 'MSAVI2', etapa: 'Agoste / cosecha', color: 'text-blue-600' },
+];
+
+function TarjetaIndice({ id, valor, recomendado, recomendados = [] }) {
   const info = INDICES_INFO[id];
   const nivel = getNivelIndice(valor, id);
   const Icon = ICONOS[id] || Leaf;
+  const esRecomendado = recomendado || recomendados.includes(id);
 
   return (
     <div className={`rounded-xl p-3 border-2 transition-all ${
-      recomendado ? 'border-primary bg-primary/5 shadow-sm' : 'border-gray-100 bg-gray-50'
+      esRecomendado ? 'border-primary bg-primary/5 shadow-sm' : 'border-gray-100 bg-gray-50'
     }`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -23,9 +31,9 @@ function TarjetaIndice({ id, valor, recomendado }) {
             <p className="text-[10px] text-gray-500">{info.etapa}</p>
           </div>
         </div>
-        {recomendado && (
+        {esRecomendado && (
           <span className="text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded-full shrink-0">
-            Recomendado
+            {recomendado ? 'Principal' : 'Usar'}
           </span>
         )}
       </div>
@@ -54,6 +62,7 @@ export default function IndicesSatelitalesPanel({ data, cultivo = '', compact = 
 
   const imagen = data.satellite_image || data.ndvi_image;
   const indiceRecomendado = data.indice_recomendado || 'ndvi';
+  const indicesRecomendados = data.indices_recomendados || [indiceRecomendado];
   const mostrarGuia = data.es_maiz_o_cana || esCultivoMaizOCana(cultivo);
 
   const indices = {
@@ -61,6 +70,10 @@ export default function IndicesSatelitalesPanel({ data, cultivo = '', compact = 
     ndvi: data.ndvi_promedio,
     ndre: data.ndre_promedio,
   };
+
+  const resolucionLabel = data.resolucion_m
+    ? `~${data.resolucion_m}m/píxel`
+    : data.source === 'sentinel-hub-wms' ? '10m' : 'estimado';
 
   return (
     <div className={compact ? '' : 'bg-white rounded-2xl p-4 shadow-sm'}>
@@ -71,33 +84,40 @@ export default function IndicesSatelitalesPanel({ data, cultivo = '', compact = 
         </div>
       )}
 
+      {data.coords_usadas && (
+        <p className="text-[10px] text-gray-400 mb-2">
+          📍 {data.coords_usadas.lat?.toFixed(5)}, {data.coords_usadas.lon?.toFixed(5)}
+          {data.coords_fuente === 'poligono' ? ' · centro del polígono mapeado' : ' · GPS'}
+          {data.dias_desde_siembra != null ? ` · día ${data.dias_desde_siembra}` : ''}
+        </p>
+      )}
+
+      {data.mapa_calor && (
+        <MapaCalorIndice mapaCalor={data.mapa_calor} indiceActivo={indiceRecomendado} />
+      )}
+
       {imagen && (
         <div className="rounded-xl overflow-hidden mb-3 relative">
           <img src={imagen} alt="Vista satelital" className="w-full h-40 object-cover" />
           <div className="absolute top-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-full">
-            {data.source === 'sentinel-hub-wms' ? 'Sentinel-2 · 10m' : 'Satélite · vista aérea'}
+            {data.source === 'sentinel-hub-wms' ? `Sentinel-2 · ${resolucionLabel}` : `Vista aérea · ${resolucionLabel}`}
           </div>
         </div>
       )}
 
       {mostrarGuia && (
         <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-3">
-          <p className="text-[10px] font-bold text-amber-800 uppercase mb-2">Caña y maíz en la costa</p>
+          <p className="text-[10px] font-bold text-amber-800 uppercase mb-2">Caña y maíz — índices por etapa (Carlos Pérez)</p>
           <div className="flex items-center justify-between text-[9px] text-amber-700 gap-1">
-            <div className="text-center flex-1">
-              <p className="font-bold text-blue-600">MSAVI2</p>
-              <p>Siembra</p>
-            </div>
-            <span className="text-amber-400">→</span>
-            <div className="text-center flex-1">
-              <p className="font-bold text-green-600">NDVI</p>
-              <p>Crecimiento</p>
-            </div>
-            <span className="text-amber-400">→</span>
-            <div className="text-center flex-1">
-              <p className="font-bold text-purple-600">NDRE</p>
-              <p>Cosecha</p>
-            </div>
+            {ETAPAS_GUIA.map((e, i) => (
+              <React.Fragment key={e.etapa}>
+                {i > 0 && <span className="text-amber-400">→</span>}
+                <div className="text-center flex-1">
+                  <p className={`font-bold ${e.color}`}>{e.indices}</p>
+                  <p>{e.etapa}</p>
+                </div>
+              </React.Fragment>
+            ))}
           </div>
           {data.nota_etapa && (
             <p className="text-[10px] text-amber-700 mt-2 text-center">{data.nota_etapa}</p>
@@ -112,20 +132,26 @@ export default function IndicesSatelitalesPanel({ data, cultivo = '', compact = 
             id={id}
             valor={indices[id]}
             recomendado={id === indiceRecomendado}
+            recomendados={indicesRecomendados}
           />
         ))}
       </div>
 
       {data.recomendacion && (
-        <div className="bg-green-50 rounded-xl p-3 mt-3">
-          <p className="text-xs text-green-700">📋 {data.recomendacion}</p>
+        <div className={`rounded-xl p-3 mt-3 ${
+          data.nivel_salud === 'Irregular' ? 'bg-orange-50' : 'bg-green-50'
+        }`}>
+          <p className={`text-xs ${data.nivel_salud === 'Irregular' ? 'text-orange-700' : 'text-green-700'}`}>
+            📋 {data.recomendacion}
+          </p>
         </div>
       )}
 
       <p className="text-[10px] text-gray-400 mt-3 text-center">
-        {data.source === 'sentinel-hub-wms' ? 'Sentinel-2 ESA · Resolución 10m' :
-          data.source === 'esri-world-imagery' ? 'Satélite ESRI · índices estimados' :
-          'Índices estimados por ubicación · MSAVI2 y NDRE derivados del análisis local'}
+        {data.source === 'sentinel-hub-wms' ? `Sentinel-2 ESA · ${resolucionLabel}` :
+          data.source === 'esri-world-imagery' ? `ESRI · ${resolucionLabel} · índices por ubicación y edad` :
+          'Índices por ubicación exacta, edad del cultivo y polígono mapeado'}
+        {data.note ? ` · ${data.note}` : ''}
       </p>
     </div>
   );
