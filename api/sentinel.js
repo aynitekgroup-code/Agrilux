@@ -5,7 +5,53 @@
  * edad del cultivo y polígono mapeado (no el mismo NDVI para todos).
  */
 
-const SENTINEL_WMS_URL = 'https://services.sentinel-hub.com/ogc/wms';
+const SENTINEL_WMS_LEGACY = 'https://services.sentinel-hub.com/ogc/wms';
+const SENTINEL_WMS_CDSE = 'https://sh.dataspace.copernicus.eu/ogc/wms';
+
+async function fetchImagenSentinelWMS(instanceId, lat, lon, radiusKm) {
+  const delta = radiusKm / 111;
+  const bbox = `${lat - delta},${lon - delta},${lat + delta},${lon + delta}`;
+  const commonParams = {
+    SERVICE: 'WMS',
+    VERSION: '1.3.0',
+    REQUEST: 'GetMap',
+    LAYERS: '1_TRUE_COLOR',
+    CRS: 'EPSG:4326',
+    BBOX: bbox,
+    WIDTH: '512',
+    HEIGHT: '512',
+    FORMAT: 'image/png',
+    TRANSPARENT: 'true',
+  };
+
+  const endpoints = [
+    { base: `${SENTINEL_WMS_CDSE}/${instanceId}`, useInstanceParam: false, label: 'cdse' },
+    { base: SENTINEL_WMS_LEGACY, useInstanceParam: true, label: 'legacy' },
+  ];
+
+  for (const ep of endpoints) {
+    try {
+      const wmsUrl = new URL(ep.base);
+      Object.entries(commonParams).forEach(([k, v]) => wmsUrl.searchParams.set(k, v));
+      if (ep.useInstanceParam) wmsUrl.searchParams.set('INSTANCE_ID', instanceId);
+
+      const wmsRes = await fetch(wmsUrl.toString(), { signal: AbortSignal.timeout(15000) });
+      if (!wmsRes.ok) continue;
+
+      const contentType = wmsRes.headers.get('content-type') || '';
+      if (!contentType.includes('image')) continue;
+
+      const arrayBuffer = await wmsRes.arrayBuffer();
+      if (arrayBuffer.byteLength < 500) continue;
+
+      const base64 = Buffer.from(arrayBuffer).toString('base64');
+      return { base64, endpoint: ep.label };
+    } catch {
+      /* probar siguiente endpoint */
+    }
+  }
+  return null;
+}
 
 function hashSemilla(str) {
   let h = 0;
@@ -367,38 +413,20 @@ export default async function handler(req, res) {
   const SENTINEL_INSTANCE_ID = process.env.SENTINEL_INSTANCE_ID;
 
   if (SENTINEL_INSTANCE_ID) {
-    try {
-      const delta = radiusKm / 111;
-      const wmsUrl = new URL(SENTINEL_WMS_URL);
-      wmsUrl.searchParams.set('SERVICE', 'WMS');
-      wmsUrl.searchParams.set('VERSION', '1.3.0');
-      wmsUrl.searchParams.set('REQUEST', 'GetMap');
-      wmsUrl.searchParams.set('LAYERS', '1_TRUE_COLOR');
-      wmsUrl.searchParams.set('CRS', 'EPSG:4326');
-      wmsUrl.searchParams.set('BBOX', `${lat - delta},${lon - delta},${lat + delta},${lon + delta}`);
-      wmsUrl.searchParams.set('WIDTH', '512');
-      wmsUrl.searchParams.set('HEIGHT', '512');
-      wmsUrl.searchParams.set('FORMAT', 'image/png');
-      wmsUrl.searchParams.set('TRANSPARENT', 'true');
-      wmsUrl.searchParams.set('INSTANCE_ID', SENTINEL_INSTANCE_ID);
+    const wms = await fetchImagenSentinelWMS(SENTINEL_INSTANCE_ID, lat, lon, radiusKm);
+    if (wms) {
+      indicesExtra.resolucion_m = 10;
+      const analisis = generarAnalisisCompleto(lat, lon, radiusKm, [indicesCompletos.ndvi], indicesExtra);
 
-      const wmsRes = await fetch(wmsUrl.toString());
-      if (wmsRes.ok) {
-        const arrayBuffer = await wmsRes.arrayBuffer();
-        const base64 = Buffer.from(arrayBuffer).toString('base64');
-        indicesExtra.resolucion_m = 10;
-        const analisis = generarAnalisisCompleto(lat, lon, radiusKm, [indicesCompletos.ndvi], indicesExtra);
-
-        return res.status(200).json({
-          source: 'sentinel-hub-wms',
-          satellite_image: `data:image/png;base64,${base64}`,
-          ...analisis,
-          generated_at: new Date().toISOString(),
-        });
-      }
-    } catch (e) {
-      console.warn('Sentinel Hub WMS falló:', e.message);
+      return res.status(200).json({
+        source: 'sentinel-hub-wms',
+        sentinel_endpoint: wms.endpoint,
+        satellite_image: `data:image/png;base64,${wms.base64}`,
+        ...analisis,
+        generated_at: new Date().toISOString(),
+      });
     }
+    console.warn('Sentinel WMS falló con INSTANCE_ID:', SENTINEL_INSTANCE_ID);
   }
 
   try {
