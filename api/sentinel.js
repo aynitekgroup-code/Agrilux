@@ -98,6 +98,75 @@ async function obtenerTokenCDSE() {
   }
 }
 
+function extraerServiceException(xml) {
+  const m = xml.match(/<(?:\w+:)?ServiceException[^>]*>([^<]+)</i);
+  return m ? m[1].trim() : xml.slice(0, 220);
+}
+
+async function fetchImagenSentinelProcess(lat, lon, radiusKm, accessToken) {
+  const bbox3857 = bboxWebMercator(lat, lon, radiusKm);
+  const [minX, minY, maxX, maxY] = bbox3857.split(',').map(Number);
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 120);
+
+  const evalscript = `//VERSION=3
+function setup() {
+  return { input: ["B02", "B03", "B04", "dataMask"], output: { bands: 3 } };
+}
+function evaluatePixel(sample) {
+  if (sample.dataMask === 0) return [0, 0, 0];
+  return [2.5 * sample.B04, 2.5 * sample.B03, 2.5 * sample.B02];
+}`;
+
+  try {
+    const res = await fetch('https://sh.dataspace.copernicus.eu/api/v1/process', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        Accept: 'image/jpeg',
+      },
+      body: JSON.stringify({
+        input: {
+          bounds: {
+            bbox: [minX, minY, maxX, maxY],
+            properties: { crs: 'http://www.opengis.net/def/crs/EPSG/0/3857' },
+          },
+          data: [{
+            type: 'sentinel-2-l2a',
+            dataFilter: {
+              timeRange: { from: start.toISOString(), to: end.toISOString() },
+              maxCloudCoverage: 80,
+            },
+          }],
+        },
+        output: { width: 512, height: 512 },
+        evalscript,
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return { failed: true, error: extraerServiceException(errText), status: res.status };
+    }
+
+    const arrayBuffer = await res.arrayBuffer();
+    if (arrayBuffer.byteLength < 500) {
+      return { failed: true, error: 'process_response_too_small', bytes: arrayBuffer.byteLength };
+    }
+
+    return {
+      base64: Buffer.from(arrayBuffer).toString('base64'),
+      mime: 'jpeg',
+      endpoint: 'process-api',
+      layer: 'TRUE_COLOR',
+    };
+  } catch (e) {
+    return { failed: true, error: e.message };
+  }
+}
 async function fetchImagenSentinelWMS(instanceId, lat, lon, radiusKm, accessToken) {
   const bbox3857 = bboxWebMercator(lat, lon, radiusKm);
   const time = rangoTiempoWMS();
@@ -115,64 +184,69 @@ async function fetchImagenSentinelWMS(instanceId, lat, lon, radiusKm, accessToke
 
   const endpoints = [
     { base: `${SENTINEL_WMS_CDSE}/${instanceId}`, useInstanceParam: false, label: 'cdse', needsAuth: true },
-    { base: SENTINEL_WMS_LEGACY, useInstanceParam: true, label: 'legacy', needsAuth: false },
   ];
+
+  const timeVariants = [null, time];
 
   for (const ep of endpoints) {
     for (const mapCfg of mapConfigs) {
       for (const layer of layers) {
-        try {
-          if (ep.needsAuth && !accessToken) {
-            debug.attempts.push({ endpoint: ep.label, layer, skipped: 'no_bearer_token' });
-            continue;
+        for (const timeVal of timeVariants) {
+          try {
+            if (ep.needsAuth && !accessToken) {
+              debug.attempts.push({ endpoint: ep.label, layer, skipped: 'no_bearer_token' });
+              continue;
+            }
+
+            const wmsUrl = new URL(ep.base);
+            wmsUrl.searchParams.set('SERVICE', 'WMS');
+            wmsUrl.searchParams.set('VERSION', mapCfg.version);
+            wmsUrl.searchParams.set('REQUEST', 'GetMap');
+            wmsUrl.searchParams.set('LAYERS', layer);
+            wmsUrl.searchParams.set(mapCfg.crsKey, mapCfg.crs);
+            wmsUrl.searchParams.set('BBOX', mapCfg.bbox);
+            wmsUrl.searchParams.set('WIDTH', '512');
+            wmsUrl.searchParams.set('HEIGHT', '512');
+            wmsUrl.searchParams.set('FORMAT', 'image/jpeg');
+            wmsUrl.searchParams.set('MAXCC', '80');
+            if (timeVal) wmsUrl.searchParams.set('TIME', timeVal);
+            if (ep.useInstanceParam) wmsUrl.searchParams.set('INSTANCE_ID', instanceId);
+
+            const headers = {};
+            if (ep.needsAuth) headers.Authorization = `Bearer ${accessToken}`;
+
+            const wmsRes = await fetch(wmsUrl.toString(), { headers, signal: AbortSignal.timeout(15_000) });
+            const contentType = wmsRes.headers.get('content-type') || '';
+
+            if (!wmsRes.ok) {
+              const errBody = await wmsRes.text();
+              debug.attempts.push({
+                endpoint: ep.label,
+                layer,
+                version: mapCfg.version,
+                time: timeVal || 'default',
+                status: wmsRes.status,
+                error: extraerServiceException(errBody),
+              });
+              continue;
+            }
+            if (!contentType.includes('image')) {
+              debug.attempts.push({ endpoint: ep.label, layer, status: wmsRes.status, contentType });
+              continue;
+            }
+
+            const arrayBuffer = await wmsRes.arrayBuffer();
+            if (arrayBuffer.byteLength < 500) {
+              debug.attempts.push({ endpoint: ep.label, layer, bytes: arrayBuffer.byteLength });
+              continue;
+            }
+
+            const base64 = Buffer.from(arrayBuffer).toString('base64');
+            const mime = contentType.includes('jpeg') ? 'jpeg' : 'png';
+            return { base64, mime, endpoint: ep.label, layer, debug };
+          } catch (e) {
+            debug.attempts.push({ endpoint: ep.label, layer, error: e.message });
           }
-
-          const wmsUrl = new URL(ep.base);
-          wmsUrl.searchParams.set('SERVICE', 'WMS');
-          wmsUrl.searchParams.set('VERSION', mapCfg.version);
-          wmsUrl.searchParams.set('REQUEST', 'GetMap');
-          wmsUrl.searchParams.set('LAYERS', layer);
-          wmsUrl.searchParams.set(mapCfg.crsKey, mapCfg.crs);
-          wmsUrl.searchParams.set('BBOX', mapCfg.bbox);
-          wmsUrl.searchParams.set('WIDTH', '512');
-          wmsUrl.searchParams.set('HEIGHT', '512');
-          wmsUrl.searchParams.set('FORMAT', 'image/jpeg');
-          wmsUrl.searchParams.set('TIME', time);
-          if (ep.useInstanceParam) wmsUrl.searchParams.set('INSTANCE_ID', instanceId);
-
-          const headers = {};
-          if (ep.needsAuth) headers.Authorization = `Bearer ${accessToken}`;
-
-          const wmsRes = await fetch(wmsUrl.toString(), { headers, signal: AbortSignal.timeout(15_000) });
-          const contentType = wmsRes.headers.get('content-type') || '';
-
-          if (!wmsRes.ok) {
-            const errBody = (await wmsRes.text()).slice(0, 180);
-            debug.attempts.push({
-              endpoint: ep.label,
-              layer,
-              version: mapCfg.version,
-              status: wmsRes.status,
-              error: errBody || undefined,
-            });
-            continue;
-          }
-          if (!contentType.includes('image')) {
-            debug.attempts.push({ endpoint: ep.label, layer, status: wmsRes.status, contentType });
-            continue;
-          }
-
-          const arrayBuffer = await wmsRes.arrayBuffer();
-          if (arrayBuffer.byteLength < 500) {
-            debug.attempts.push({ endpoint: ep.label, layer, bytes: arrayBuffer.byteLength });
-            continue;
-          }
-
-          const base64 = Buffer.from(arrayBuffer).toString('base64');
-          const mime = contentType.includes('jpeg') ? 'jpeg' : 'png';
-          return { base64, mime, endpoint: ep.label, layer, debug };
-        } catch (e) {
-          debug.attempts.push({ endpoint: ep.label, layer, error: e.message });
         }
       }
     }
@@ -572,6 +646,25 @@ export default async function handler(req, res) {
     }
 
     sentinelDebug.wms = wms?.debug || { failed: true };
+
+    if (tokenResult.token) {
+      const processImg = await fetchImagenSentinelProcess(lat, lon, radiusKm, tokenResult.token);
+      if (processImg && !processImg.failed) {
+        indicesExtra.resolucion_m = 10;
+        const analisis = generarAnalisisCompleto(lat, lon, radiusKm, [indicesCompletos.ndvi], indicesExtra);
+
+        return res.status(200).json({
+          source: 'sentinel-hub-process',
+          sentinel_endpoint: processImg.endpoint,
+          sentinel_layer: processImg.layer,
+          satellite_image: `data:image/${processImg.mime || 'jpeg'};base64,${processImg.base64}`,
+          ...analisis,
+          generated_at: new Date().toISOString(),
+        });
+      }
+      sentinelDebug.process = processImg;
+    }
+
     console.warn('Sentinel WMS falló:', JSON.stringify(sentinelDebug));
   } else {
     sentinelDebug.hint = 'Agrega SENTINEL_INSTANCE_ID en Vercel (Production)';
