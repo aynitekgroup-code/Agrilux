@@ -33,6 +33,7 @@ export default function Registro() {
 
   const [modo, setModo]           = useState('login');
   const [nombre, setNombre]       = useState('');
+  const [whatsapp, setWhatsapp]   = useState('');
   const [email, setEmail]         = useState('');
   const [ubicacion, setUbicacion] = useState('');
   const [password, setPassword]   = useState('');
@@ -46,7 +47,7 @@ export default function Registro() {
 
   const cambiarModo = (m) => {
     setModo(m); setError('');
-    setNombre(''); setEmail(''); setUbicacion(''); setPassword(''); setCoords(null);
+    setNombre(''); setWhatsapp(''); setEmail(''); setUbicacion(''); setPassword(''); setCoords(null);
   };
 
   const detectarGPS = () => {
@@ -89,6 +90,7 @@ export default function Registro() {
 
     if (modo === 'registro') {
       if (!nombre.trim())       { setError('Ingresa tu nombre completo.'); submittingRef.current = false; return; }
+      if (!whatsapp.trim())     { setError('Ingresa tu número de WhatsApp.'); submittingRef.current = false; return; }
       if (!email.trim())        { setError('Ingresa tu correo electrónico.'); submittingRef.current = false; return; }
       if (!ubicacion.trim())    { setError('Selecciona tu ubicación (GPS o manual).'); submittingRef.current = false; return; }
       if (password.length < 6)  { setError('La contraseña debe tener al menos 6 caracteres.'); submittingRef.current = false; return; }
@@ -102,7 +104,8 @@ export default function Registro() {
       if (modo === 'registro') {
         const nombreSanitizado = DOMPurify.sanitize(nombre).trim();
         const ubicacionSanitizada = DOMPurify.sanitize(ubicacion).trim();
-        await register({ nombre: nombreSanitizado, email, password, ubicacion: ubicacionSanitizada, coords });
+        const whatsappSanitizado = DOMPurify.sanitize(whatsapp).trim();
+        await register({ nombre: nombreSanitizado, email, password, ubicacion: ubicacionSanitizada, coords, whatsapp: whatsappSanitizado });
       } else {
         await login({ email, password });
       }
@@ -169,6 +172,22 @@ export default function Registro() {
                     placeholder="Ej: Juan Pérez García"
                     className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
                     autoComplete="name"
+                  />
+                </div>
+              </div>
+
+              {/* WhatsApp */}
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1.5">WhatsApp *</label>
+                <div className="relative">
+                  <input
+                    value={whatsapp}
+                    onChange={e => setWhatsapp(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                    placeholder="Ej: 987654321"
+                    className="w-full border-2 border-gray-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                    autoComplete="tel"
+                    inputMode="tel"
                   />
                 </div>
               </div>

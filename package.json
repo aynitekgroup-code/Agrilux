@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean-api": "cmd /c cleanup-api.bat",
+    "generate-android-icons": "node scripts/generate-android-icons.js",
     "deploy": "npm run build && git add -A && git commit -m \"deploy\" && git push"
   },
   "dependencies": {
