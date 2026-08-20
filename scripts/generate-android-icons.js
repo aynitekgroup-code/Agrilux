@@ -16,7 +16,7 @@ function getFullIconSvg(size) {
   </defs>
   <rect width="${size}" height="${size}" rx="${cornerRadius}" fill="url(#bg)"/>
   <text x="${size/2}" y="${size * 0.58}" font-family="Arial,Helvetica,sans-serif" font-size="${size * 0.45}" font-weight="bold" fill="white" text-anchor="middle">A</text>
-  <text x="${size/2}" y="${size * 0.82}" font-family="Arial,Helvetica,sans-serif" font-size="${size * 0.1}" font-weight="bold" fill="#a8e6cf" text-anchor="middle">GRILUX</text>
+  <text x="${size/2}" y="${size * 0.82}" font-family="Arial,Helvetica,sans-serif" font-size="${size * 0.1}" font-weight="bold" fill="#a8e6cf" text-anchor="middle">AGRILUX</text>
 </svg>`;
 }
 
@@ -25,7 +25,7 @@ function getForegroundIconSvg(size) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
   <g transform="translate(${size * 0.15}, ${size * 0.15}) scale(0.7)">
     <text x="${size/2}" y="${size * 0.55}" font-family="Arial,Helvetica,sans-serif" font-size="${size * 0.45}" font-weight="bold" fill="white" text-anchor="middle">A</text>
-    <text x="${size/2}" y="${size * 0.80}" font-family="Arial,Helvetica,sans-serif" font-size="${size * 0.1}" font-weight="bold" fill="#a8e6cf" text-anchor="middle">GRILUX</text>
+    <text x="${size/2}" y="${size * 0.80}" font-family="Arial,Helvetica,sans-serif" font-size="${size * 0.1}" font-weight="bold" fill="#a8e6cf" text-anchor="middle">AGRILUX</text>
   </g>
 </svg>`;
 }
