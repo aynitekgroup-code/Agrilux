@@ -71,7 +71,10 @@ async function cargarOfertasFirestore({ lat, lon, cultivo = '' } = {}) {
     const tiendasMap = {};
     await Promise.all(tiendaIds.map(async (id) => {
       const tiendaDoc = await getDoc(doc(db, 'tiendas_comunidad', id));
-      if (tiendaDoc.exists()) tiendasMap[id] = { id: tiendaDoc.id, ...tiendaDoc.data() };
+      if (tiendaDoc.exists()) {
+        const data = tiendaDoc.data();
+        if (data.propietarioId) tiendasMap[id] = { id: tiendaDoc.id, ...data };
+      }
     }));
 
     for (const precioDoc of preciosSnap.docs) {
@@ -102,6 +105,7 @@ async function cargarOfertasFirestore({ lat, lon, cultivo = '' } = {}) {
 
       for (const tiendaDoc of tiendasSnap.docs) {
         const tienda = tiendaDoc.data();
+        if (!tienda.propietarioId) continue;
         const preciosActuales = tienda.preciosActuales || {};
         const entries = Object.entries(preciosActuales);
 

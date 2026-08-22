@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Store, Tag, Mic, Loader2, RefreshCw, MapPin, Plus,
   MessageCircle, ExternalLink, ShoppingBag, Trash2, AlertTriangle,
@@ -16,6 +16,7 @@ const FILTROS_REGION = ['todas', 'cajamarca', 'lambayeque', 'piura', 'ica', 'jun
 
 export default function MercadoPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const tabInicial = searchParams.get('tab') || 'ofertas';
   const { coords, ubicacion, productoRecomendado, tiendasEncontradas } = useAgentes();
   const { user } = useAuth();
@@ -30,6 +31,14 @@ export default function MercadoPage() {
   const [cargandoTiendas, setCargandoTiendas] = useState(false);
   const [eliminandoId, setEliminandoId] = useState(null);
   const [confirmEliminar, setConfirmEliminar] = useState(null);
+
+  const abrirRegistro = useCallback(() => {
+    if (!user?.uid) {
+      navigate('/registro?redirect=/mercado&tab=mitienda');
+      return;
+    }
+    setMostrarRegistro(true);
+  }, [user?.uid, navigate]);
 
   useEffect(() => {
     const t = searchParams.get('tab');
@@ -203,7 +212,7 @@ export default function MercadoPage() {
               <Tag size={40} className="text-gray-300 mx-auto mb-3" />
               <p className="text-gray-600 font-medium">Aún no hay ofertas registradas</p>
               <p className="text-gray-400 text-xs mt-1 mb-4">Registra tu tienda en la pestaña Mi tienda</p>
-              <button onClick={() => setTab('mitienda')}
+              <button onClick={() => { setTab('mitienda'); abrirRegistro(); }}
                 className="bg-primary text-white font-bold px-6 py-3 rounded-2xl text-sm">
                 Registrar mi tienda
               </button>
@@ -332,7 +341,7 @@ export default function MercadoPage() {
                   {misTiendas.length} tienda{misTiendas.length !== 1 ? 's' : ''} registrada{misTiendas.length !== 1 ? 's' : ''}
                 </p>
                 <button
-                  onClick={() => setMostrarRegistro(true)}
+                  onClick={abrirRegistro}
                   className="text-xs font-bold text-primary flex items-center gap-1"
                 >
                   <Plus size={14} /> Agregar
@@ -412,7 +421,7 @@ export default function MercadoPage() {
               <p className="text-gray-400 text-sm mb-4">
                 Regístrala gratis y tus ofertas aparecerán en Agrilux y en el agente de ventas.
               </p>
-              <button onClick={() => setMostrarRegistro(true)}
+              <button onClick={abrirRegistro}
                 className="inline-flex items-center gap-2 bg-primary text-white font-bold px-6 py-3 rounded-2xl text-sm">
                 <Plus size={18} /> Registrar mi tienda
               </button>

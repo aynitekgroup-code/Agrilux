@@ -6,12 +6,13 @@
  */
 
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import { useAuth } from '../lib/AuthContext';
 import {
-  Store, MapPin, Phone, MessageCircle, Globe, Camera,
-  CheckCircle, Loader2, X, ChevronDown
+  Store, MapPin, Globe, Camera,
+  CheckCircle, Loader2, X, ChevronDown, Lock,
 } from 'lucide-react';
 
 const DEPARTAMENTOS = [
@@ -30,6 +31,7 @@ const ESPECIALIDADES = [
 
 export default function RegistroTienda({ onCerrado, onRegistrada }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     nombre: '',
     direccion: '',
@@ -88,6 +90,10 @@ export default function RegistroTienda({ onCerrado, onRegistrada }) {
   };
 
   const registrar = async () => {
+    if (!user?.uid) {
+      setError('Debes iniciar sesión para registrar tu tienda');
+      return;
+    }
     if (!form.nombre.trim()) { setError('El nombre de la tienda es obligatorio'); return; }
     if (!form.whatsapp.trim()) { setError('El número de WhatsApp es obligatorio'); return; }
 
@@ -133,6 +139,32 @@ export default function RegistroTienda({ onCerrado, onRegistrada }) {
     }
     setLoading(false);
   };
+
+  if (!user?.uid) {
+    return (
+      <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-3xl w-full max-w-sm p-8 text-center space-y-4">
+          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
+            <Lock size={32} className="text-amber-600" />
+          </div>
+          <h3 className="text-xl font-bold text-gray-800">Inicia sesión primero</h3>
+          <p className="text-gray-500 text-sm">
+            Para registrar tu tienda agrícola necesitas una cuenta Agrilux.
+          </p>
+          <button
+            type="button"
+            onClick={() => { onCerrado(); navigate('/registro?redirect=/mercado&tab=mitienda'); }}
+            className="w-full bg-green-600 text-white font-bold py-3 rounded-xl"
+          >
+            Iniciar sesión / Crear cuenta
+          </button>
+          <button type="button" onClick={onCerrado} className="text-sm text-gray-400">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (exito) {
     return (

@@ -449,12 +449,17 @@ export default async function handler(req, res) {
       const tiendaIds = [...new Set(precios.map(p => p.tiendaId))];
       const tiendasMap = {};
       for (const id of tiendaIds) {
-        const doc = await db.collection('tiendas_comunidad').doc(id).get();
-        if (doc.exists) tiendasMap[id] = { id: doc.id, ...doc.data() };
+        const docSnap = await db.collection('tiendas_comunidad').doc(id).get();
+        if (docSnap.exists) {
+          const data = docSnap.data();
+          if (data.propietarioId) tiendasMap[id] = { id: docSnap.id, ...data };
+        }
       }
 
-      // Formatear como ofertas
-      let ofertas = precios.map(p => ({
+      // Formatear como ofertas (solo tiendas con dueño registrado)
+      let ofertas = precios
+        .filter((p) => tiendasMap[p.tiendaId])
+        .map(p => ({
         tienda: p.tiendaNombre || tiendasMap[p.tiendaId]?.nombre || 'Tienda',
         producto: p.productoNombre || p.producto,
         precio: p.precio,
@@ -490,11 +495,34 @@ export default async function handler(req, res) {
       });
     }
 
-    // ── ADMIN: Ver tiendas registradas ──
+    // ── ADMIN ──
     if (type === 'admin') {
       const key = url.searchParams.get('key');
       if (key !== process.env.ADMIN_KEY) {
         return res.status(403).json({ error: 'Clave incorrecta' });
+      }
+
+      const action = url.searchParams.get('action');
+
+      if (action === 'purge_comunidad' && req.method === 'POST') {
+        const snapTiendas = await db.collection('tiendas_comunidad').get();
+        const snapPrecios = await db.collection('precios_historicos').get();
+        const allDocs = [...snapTiendas.docs, ...snapPrecios.docs];
+        let eliminados = 0;
+
+        for (let i = 0; i < allDocs.length; i += 450) {
+          const batch = db.batch();
+          allDocs.slice(i, i + 450).forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+          eliminados += Math.min(450, allDocs.length - i);
+        }
+
+        return res.status(200).json({
+          ok: true,
+          eliminados,
+          tiendas: snapTiendas.size,
+          precios: snapPrecios.size,
+        });
       }
 
       const snap = await db.collection('tiendas_comunidad').orderBy('createdAt', 'desc').get();
