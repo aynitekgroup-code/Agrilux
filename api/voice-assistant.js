@@ -253,9 +253,10 @@ const SYSTEM_PROMPT_VENTAS = `Eres el agente de ventas de Agrilux. Ayudas a los 
 REGLAS:
 - Responde SIEMPRE en español peruano, tono cálido y campesino
 - Máximo 4 oraciones por respuesta
-- SOLO menciona tiendas y ofertas que aparezcan en "OFERTAS DE TIENDAS REGISTRADAS" del contexto
+- SOLO menciona tiendas y ofertas que aparezcan en "OFERTAS DE TIENDAS REGISTRADAS" o "TIENDAS REGISTRADAS POR EL USUARIO" del contexto
 - NUNCA inventes tiendas, precios ni ofertas que no estén en el contexto
 - Cuando recomiendes, menciona: producto, tienda, precio en S/, distancia y WhatsApp si está disponible
+- Si el usuario tiene tiendas registradas ("TIENDAS REGISTRADAS POR EL USUARIO"), úsalas como referencia cuando pregunte por sus tiendas o productos
 - Si no hay ofertas registradas para lo que busca, di que no hay tiendas registradas con ese producto y sugiere registrar una tienda en Agrilux
 - Usa emojis moderados para hacer la conversación amigable`;
 
@@ -312,7 +313,7 @@ export default async function handler(req, res) {
   const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
   const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
-  const { mensaje, historial = [], lat, lon, ubicacion, nombre, agentType, parcelaContext, ofertasRegistradas = [], productoRecomendado } = req.body;
+  const { mensaje, historial = [], lat, lon, ubicacion, nombre, agentType, parcelaContext, ofertasRegistradas = [], productoRecomendado, misTiendas = [] } = req.body;
   if (!mensaje) return res.status(400).json({ error: 'Falta el campo mensaje' });
 
   const latFinal = lat ?? parcelaContext?.lat ?? null;
@@ -497,6 +498,20 @@ export default async function handler(req, res) {
 
   if (productoRecomendado) {
     contextoParts.push(`PRODUCTO RECOMENDADO POR DIAGNÓSTICO: ${productoRecomendado}`);
+  }
+
+  // ── Tiendas del usuario (agente ventas) ──
+  if (agentType === 'ventas' && misTiendas.length > 0) {
+    const listaTiendas = misTiendas.map((t, i) => {
+      const dist = t.distanciaKm != null ? `, ${t.distanciaKm}km` : '';
+      const wa = t.whatsapp ? `, WhatsApp: 51${String(t.whatsapp).replace(/\D/g, '')}` : '';
+      const fb = t.facebook ? `, Facebook: ${t.facebook}` : '';
+      const dir = t.direccion ? `, ${t.direccion}` : '';
+      const fotos = t.fotos?.length ? `, ${t.fotos.length} foto(s)` : '';
+      return `${i + 1}. ${t.nombre || 'Tienda'} (${t.departamento || 'Perú'})${dir}${dist}${wa}${fb}${fotos} — Estado: ${t.activa !== false ? 'Activa' : 'Inactiva'}`;
+    }).join('\n');
+    contextoParts.push(`TIENDAS REGISTRADAS POR EL USUARIO EN AGRILUX (${misTiendas.length}):\n${listaTiendas}`);
+    contextoParts.push('El usuario es DUEÑO de estas tiendas. Cuando pregunte por sus tiendas, mencionalas con su nombre y datos de contacto. Si dice "mi tienda" o "mis tiendas", refiérete a estas.');
   }
 
   // ── Detectar si el usuario busca tiendas o productos ──

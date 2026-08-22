@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Store, Tag, Mic, Loader2, RefreshCw, MapPin, Plus,
-  MessageCircle, ExternalLink, ShoppingBag, Trash2, AlertTriangle,
+  MessageCircle, ExternalLink, ShoppingBag, Trash2, AlertTriangle, Pencil,
 } from 'lucide-react';
 import { useAgentes } from '../lib/AgentContext';
 import { useAuth } from '../lib/AuthContext';
@@ -27,6 +27,7 @@ export default function MercadoPage() {
   const [filtro, setFiltro] = useState('todas');
   const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
   const [mostrarRegistro, setMostrarRegistro] = useState(false);
+  const [tiendaEditando, setTiendaEditando] = useState(null);
   const [misTiendas, setMisTiendas] = useState([]);
   const [cargandoTiendas, setCargandoTiendas] = useState(false);
   const [eliminandoId, setEliminandoId] = useState(null);
@@ -37,6 +38,16 @@ export default function MercadoPage() {
       navigate('/registro?redirect=/mercado&tab=mitienda');
       return;
     }
+    setTiendaEditando(null);
+    setMostrarRegistro(true);
+  }, [user?.uid, navigate]);
+
+  const abrirEdicion = useCallback((tienda) => {
+    if (!user?.uid) {
+      navigate('/registro?redirect=/mercado&tab=mitienda');
+      return;
+    }
+    setTiendaEditando(tienda);
     setMostrarRegistro(true);
   }, [user?.uid, navigate]);
 
@@ -314,7 +325,7 @@ export default function MercadoPage() {
               </p>
             </div>
           )}
-          <VoiceAssistant fullPage agentType="ventas" />
+          <VoiceAssistant fullPage agentType="ventas" misTiendas={misTiendas} />
         </>
       )}
 
@@ -350,6 +361,18 @@ export default function MercadoPage() {
 
               {misTiendas.map((tienda) => (
                 <div key={tienda.id} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+                  {tienda.fotos?.length > 0 && (
+                    <div className="flex gap-2 mb-3 overflow-x-auto pb-2">
+                      {tienda.fotos.map((foto, idx) => (
+                        <img
+                          key={idx}
+                          src={foto}
+                          alt={`${tienda.nombre} - foto ${idx + 1}`}
+                          className="w-24 h-24 object-cover rounded-xl border border-gray-100 flex-shrink-0"
+                        />
+                      ))}
+                    </div>
+                  )}
                   <div className="flex items-start gap-3 mb-3">
                     <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
                       <Store size={22} className="text-green-600" />
@@ -397,6 +420,14 @@ export default function MercadoPage() {
                         💬 WhatsApp
                       </a>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => abrirEdicion(tienda)}
+                      className="flex items-center justify-center gap-1 px-4 bg-gray-100 text-gray-700 text-xs font-bold py-2.5 rounded-xl"
+                    >
+                      <Pencil size={14} />
+                      Editar
+                    </button>
                     <button
                       type="button"
                       onClick={() => setConfirmEliminar(tienda)}
@@ -473,9 +504,14 @@ export default function MercadoPage() {
 
       {mostrarRegistro && (
         <RegistroTienda
-          onCerrado={() => setMostrarRegistro(false)}
-          onRegistrada={() => {
+          tienda={tiendaEditando}
+          onCerrado={() => {
             setMostrarRegistro(false);
+            setTiendaEditando(null);
+          }}
+          onRegistrada={(tienda) => {
+            setMostrarRegistro(false);
+            setTiendaEditando(null);
             cargarMisTiendas();
             recargarOfertas(true);
             setTab('mitienda');

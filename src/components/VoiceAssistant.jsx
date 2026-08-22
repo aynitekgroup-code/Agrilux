@@ -14,6 +14,7 @@ export default function VoiceAssistant({
   embedded = false,
   agentType = 'ventas',
   parcelaContext = null,
+  misTiendas = [],
 }) {
   const { user } = useAuth();
   const { ubicacion, coords, ofertasRegistradas, productoRecomendado } = useAgentes();
@@ -80,6 +81,7 @@ export default function VoiceAssistant({
           parcelaContext,
           ofertasRegistradas: ofertasRegistradas.slice(0, 12),
           productoRecomendado: productoRecomendado?.nombre || null,
+          misTiendas: misTiendas.slice(0, 10),
         }),
       });
       const data = await r.json();
@@ -95,7 +97,7 @@ export default function VoiceAssistant({
     } finally {
       setProcesando(false);
     }
-  }, [coordenadas, user, agentType, ubicacion, coords, leerTexto, ofertasRegistradas, productoRecomendado, parcelaContext]);
+  }, [coordenadas, user, agentType, ubicacion, coords, leerTexto, ofertasRegistradas, productoRecomendado, parcelaContext, misTiendas]);
 
   const iniciarEscucha = useCallback(() => {
     setError('');
