@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Store, Tag, Mic, Loader2, RefreshCw, MapPin, Plus,
-  MessageCircle, ExternalLink, ShoppingBag,
+  MessageCircle, ExternalLink, ShoppingBag, Trash2, AlertTriangle,
 } from 'lucide-react';
 import { useAgentes } from '../lib/AgentContext';
 import { useAuth } from '../lib/AuthContext';
@@ -10,7 +10,7 @@ import { cargarOfertasRegistradas } from '../lib/ofertasRegistradas';
 import VoiceAssistant from '../components/VoiceAssistant';
 import RegistroTienda from '../components/RegistroTienda';
 import { db } from '../lib/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 
 const FILTROS_REGION = ['todas', 'cajamarca', 'lambayeque', 'piura', 'ica', 'junín'];
 
@@ -26,7 +26,10 @@ export default function MercadoPage() {
   const [filtro, setFiltro] = useState('todas');
   const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
   const [mostrarRegistro, setMostrarRegistro] = useState(false);
-  const [miTienda, setMiTienda] = useState(null);
+  const [misTiendas, setMisTiendas] = useState([]);
+  const [cargandoTiendas, setCargandoTiendas] = useState(false);
+  const [eliminandoId, setEliminandoId] = useState(null);
+  const [confirmEliminar, setConfirmEliminar] = useState(null);
 
   useEffect(() => {
     const t = searchParams.get('tab');
@@ -52,22 +55,63 @@ export default function MercadoPage() {
 
   useEffect(() => { recargarOfertas(); }, [recargarOfertas]);
 
-  useEffect(() => {
-    if (!user?.id) { setMiTienda(null); return; }
-    (async () => {
-      try {
-        const q = query(
+  const cargarMisTiendas = useCallback(async () => {
+    if (!user?.uid) {
+      setMisTiendas([]);
+      return;
+    }
+    setCargandoTiendas(true);
+    try {
+      const porUid = query(
+        collection(db, 'tiendas_comunidad'),
+        where('propietarioId', '==', user.uid),
+      );
+      const snap = await getDocs(porUid);
+      let tiendas = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((t) => t.activa !== false);
+
+      if (tiendas.length === 0 && user.email) {
+        const porEmail = query(
           collection(db, 'tiendas_comunidad'),
-          where('propietarioId', '==', user.id)
+          where('propietarioEmail', '==', user.email),
         );
-        const snap = await getDocs(q);
-        if (!snap.empty) setMiTienda({ id: snap.docs[0].id, ...snap.docs[0].data() });
-        else setMiTienda(null);
-      } catch {
-        setMiTienda(null);
+        const snapEmail = await getDocs(porEmail);
+        tiendas = snapEmail.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((t) => t.activa !== false);
       }
-    })();
-  }, [user?.id, mostrarRegistro]);
+
+      tiendas.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      setMisTiendas(tiendas);
+    } catch (e) {
+      console.error(e);
+      setMisTiendas([]);
+    }
+    setCargandoTiendas(false);
+  }, [user?.uid, user?.email]);
+
+  useEffect(() => {
+    cargarMisTiendas();
+  }, [cargarMisTiendas, mostrarRegistro]);
+
+  const eliminarTienda = async (tienda) => {
+    setEliminandoId(tienda.id);
+    try {
+      await updateDoc(doc(db, 'tiendas_comunidad', tienda.id), {
+        activa: false,
+        eliminadaAt: new Date().toISOString(),
+        eliminadaPor: user.uid,
+      });
+      setMisTiendas((prev) => prev.filter((t) => t.id !== tienda.id));
+      setConfirmEliminar(null);
+      recargarOfertas(true);
+    } catch (e) {
+      console.error(e);
+      alert('No se pudo eliminar la tienda. Intenta de nuevo.');
+    }
+    setEliminandoId(null);
+  };
 
   const ofertasFiltradas = filtro === 'todas'
     ? ofertas
@@ -268,44 +312,98 @@ export default function MercadoPage() {
       {/* ── TAB MI TIENDA ── */}
       {tab === 'mitienda' && (
         <div>
-          {miTienda ? (
-            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm mb-4">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                  <Store size={24} className="text-green-600" />
-                </div>
-                <div>
-                  <h2 className="font-bold text-gray-800">{miTienda.nombre}</h2>
-                  <p className="text-xs text-gray-500">
-                    📍 {[miTienda.distrito, miTienda.departamento].filter(Boolean).join(', ')}
-                  </p>
-                </div>
-              </div>
-              {miTienda.descripcion && (
-                <p className="text-sm text-gray-600 mb-3">{miTienda.descripcion}</p>
-              )}
-              {miTienda.especialidades?.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {miTienda.especialidades.map(e => (
-                    <span key={e} className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">{e}</span>
-                  ))}
-                </div>
-              )}
-              <div className="flex gap-2">
-                {miTienda.whatsapp && (
-                  <a href={`https://wa.me/51${miTienda.whatsapp}`}
-                    className="flex-1 text-center bg-green-500 text-white text-xs font-bold py-2.5 rounded-xl">
-                    💬 WhatsApp
-                  </a>
-                )}
-                <button onClick={() => setMostrarRegistro(true)}
-                  className="flex-1 bg-gray-100 text-gray-700 text-xs font-bold py-2.5 rounded-xl">
-                  Editar tienda
+          {!user?.uid ? (
+            <div className="text-center py-8 mb-4 bg-white rounded-2xl border border-gray-100 p-6">
+              <Store size={40} className="text-gray-300 mx-auto mb-3" />
+              <h2 className="font-bold text-gray-700 mb-1">Inicia sesión</h2>
+              <p className="text-gray-400 text-sm">
+                Necesitas una cuenta para ver y gestionar tus tiendas registradas.
+              </p>
+            </div>
+          ) : cargandoTiendas ? (
+            <div className="flex flex-col items-center py-12">
+              <Loader2 size={32} className="animate-spin text-primary mb-3" />
+              <p className="text-gray-500 text-sm">Cargando tus tiendas...</p>
+            </div>
+          ) : misTiendas.length > 0 ? (
+            <div className="space-y-3 mb-4">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs font-semibold text-gray-500">
+                  {misTiendas.length} tienda{misTiendas.length !== 1 ? 's' : ''} registrada{misTiendas.length !== 1 ? 's' : ''}
+                </p>
+                <button
+                  onClick={() => setMostrarRegistro(true)}
+                  className="text-xs font-bold text-primary flex items-center gap-1"
+                >
+                  <Plus size={14} /> Agregar
                 </button>
               </div>
-              <p className="text-[10px] text-gray-400 mt-3 text-center">
-                {miTienda.verificada ? '✓ Tienda verificada' : '⏳ Pendiente de verificación'}
-              </p>
+
+              {misTiendas.map((tienda) => (
+                <div key={tienda.id} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <Store size={22} className="text-green-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="font-bold text-gray-800">{tienda.nombre}</h2>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        📍 {[tienda.direccion, tienda.distrito, tienda.departamento].filter(Boolean).join(', ')}
+                      </p>
+                      {tienda.horario && (
+                        <p className="text-xs text-gray-400 mt-1">🕐 {tienda.horario}</p>
+                      )}
+                      {tienda.createdAt && (
+                        <p className="text-[10px] text-gray-300 mt-1">
+                          Registrada: {new Date(tienda.createdAt).toLocaleDateString('es-PE')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {tienda.descripcion && (
+                    <p className="text-sm text-gray-600 mb-3">{tienda.descripcion}</p>
+                  )}
+
+                  {tienda.especialidades?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {tienda.especialidades.map((e) => (
+                        <span key={e} className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">{e}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-gray-400 mb-3">
+                    {tienda.verificada ? '✓ Tienda verificada' : '⏳ Pendiente de verificación'}
+                  </p>
+
+                  <div className="flex gap-2">
+                    {tienda.whatsapp && (
+                      <a
+                        href={`https://wa.me/51${String(tienda.whatsapp).replace(/\D/g, '')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex-1 text-center bg-green-500 text-white text-xs font-bold py-2.5 rounded-xl"
+                      >
+                        💬 WhatsApp
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setConfirmEliminar(tienda)}
+                      disabled={eliminandoId === tienda.id}
+                      className="flex items-center justify-center gap-1 px-4 bg-red-50 text-red-600 text-xs font-bold py-2.5 rounded-xl disabled:opacity-50"
+                    >
+                      {eliminandoId === tienda.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
+                      Eliminar
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="text-center py-8 mb-4">
@@ -333,11 +431,43 @@ export default function MercadoPage() {
         </div>
       )}
 
+      {confirmEliminar && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto">
+              <AlertTriangle size={24} className="text-red-600" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-800 text-center">¿Eliminar tienda?</h3>
+            <p className="text-sm text-gray-500 text-center">
+              Se ocultará <strong>{confirmEliminar.nombre}</strong> del mercado y de las ofertas. Esta acción no se puede deshacer.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmEliminar(null)}
+                className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-bold"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => eliminarTienda(confirmEliminar)}
+                disabled={!!eliminandoId}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold disabled:opacity-50"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {mostrarRegistro && (
         <RegistroTienda
           onCerrado={() => setMostrarRegistro(false)}
           onRegistrada={() => {
             setMostrarRegistro(false);
+            cargarMisTiendas();
             recargarOfertas(true);
             setTab('mitienda');
           }}

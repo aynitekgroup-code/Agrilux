@@ -110,7 +110,7 @@ export default function RegistroTienda({ onCerrado, onRegistrada }) {
         horario: form.horario.trim() || null,
         descripcion: form.descripcion.trim() || null,
         // Datos del propietario
-        propietarioId: user?.id || null,
+        propietarioId: user?.uid || null,
         propietarioNombre: user?.nombre || null,
         propietarioEmail: user?.email || null,
         // Metadatos
