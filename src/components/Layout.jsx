@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, Leaf, Calendar, Store, LogOut, Menu, X, MapPin, Shield, User } from 'lucide-react';
+import { Camera, Leaf, Calendar, Store, LogOut, Menu, X, MapPin, Shield, User, Sparkles } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import SelectorUbicacion from './SelectorUbicacion';
 import OnlineStatus from './OnlineStatus';
@@ -41,7 +41,7 @@ export default function Layout({ children }) {
 
   const handleAdminLogin = async () => {
     try {
-      const res = await fetch('/api/admin-auth', {
+      const res = await fetch('/api/alertas-preventivas?type=auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clave: adminClave }),

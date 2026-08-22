@@ -16,17 +16,22 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
-// ── Firebase Admin ──
-if (!getApps().length) {
-  initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
-  });
+// ── Firebase Admin (con manejo de errores) ──
+let db = null;
+try {
+  if (!getApps().length) {
+    initializeApp({
+      credential: cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      }),
+    });
+  }
+  db = getFirestore();
+} catch (err) {
+  console.error('Firebase Admin init error:', err.message);
 }
-const db = getFirestore();
 
 // ── Ciudades agrícolas ──
 const CIUDES_AGRICOLAS = [
@@ -218,6 +223,11 @@ export default async function handler(req, res) {
   try {
     const url = new URL(req.url, 'http://localhost');
     const type = url.searchParams.get('type') || 'comunidad';
+
+    // Si Firebase no está configurado, solo permitir scraping
+    if (!db && type !== 'scraper') {
+      return res.status(503).json({ error: 'Firebase no configurado. Agrega FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL y FIREBASE_PRIVATE_KEY en Vercel.' });
+    }
 
     // ── SCRAPING ──
     if (type === 'scraper') {

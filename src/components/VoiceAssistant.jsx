@@ -6,8 +6,15 @@ import { guardarConversacion } from '../lib/learningSystem';
 
 const WELCOME_VENTAS = '¡Hola! Soy tu agente de ventas Agrilux. Conozco las ofertas de tiendas registradas en la app. Pregúntame por productos, precios o dónde comprar cerca. ¿Qué necesitas?';
 const WELCOME_PLAGAS = '¡Hola! Soy tu asistente técnico. Puedo ayudarte con diagnóstico de plagas, recomendaciones de productos y consejos para tus cultivos. ¿En qué te puedo ayudar?';
+const WELCOME_PARCELA = '¡Hola! Soy tu agente de parcela. Conozco tu cultivo, los índices satelitales MSAVI2, NDVI y NDRE, y el riesgo de plagas. Pregúntame por riego, fertilización, etapa del cultivo o qué índice revisar. ¿En qué te ayudo?';
 
-export default function VoiceAssistant({ disabled = false, fullPage = false, agentType = 'ventas' }) {
+export default function VoiceAssistant({
+  disabled = false,
+  fullPage = false,
+  embedded = false,
+  agentType = 'ventas',
+  parcelaContext = null,
+}) {
   const { user } = useAuth();
   const { ubicacion, coords, ofertasRegistradas, productoRecomendado } = useAgentes();
   const [escuchando, setEscuchando]       = useState(false);
@@ -33,7 +40,9 @@ export default function VoiceAssistant({ disabled = false, fullPage = false, age
     }
   }, [coords?.lat, coords?.lon]);
 
-  const welcomeMsg = agentType === 'ventas' ? WELCOME_VENTAS : WELCOME_PLAGAS;
+  const welcomeMsg = agentType === 'ventas' ? WELCOME_VENTAS
+    : agentType === 'parcela' ? WELCOME_PARCELA
+    : WELCOME_PLAGAS;
 
   const leerTexto = useCallback((texto) => {
     if (!('speechSynthesis' in window)) return;
@@ -63,11 +72,12 @@ export default function VoiceAssistant({ disabled = false, fullPage = false, age
         body: JSON.stringify({
           mensaje,
           historial: hist.slice(-10),
-          lat: coordenadas?.lat || coords?.lat || null,
-          lon: coordenadas?.lon || coords?.lon || null,
-          ubicacion: ubicacion || user?.ubicacion || null,
+          lat: coordenadas?.lat || coords?.lat || parcelaContext?.lat || null,
+          lon: coordenadas?.lon || coords?.lon || parcelaContext?.lon || null,
+          ubicacion: ubicacion || user?.ubicacion || parcelaContext?.gps || null,
           nombre: user?.nombre || null,
           agentType,
+          parcelaContext,
           ofertasRegistradas: ofertasRegistradas.slice(0, 12),
           productoRecomendado: productoRecomendado?.nombre || null,
         }),
@@ -85,7 +95,7 @@ export default function VoiceAssistant({ disabled = false, fullPage = false, age
     } finally {
       setProcesando(false);
     }
-  }, [coordenadas, user, agentType, ubicacion, coords, leerTexto, ofertasRegistradas, productoRecomendado]);
+  }, [coordenadas, user, agentType, ubicacion, coords, leerTexto, ofertasRegistradas, productoRecomendado, parcelaContext]);
 
   const iniciarEscucha = useCallback(() => {
     setError('');
@@ -132,16 +142,75 @@ export default function VoiceAssistant({ disabled = false, fullPage = false, age
     setEscuchando(false);
   }, []);
 
-  // Auto-start welcome on mount (fullPage mode)
+  // Auto-start welcome on mount (fullPage or embedded mode)
   useEffect(() => {
-    if (fullPage && !started) {
+    if ((fullPage || embedded) && !started) {
       setRespuesta(welcomeMsg);
-      setTimeout(() => leerTexto(welcomeMsg), 500);
-      setStarted(true);
+      if (embedded) {
+        setStarted(true);
+      } else {
+        setTimeout(() => leerTexto(welcomeMsg), 500);
+        setStarted(true);
+      }
     }
-  }, [fullPage]);
+  }, [fullPage, embedded]);
 
   if (disabled) return null;
+
+  // ── Embedded mode (inline card, e.g. Mi Parcela) ──
+  if (embedded) {
+    return (
+      <div className="space-y-4">
+        {respuesta && (
+          <div className="bg-primary/5 rounded-xl p-3 border border-primary/10">
+            <p className="text-sm text-gray-700 leading-relaxed">{respuesta}</p>
+          </div>
+        )}
+
+        {escuchando && transcripcion && (
+          <div className="bg-primary/10 rounded-xl px-3 py-2">
+            <p className="text-sm text-primary italic">"{transcripcion}"</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-50 rounded-xl px-3 py-2">
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+        )}
+
+        <div className="flex flex-col items-center gap-3 py-2">
+          <button
+            onClick={escuchando ? detenerEscucha : iniciarEscucha}
+            disabled={procesando}
+            className={`
+              w-20 h-20 rounded-full shadow-lg flex items-center justify-center
+              transition-all duration-200 active:scale-95
+              ${escuchando
+                ? 'bg-red-500 text-white animate-pulse'
+                : procesando
+                  ? 'bg-amber-500 text-white'
+                  : 'bg-primary text-white hover:bg-primary/90'
+              }
+            `}
+          >
+            {procesando ? (
+              <Loader2 size={36} className="animate-spin" />
+            ) : escuchando ? (
+              <MicOff size={36} />
+            ) : (
+              <Mic size={36} />
+            )}
+          </button>
+          <p className="text-xs text-gray-500 text-center">
+            {escuchando ? '🔴 Escuchando... habla ahora' :
+             procesando ? '⏳ Consultando...' :
+             'Toca el micrófono para preguntar sobre tu parcela'}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // ── Full Page mode ──
   if (fullPage) {

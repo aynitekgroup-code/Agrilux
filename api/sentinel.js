@@ -1,26 +1,805 @@
 /**
- * api/sentinel.js — Análisis NDVI + parámetros satelitales extendidos
+ * api/sentinel.js — NDVI + MSAVI2 + NDRE + mapa de calor (estilo NAX)
  *
- * Parámetros: NDVI, clorofila, humedad hoja, humedad suelo, biomasa, punto de rocío
- * Fuentes: Sentinel-2, ESRI, estimación por ubicación
+ * Con OAuth Copernicus: índices espectrales reales Sentinel-2 L2A vía Process API.
+ * Sin OAuth: fallback estimado por ubicación, edad del cultivo y polígono.
  */
 
-const SENTINEL_WMS_URL = 'https://services.sentinel-hub.com/ogc/wms';
+import zlib from 'zlib';
 
-function generarAnalisisCompleto(lat, lon, radiusKm, ndviValues) {
+const SENTINEL_WMS_CDSE = 'https://sh.dataspace.copernicus.eu/ogc/wms';
+const SENTINEL_PROCESS_URL = 'https://sh.dataspace.copernicus.eu/api/v1/process';
+const CDSE_TOKEN_URL = 'https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token';
+const GRID_SIZE = 10;
+
+/** Capas habituales en configs Sentinel Hub / Simple WMS */
+const WMS_LAYERS_DEFAULT = ['TRUE_COLOR', 'FALSE_COLOR', 'NDVI', 'EVI', 'NATURAL-COLOR'];
+
+let tokenCache = { token: null, expiresAt: 0 };
+
+function latLonTo3857(la, lo) {
+  const x = (lo * 20037508.34) / 180;
+  const y = Math.log(Math.tan(((90 + la) * Math.PI) / 360)) / (Math.PI / 180);
+  return [x, (y * 20037508.34) / 180];
+}
+
+function bboxWebMercator(lat, lon, radiusKm) {
+  const delta = radiusKm / 111;
+  const corners = [
+    latLonTo3857(lat - delta, lon - delta),
+    latLonTo3857(lat - delta, lon + delta),
+    latLonTo3857(lat + delta, lon - delta),
+    latLonTo3857(lat + delta, lon + delta),
+  ];
+  const xs = corners.map((c) => c[0]);
+  const ys = corners.map((c) => c[1]);
+  return `${Math.min(...xs)},${Math.min(...ys)},${Math.max(...xs)},${Math.max(...ys)}`;
+}
+
+function bboxLatLon(lat, lon, radiusKm, coordenadas) {
+  if (coordenadas?.length >= 3) {
+    const bb = calcularBBox(coordenadas);
+    const pad = 0.00008;
+    return {
+      minLat: bb.minLat - pad,
+      maxLat: bb.maxLat + pad,
+      minLon: bb.minLon - pad,
+      maxLon: bb.maxLon + pad,
+    };
+  }
+  const delta = radiusKm / 111;
+  return {
+    minLat: lat - delta,
+    maxLat: lat + delta,
+    minLon: lon - delta,
+    maxLon: lon + delta,
+  };
+}
+
+function bbox3857FromLatLonBox(box) {
+  const sw = latLonTo3857(box.minLat, box.minLon);
+  const ne = latLonTo3857(box.maxLat, box.maxLon);
+  return [sw[0], sw[1], ne[0], ne[1]];
+}
+
+function rangoTiempoProcess() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 120);
+  return { from: start.toISOString(), to: end.toISOString() };
+}
+
+function rangoTiempoWMS() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 120);
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  return `${fmt(start)}/${fmt(end)}`;
+}
+
+async function fetchCapasWMS(instanceId, accessToken) {
+  try {
+    const url = `${SENTINEL_WMS_CDSE}/${instanceId}?SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.3.0`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) return WMS_LAYERS_DEFAULT;
+    const xml = await res.text();
+    const names = [...xml.matchAll(/<(?:[^>:]+:)?Name>([^<]+)<\/(?:[^>:]+:)?Name>/gi)]
+      .map((m) => m[1].trim())
+      .filter((n) => n && !/^wms$/i.test(n) && !n.includes(':'));
+    const unique = [...new Set(names)];
+    return unique.length ? unique.slice(0, 10) : WMS_LAYERS_DEFAULT;
+  } catch {
+    return WMS_LAYERS_DEFAULT;
+  }
+}
+
+async function obtenerTokenCDSE() {
+  const clientId = process.env.SENTINEL_CLIENT_ID;
+  const clientSecret = process.env.SENTINEL_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    return { token: null, error: 'oauth_not_configured' };
+  }
+
+  if (tokenCache.token && Date.now() < tokenCache.expiresAt - 60_000) {
+    return { token: tokenCache.token };
+  }
+
+  try {
+    const res = await fetch(CDSE_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+      signal: AbortSignal.timeout(12_000),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.access_token) {
+      return {
+        token: null,
+        error: data.error_description || data.error || `token_http_${res.status}`,
+      };
+    }
+    tokenCache = {
+      token: data.access_token,
+      expiresAt: Date.now() + (data.expires_in || 3600) * 1000,
+    };
+    return { token: data.access_token };
+  } catch (e) {
+    return { token: null, error: e.message };
+  }
+}
+
+function extraerServiceException(xml) {
+  const m = xml.match(/<(?:\w+:)?ServiceException[^>]*>([^<]+)</i);
+  return m ? m[1].trim() : xml.slice(0, 220);
+}
+
+const EVALSCRIPT_TRUE_COLOR = `//VERSION=3
+function setup() {
+  return { input: ["B02", "B03", "B04", "dataMask"], output: { bands: 3 } };
+}
+function evaluatePixel(sample) {
+  if (sample.dataMask === 0) return [0, 0, 0];
+  return [2.5 * sample.B04, 2.5 * sample.B03, 2.5 * sample.B02];
+}`;
+
+const EVALSCRIPT_INDICES = `//VERSION=3
+function setup() {
+  return {
+    input: [{ bands: ["B04", "B05", "B08"], units: "REFLECTANCE" }, "dataMask"],
+    output: { bands: 3, sampleType: "UINT8" },
+  };
+}
+function evaluatePixel(samples) {
+  if (samples[1] === 0) return [0, 0, 0];
+  const s = samples[0];
+  const ndvi = (s.B08 - s.B04) / (s.B08 + s.B04 + 1e-6);
+  const msavi2 = (2 * s.B08 + 1 - Math.sqrt(Math.pow(2 * s.B08 + 1, 2) - 8 * (s.B08 - s.B04) + 1e-6)) / 2;
+  const ndre = (s.B08 - s.B05) / (s.B08 + s.B05 + 1e-6);
+  const c = (v) => Math.max(0, Math.min(1, isNaN(v) ? 0 : v));
+  return [Math.round(c(ndvi) * 255), Math.round(c(msavi2) * 255), Math.round(c(ndre) * 255)];
+}`;
+
+function decodePngRgb(buffer) {
+  if (buffer.length < 24 || buffer.toString('hex', 0, 8) !== '89504e470d0a1a0a') {
+    throw new Error('invalid_png');
+  }
+
+  let offset = 8;
+  let width = 0;
+  let height = 0;
+  const idatParts = [];
+
+  while (offset + 8 <= buffer.length) {
+    const len = buffer.readUInt32BE(offset);
+    const type = buffer.toString('ascii', offset + 4, offset + 8);
+    const data = buffer.subarray(offset + 8, offset + 8 + len);
+
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      const bitDepth = data[8];
+      const colorType = data[9];
+      if (bitDepth !== 8 || colorType !== 2) throw new Error('unsupported_png_format');
+    } else if (type === 'IDAT') {
+      idatParts.push(data);
+    } else if (type === 'IEND') {
+      break;
+    }
+
+    offset += 12 + len;
+  }
+
+  if (!width || !height || idatParts.length === 0) throw new Error('png_parse_failed');
+
+  const raw = zlib.inflateSync(Buffer.concat(idatParts));
+  const bpp = 3;
+  const stride = 1 + width * bpp;
+  const prev = new Uint8Array(width * bpp);
+  const out = new Uint8Array(width * height * bpp);
+  let rawOff = 0;
+
+  for (let y = 0; y < height; y++) {
+    const filter = raw[rawOff++];
+    for (let x = 0; x < width * bpp; x++) {
+      const cur = raw[rawOff++];
+      let val = cur;
+      const left = x >= bpp ? out[y * width * bpp + x - bpp] : 0;
+      const up = prev[x];
+      const upLeft = x >= bpp ? prev[x - bpp] : 0;
+
+      if (filter === 1) val = (cur + left) & 0xff;
+      else if (filter === 2) val = (cur + up) & 0xff;
+      else if (filter === 3) val = (cur + Math.floor((left + up) / 2)) & 0xff;
+      else if (filter === 4) {
+        const p = left + up - upLeft;
+        const pa = Math.abs(p - left);
+        const pb = Math.abs(p - up);
+        const pc = Math.abs(p - upLeft);
+        const pr = pa <= pb && pa <= pc ? left : pb <= pc ? up : upLeft;
+        val = (cur + pr) & 0xff;
+      }
+
+      out[y * width * bpp + x] = val;
+      prev[x] = val;
+    }
+  }
+
+  return { width, height, data: out };
+}
+
+async function callProcessApi(accessToken, bboxArr, width, height, evalscript, accept = 'image/jpeg') {
+  const timeRange = rangoTiempoProcess();
+  const res = await fetch(SENTINEL_PROCESS_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      Accept: accept,
+    },
+    body: JSON.stringify({
+      input: {
+        bounds: {
+          bbox: bboxArr,
+          properties: { crs: 'http://www.opengis.net/def/crs/EPSG/0/3857' },
+        },
+        data: [{
+          type: 'sentinel-2-l2a',
+          dataFilter: { timeRange, maxCloudCoverage: 80 },
+        }],
+      },
+      output: { width, height },
+      evalscript,
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    return { failed: true, error: extraerServiceException(errText), status: res.status };
+  }
+
+  const arrayBuffer = await res.arrayBuffer();
+  if (arrayBuffer.byteLength < 100) {
+    return { failed: true, error: 'process_response_too_small', bytes: arrayBuffer.byteLength };
+  }
+
+  return { buffer: Buffer.from(arrayBuffer) };
+}
+
+async function fetchImagenSentinelProcess(lat, lon, radiusKm, accessToken, coordenadas) {
+  const latLonBox = bboxLatLon(lat, lon, radiusKm, coordenadas);
+  const bboxArr = bbox3857FromLatLonBox(latLonBox);
+
+  try {
+    const result = await callProcessApi(
+      accessToken,
+      bboxArr,
+      512,
+      512,
+      EVALSCRIPT_TRUE_COLOR,
+      'image/jpeg',
+    );
+    if (result.failed) return result;
+
+    return {
+      base64: result.buffer.toString('base64'),
+      mime: 'jpeg',
+      endpoint: 'process-api',
+      layer: 'TRUE_COLOR',
+    };
+  } catch (e) {
+    return { failed: true, error: e.message };
+  }
+}
+
+function construirMapaCalorEspectral(grid, latLonBox, coordenadas, etapa, indicePrincipal = 'ndvi') {
+  const { width, height, celdasRaw } = grid;
+  const celdas = [];
+
+  for (let gy = 0; gy < height; gy++) {
+    for (let gx = 0; gx < width; gx++) {
+      const cellLat = latLonBox.minLat + (gy + 0.5) * (latLonBox.maxLat - latLonBox.minLat) / height;
+      const cellLon = latLonBox.minLon + (gx + 0.5) * (latLonBox.maxLon - latLonBox.minLon) / width;
+
+      if (coordenadas?.length >= 3 && !puntoEnPoligono(cellLon, cellLat, coordenadas)) continue;
+
+      const cell = celdasRaw[gy * width + gx];
+      if (!cell?.valid) continue;
+
+      const valor = indicePrincipal === 'msavi2' ? cell.msavi2
+        : indicePrincipal === 'ndre' ? cell.ndre
+          : cell.ndvi;
+
+      celdas.push({
+        gx,
+        gy,
+        lat: parseFloat(cellLat.toFixed(6)),
+        lon: parseFloat(cellLon.toFixed(6)),
+        valor: parseFloat(valor.toFixed(3)),
+        ndvi: parseFloat(cell.ndvi.toFixed(3)),
+        msavi2: parseFloat(cell.msavi2.toFixed(3)),
+        ndre: parseFloat(cell.ndre.toFixed(3)),
+        color: valorAHeatmapColor(valor),
+      });
+    }
+  }
+
+  if (celdas.length === 0) return null;
+
+  const ndviVals = celdas.map((c) => c.ndvi);
+  const msavi2Vals = celdas.map((c) => c.msavi2);
+  const ndreVals = celdas.map((c) => c.ndre);
+  const valores = celdas.map((c) => c.valor);
+  const promedio = valores.reduce((a, b) => a + b, 0) / valores.length;
+  const min = Math.min(...valores);
+  const max = Math.max(...valores);
+  const varianza = valores.reduce((s, v) => s + (v - promedio) ** 2, 0) / valores.length;
+  const desviacion = Math.sqrt(varianza);
+  const uniforme = desviacion < 0.07;
+  const umbralProblema = promedio - desviacion * 0.45;
+
+  const zonas_problema = celdas
+    .filter((c) => c.valor < umbralProblema || c.valor < 0.22)
+    .sort((a, b) => a.valor - b.valor)
+    .slice(0, 8)
+    .map((c, i) => ({
+      id: i + 1,
+      lat: c.lat,
+      lon: c.lon,
+      indice: c.valor,
+      severidad: c.valor < 0.12 ? 'alta' : c.valor < 0.22 ? 'media' : 'leve',
+      color: c.color,
+      causa_probable: inferirCausaProbable(c.valor, promedio, etapa),
+    }));
+
+  let alerta_uniformidad = null;
+  if (!uniforme && zonas_problema.length > 0) {
+    alerta_uniformidad = `Colores no uniformes en la chacra: ${zonas_problema.length} zona(s) con posible problema detectada. Revisa las manchas rojas/amarillas del mapa.`;
+  } else if (uniforme) {
+    alerta_uniformidad = 'Vegetación relativamente uniforme en toda la parcela.';
+  }
+
+  const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+
+  return {
+    celdas,
+    grid_size: GRID_SIZE,
+    min: parseFloat(min.toFixed(3)),
+    max: parseFloat(max.toFixed(3)),
+    promedio: parseFloat(promedio.toFixed(3)),
+    desviacion: parseFloat(desviacion.toFixed(3)),
+    uniforme,
+    zonas_problema,
+    alerta_uniformidad,
+    promedios_espectrales: {
+      ndvi: parseFloat(avg(ndviVals).toFixed(3)),
+      msavi2: parseFloat(avg(msavi2Vals).toFixed(3)),
+      ndre: parseFloat(avg(ndreVals).toFixed(3)),
+    },
+  };
+}
+
+async function fetchIndicesEspectralesSentinel(lat, lon, radiusKm, coordenadas, cultivo, dias, accessToken) {
+  const etapaInfo = determinarEtapaCarlos(cultivo, dias);
+  const latLonBox = bboxLatLon(lat, lon, radiusKm, coordenadas);
+  const bboxArr = bbox3857FromLatLonBox(latLonBox);
+
+  try {
+    const result = await callProcessApi(
+      accessToken,
+      bboxArr,
+      GRID_SIZE,
+      GRID_SIZE,
+      EVALSCRIPT_INDICES,
+      'image/png',
+    );
+    if (result.failed) return { failed: true, ...result };
+
+    const png = decodePngRgb(result.buffer);
+    if (png.width !== GRID_SIZE || png.height !== GRID_SIZE) {
+      return { failed: true, error: 'unexpected_grid_size' };
+    }
+
+    const celdasRaw = [];
+    let validCount = 0;
+    for (let gy = 0; gy < GRID_SIZE; gy++) {
+      for (let gx = 0; gx < GRID_SIZE; gx++) {
+        const i = (gy * GRID_SIZE + gx) * 3;
+        const r = png.data[i];
+        const g = png.data[i + 1];
+        const b = png.data[i + 2];
+        const valid = r + g + b > 0;
+        if (valid) validCount++;
+        celdasRaw.push({
+          valid,
+          ndvi: r / 255,
+          msavi2: g / 255,
+          ndre: b / 255,
+        });
+      }
+    }
+
+    if (validCount < 3) {
+      return { failed: true, error: 'insufficient_valid_pixels', validCount };
+    }
+
+    const indicePrincipal = etapaInfo.indice_recomendado || 'ndvi';
+    const mapaCalor = construirMapaCalorEspectral(
+      { width: GRID_SIZE, height: GRID_SIZE, celdasRaw },
+      latLonBox,
+      coordenadas,
+      etapaInfo.etapa,
+      indicePrincipal,
+    );
+    if (!mapaCalor) return { failed: true, error: 'empty_heatmap' };
+
+    const { ndvi, msavi2, ndre } = mapaCalor.promedios_espectrales;
+
+    return {
+      source: 'sentinel-2-l2a',
+      ndvi,
+      msavi2,
+      ndre,
+      ndvi_promedio: parseFloat(ndvi.toFixed(2)),
+      msavi2_promedio: parseFloat(msavi2.toFixed(2)),
+      ndre_promedio: parseFloat(ndre.toFixed(2)),
+      ...etapaInfo,
+      indices_disponibles: ['msavi2', 'ndvi', 'ndre'],
+      mapa_calor: mapaCalor,
+      dias_desde_siembra: Number(dias) || 0,
+      coords_usadas: { lat, lon },
+      valid_pixels: validCount,
+    };
+  } catch (e) {
+    return { failed: true, error: e.message };
+  }
+}
+async function fetchImagenSentinelWMS(instanceId, lat, lon, radiusKm, accessToken) {
+  const bbox3857 = bboxWebMercator(lat, lon, radiusKm);
+  const time = rangoTiempoWMS();
+  const debug = { attempts: [], bbox3857, time };
+
+  const layers = accessToken
+    ? await fetchCapasWMS(instanceId, accessToken)
+    : WMS_LAYERS_DEFAULT;
+  debug.layers_from_capabilities = layers;
+
+  const mapConfigs = [
+    { version: '1.3.0', crsKey: 'CRS', crs: 'EPSG:3857', bbox: bbox3857 },
+    { version: '1.1.1', crsKey: 'SRS', crs: 'EPSG:3857', bbox: bbox3857 },
+  ];
+
+  const endpoints = [
+    { base: `${SENTINEL_WMS_CDSE}/${instanceId}`, useInstanceParam: false, label: 'cdse', needsAuth: true },
+  ];
+
+  const timeVariants = [null, time];
+
+  for (const ep of endpoints) {
+    for (const mapCfg of mapConfigs) {
+      for (const layer of layers) {
+        for (const timeVal of timeVariants) {
+          try {
+            if (ep.needsAuth && !accessToken) {
+              debug.attempts.push({ endpoint: ep.label, layer, skipped: 'no_bearer_token' });
+              continue;
+            }
+
+            const wmsUrl = new URL(ep.base);
+            wmsUrl.searchParams.set('SERVICE', 'WMS');
+            wmsUrl.searchParams.set('VERSION', mapCfg.version);
+            wmsUrl.searchParams.set('REQUEST', 'GetMap');
+            wmsUrl.searchParams.set('LAYERS', layer);
+            wmsUrl.searchParams.set(mapCfg.crsKey, mapCfg.crs);
+            wmsUrl.searchParams.set('BBOX', mapCfg.bbox);
+            wmsUrl.searchParams.set('WIDTH', '512');
+            wmsUrl.searchParams.set('HEIGHT', '512');
+            wmsUrl.searchParams.set('FORMAT', 'image/jpeg');
+            wmsUrl.searchParams.set('MAXCC', '80');
+            if (timeVal) wmsUrl.searchParams.set('TIME', timeVal);
+            if (ep.useInstanceParam) wmsUrl.searchParams.set('INSTANCE_ID', instanceId);
+
+            const headers = {};
+            if (ep.needsAuth) headers.Authorization = `Bearer ${accessToken}`;
+
+            const wmsRes = await fetch(wmsUrl.toString(), { headers, signal: AbortSignal.timeout(15_000) });
+            const contentType = wmsRes.headers.get('content-type') || '';
+
+            if (!wmsRes.ok) {
+              const errBody = await wmsRes.text();
+              debug.attempts.push({
+                endpoint: ep.label,
+                layer,
+                version: mapCfg.version,
+                time: timeVal || 'default',
+                status: wmsRes.status,
+                error: extraerServiceException(errBody),
+              });
+              continue;
+            }
+            if (!contentType.includes('image')) {
+              debug.attempts.push({ endpoint: ep.label, layer, status: wmsRes.status, contentType });
+              continue;
+            }
+
+            const arrayBuffer = await wmsRes.arrayBuffer();
+            if (arrayBuffer.byteLength < 500) {
+              debug.attempts.push({ endpoint: ep.label, layer, bytes: arrayBuffer.byteLength });
+              continue;
+            }
+
+            const base64 = Buffer.from(arrayBuffer).toString('base64');
+            const mime = contentType.includes('jpeg') ? 'jpeg' : 'png';
+            return { base64, mime, endpoint: ep.label, layer, debug };
+          } catch (e) {
+            debug.attempts.push({ endpoint: ep.label, layer, error: e.message });
+          }
+        }
+      }
+    }
+  }
+
+  return { failed: true, debug };
+}
+
+function hashSemilla(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h) + str.charCodeAt(i);
+    h |= 0;
+  }
+  return Math.abs(h);
+}
+
+function ruidoDeterministico(lat, lon, parcelaId, cultivo, dias, gx, gy) {
+  const s = hashSemilla(`${lat.toFixed(6)}_${lon.toFixed(6)}_${parcelaId}_${cultivo}_${dias}_${gx}_${gy}`);
+  return (s % 1000) / 1000;
+}
+
+function parseCoordenadas(raw) {
+  if (!raw) return null;
+  try {
+    const arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return Array.isArray(arr) && arr.length >= 3 ? arr : null;
+  } catch {
+    return null;
+  }
+}
+
+function calcularCentroide(coordenadas) {
+  const n = coordenadas.length;
+  return {
+    lat: coordenadas.reduce((s, c) => s + c[1], 0) / n,
+    lon: coordenadas.reduce((s, c) => s + c[0], 0) / n,
+  };
+}
+
+function calcularBBox(coordenadas) {
+  const lats = coordenadas.map(c => c[1]);
+  const lons = coordenadas.map(c => c[0]);
+  return {
+    minLat: Math.min(...lats), maxLat: Math.max(...lats),
+    minLon: Math.min(...lons), maxLon: Math.max(...lons),
+  };
+}
+
+function puntoEnPoligono(lng, lat, coordenadas) {
+  let inside = false;
+  for (let i = 0, j = coordenadas.length - 1; i < coordenadas.length; j = i++) {
+    const xi = coordenadas[i][0], yi = coordenadas[i][1];
+    const xj = coordenadas[j][0], yj = coordenadas[j][1];
+    if ((yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/** Curva de vigor según edad del cultivo (días desde siembra) */
+function factorEdadCultivo(dias, cultivo) {
+  const d = Number(dias) || 0;
+  const esCana = (cultivo || '').toLowerCase().includes('cana');
+  const pico = esCana ? 240 : 90;
+  const cosecha = esCana ? 360 : 130;
+
+  if (d < 20) return 0.12 + (d / 20) * 0.1;
+  if (d < 60) return 0.22 + ((d - 20) / 40) * 0.18;
+  if (d < pico) return 0.4 + ((d - 60) / (pico - 60)) * 0.35;
+  if (d < cosecha) return 0.75 - ((d - pico) / (cosecha - pico)) * 0.15;
+  return 0.35 - Math.min((d - cosecha) / 120, 0.2);
+}
+
+function calcularNDVIBase(lat, lon, dias, cultivo, parcelaId) {
+  const mes = new Date().getMonth() + 1;
+  const enTemporadaLluvias = mes >= 11 || mes <= 3;
+  const factorLat = Math.min(Math.max((lat + 15) / 15, 0.2), 1.0);
+  const factorTemporada = enTemporadaLluvias ? 0.85 : 0.55;
+  const baseLoc = 0.08 + factorLat * factorTemporada * 0.25;
+  const edad = factorEdadCultivo(dias, cultivo);
+  const semilla = hashSemilla(`${lat.toFixed(6)}_${lon.toFixed(6)}_${parcelaId}_${cultivo}_${dias}`) % 1000;
+  const microVar = (semilla / 1000 - 0.5) * 0.12;
+  const ndvi = baseLoc + edad * 0.72 + microVar;
+  return Math.min(Math.max(parseFloat(ndvi.toFixed(3)), 0.04), 0.88);
+}
+
+function calcularMSAVI2(ndvi, etapa) {
+  const factor = etapa === 'poco_cultivo' || etapa === 'agoste_cosecha' ? 1.04 : 0.92;
+  return Math.min(Math.max(parseFloat((ndvi * factor + 0.03).toFixed(3)), 0.04), 0.82);
+}
+
+function calcularNDRE(ndvi, etapa) {
+  const factor = etapa === 'pleno_crecimiento' ? 0.95 : 0.88;
+  return Math.min(Math.max(parseFloat((ndvi * factor + 0.08).toFixed(3)), 0.05), 0.8);
+}
+
+function determinarEtapaCarlos(cultivo, dias) {
+  const c = (cultivo || '').toLowerCase();
+  const esMaizOCana = c.includes('maiz') || c.includes('maíz') || c.includes('cana') || c.includes('caña');
+  const d = Number(dias) || 0;
+
+  if (!esMaizOCana) {
+    return { etapa: 'crecimiento', indice_recomendado: 'ndvi', indices_recomendados: ['ndvi'], nota_etapa: 'NDVI principal para este cultivo.', es_maiz_o_cana: false };
+  }
+
+  const umbralTemprano = c.includes('cana') ? 60 : 45;
+  const umbralCosecha = c.includes('cana') ? 300 : 130;
+
+  if (d < umbralTemprano) {
+    return { etapa: 'poco_cultivo', etapa_cultivo: 'siembra_emergencia', indice_recomendado: 'msavi2', indices_recomendados: ['msavi2'], nota_etapa: 'Poco cultivo: MSAVI2. Detecta emergencia irregular en la chacra.', es_maiz_o_cana: true };
+  }
+  if (d < umbralCosecha) {
+    return { etapa: 'pleno_crecimiento', etapa_cultivo: 'crecimiento', indice_recomendado: 'ndvi', indices_recomendados: ['ndvi', 'ndre'], nota_etapa: 'Pleno crecimiento: NDVI + NDRE. Revisa mapa de calor — colores no uniformes = problema.', es_maiz_o_cana: true };
+  }
+  return { etapa: 'agoste_cosecha', etapa_cultivo: 'maduracion', indice_recomendado: 'msavi2', indices_recomendados: ['msavi2'], nota_etapa: 'Agoste/cosecha: MSAVI2. Manchas rojas = zonas con caña muerta o estrés.', es_maiz_o_cana: true };
+}
+
+function valorAHeatmapColor(v) {
+  if (v >= 0.55) return '#22C55E';
+  if (v >= 0.4) return '#84CC16';
+  if (v >= 0.28) return '#EAB308';
+  if (v >= 0.15) return '#F97316';
+  return '#EF4444';
+}
+
+function inferirCausaProbable(valor, promedio, etapa) {
+  if (valor < 0.12) return 'Posible zona muerta — revisar exceso de humedad o anegamiento';
+  if (valor < promedio * 0.65) return 'Estrés localizado — posible exceso de agua, compactación o plaga';
+  if (etapa === 'pleno_crecimiento' && valor < 0.35) return 'Posible déficit de nitrógeno en esta zona';
+  return 'Variabilidad detectada — inspección en campo recomendada';
+}
+
+/** Genera grilla de calor dentro del polígono o bbox alrededor del centro */
+function generarMapaCalor(lat, lon, coordenadas, ndviBase, dias, cultivo, parcelaId, etapa) {
+  const GRID = 10;
+  let bbox;
+  if (coordenadas?.length >= 3) {
+    bbox = calcularBBox(coordenadas);
+  } else {
+    const delta = 0.002;
+    bbox = { minLat: lat - delta, maxLat: lat + delta, minLon: lon - delta, maxLon: lon + delta };
+  }
+
+  const celdas = [];
+  for (let gy = 0; gy < GRID; gy++) {
+    for (let gx = 0; gx < GRID; gx++) {
+      const cellLat = bbox.minLat + (gy + 0.5) * (bbox.maxLat - bbox.minLat) / GRID;
+      const cellLon = bbox.minLon + (gx + 0.5) * (bbox.maxLon - bbox.minLon) / GRID;
+
+      if (coordenadas?.length >= 3 && !puntoEnPoligono(cellLon, cellLat, coordenadas)) continue;
+
+      const ruido = ruidoDeterministico(cellLat, cellLon, parcelaId, cultivo, dias, gx, gy);
+      const mancha = ruido < 0.12 ? -0.25 - ruido * 0.5 : (ruido > 0.88 ? 0.08 : (ruido - 0.5) * 0.18);
+      const valor = Math.min(Math.max(ndviBase + mancha, 0.04), 0.88);
+
+      celdas.push({
+        gx, gy,
+        lat: parseFloat(cellLat.toFixed(6)),
+        lon: parseFloat(cellLon.toFixed(6)),
+        valor: parseFloat(valor.toFixed(3)),
+        color: valorAHeatmapColor(valor),
+      });
+    }
+  }
+
+  if (celdas.length === 0) {
+    celdas.push({ gx: 0, gy: 0, lat, lon, valor: ndviBase, color: valorAHeatmapColor(ndviBase) });
+  }
+
+  const valores = celdas.map(c => c.valor);
+  const promedio = valores.reduce((a, b) => a + b, 0) / valores.length;
+  const min = Math.min(...valores);
+  const max = Math.max(...valores);
+  const varianza = valores.reduce((s, v) => s + (v - promedio) ** 2, 0) / valores.length;
+  const desviacion = Math.sqrt(varianza);
+  const uniforme = desviacion < 0.07;
+  const umbralProblema = promedio - desviacion * 0.45;
+
+  const zonas_problema = celdas
+    .filter(c => c.valor < umbralProblema || c.valor < 0.22)
+    .sort((a, b) => a.valor - b.valor)
+    .slice(0, 8)
+    .map((c, i) => ({
+      id: i + 1,
+      lat: c.lat,
+      lon: c.lon,
+      indice: c.valor,
+      severidad: c.valor < 0.12 ? 'alta' : c.valor < 0.22 ? 'media' : 'leve',
+      color: c.color,
+      causa_probable: inferirCausaProbable(c.valor, promedio, etapa),
+    }));
+
+  let alerta_uniformidad = null;
+  if (!uniforme && zonas_problema.length > 0) {
+    alerta_uniformidad = `Colores no uniformes en la chacra: ${zonas_problema.length} zona(s) con posible problema detectada. Revisa las manchas rojas/amarillas del mapa.`;
+  } else if (uniforme) {
+    alerta_uniformidad = 'Vegetación relativamente uniforme en toda la parcela.';
+  }
+
+  return {
+    celdas,
+    grid_size: GRID,
+    min: parseFloat(min.toFixed(3)),
+    max: parseFloat(max.toFixed(3)),
+    promedio: parseFloat(promedio.toFixed(3)),
+    desviacion: parseFloat(desviacion.toFixed(3)),
+    uniforme,
+    zonas_problema,
+    alerta_uniformidad,
+  };
+}
+
+function calcularIndicesCompletos(lat, lon, cultivo, dias, parcelaId, coordenadas) {
+  const etapaInfo = determinarEtapaCarlos(cultivo, dias);
+  const ndvi = calcularNDVIBase(lat, lon, dias, cultivo, parcelaId);
+  const msavi2 = calcularMSAVI2(ndvi, etapaInfo.etapa);
+  const ndre = calcularNDRE(ndvi, etapaInfo.etapa);
+  const mapaCalor = generarMapaCalor(lat, lon, coordenadas, ndvi, dias, cultivo, parcelaId, etapaInfo.etapa);
+
+  const ndviPromedio = mapaCalor.promedio;
+
+  return {
+    ndvi: ndviPromedio,
+    msavi2: parseFloat(calcularMSAVI2(ndviPromedio, etapaInfo.etapa).toFixed(2)),
+    ndre: parseFloat(calcularNDRE(ndviPromedio, etapaInfo.etapa).toFixed(2)),
+    ndvi_promedio: parseFloat(ndviPromedio.toFixed(2)),
+    msavi2_promedio: parseFloat(calcularMSAVI2(ndviPromedio, etapaInfo.etapa).toFixed(2)),
+    ndre_promedio: parseFloat(calcularNDRE(ndviPromedio, etapaInfo.etapa).toFixed(2)),
+    ...etapaInfo,
+    indices_disponibles: ['msavi2', 'ndvi', 'ndre'],
+    mapa_calor: mapaCalor,
+    dias_desde_siembra: Number(dias) || 0,
+    coords_usadas: { lat, lon },
+  };
+}
+
+function generarAnalisisCompleto(lat, lon, radiusKm, ndviValues, indicesExtra = {}) {
   const promedio = ndviValues.length > 0
     ? (ndviValues.reduce((a, b) => a + b, 0) / ndviValues.length).toFixed(2)
     : null;
 
   let nivelSalud, color, recomendacion;
+  const mapa = indicesExtra.mapa_calor;
+  const hayProblemas = mapa?.zonas_problema?.length > 0 && !mapa?.uniforme;
+
   if (promedio === null) {
     nivelSalud = 'Sin datos';
     color = '#9CA3AF';
     recomendacion = 'No se pudieron obtener datos de vegetación para esta zona.';
+  } else if (hayProblemas) {
+    nivelSalud = 'Irregular';
+    color = '#F97316';
+    recomendacion = mapa.alerta_uniformidad || `Se detectaron ${mapa.zonas_problema.length} zona(s) con estrés. Inspecciona las manchas del mapa de calor.`;
   } else if (promedio > 0.5) {
     nivelSalud = 'Saludable';
     color = '#22C55E';
-    recomendacion = 'Tu cultivo muestra buena salud vegetal. Mantén las prácticas actuales.';
+    recomendacion = 'Vegetación uniforme y saludable. Mantén las prácticas actuales.';
   } else if (promedio > 0.3) {
     nivelSalud = 'Moderado';
     color = '#EAB308';
@@ -28,18 +807,32 @@ function generarAnalisisCompleto(lat, lon, radiusKm, ndviValues) {
   } else if (promedio > 0.1) {
     nivelSalud = 'Estrés';
     color = '#F97316';
-    recomendacion = 'Vegetación con estrés significativo. Revisar plagas, enfermedades o déficit hídrico.';
+    recomendacion = 'Vegetación con estrés significativo. Revisar humedad, plagas o déficit hídrico.';
   } else {
     nivelSalud = 'Crítico';
     color = '#EF4444';
     recomendacion = 'Vegetación muy dañada o suelo desnudo. Acción inmediata requerida.';
   }
 
-  // Calcular parámetros extendidos basados en NDVI y ubicación
   const parametros = calcularParametrosExtendidos(lat, lon, promedio);
 
   return {
     ndvi_promedio: promedio ? parseFloat(promedio) : null,
+    msavi2_promedio: indicesExtra.msavi2_promedio ?? null,
+    ndre_promedio: indicesExtra.ndre_promedio ?? null,
+    indice_recomendado: indicesExtra.indice_recomendado || 'ndvi',
+    indices_recomendados: indicesExtra.indices_recomendados || ['ndvi'],
+    indices_source: indicesExtra.indices_source || 'estimated',
+    etapa_cultivo: indicesExtra.etapa_cultivo || 'crecimiento',
+    etapa: indicesExtra.etapa || null,
+    nota_etapa: indicesExtra.nota_etapa || null,
+    es_maiz_o_cana: indicesExtra.es_maiz_o_cana || false,
+    indices_disponibles: indicesExtra.indices_disponibles || ['ndvi'],
+    mapa_calor: indicesExtra.mapa_calor || null,
+    dias_desde_siembra: indicesExtra.dias_desde_siembra ?? null,
+    coords_usadas: indicesExtra.coords_usadas || { lat, lon },
+    coords_fuente: indicesExtra.coords_fuente || 'centro',
+    resolucion_m: indicesExtra.resolucion_m ?? null,
     nivel_salud: nivelSalud,
     color,
     recomendacion,
@@ -53,27 +846,14 @@ function calcularParametrosExtendidos(lat, lon, ndvi) {
   const now = new Date();
   const mes = now.getMonth() + 1;
   const esTemporadaLluvias = mes >= 11 || mes <= 3;
-
-  // Clorofila estimada (relacionada con NDVI)
-  const clorofila = ndvi ? Math.round(ndvi * 80 + 10) : null; // mg/m²
-
-  // Humedad de la hoja (relacionada con humedad ambiental y NDVI)
-  const humedadHoja = ndvi ? Math.round(40 + ndvi * 50 + (esTemporadaLluvias ? 10 : 0)) : null; // %
-
-  // Humedad del suelo (relacionada con latitud, época y precipitación)
+  const clorofila = ndvi ? Math.round(ndvi * 80 + 10) : null;
+  const humedadHoja = ndvi ? Math.round(40 + ndvi * 50 + (esTemporadaLluvias ? 10 : 0)) : null;
   const factorLat = Math.min(Math.max((lat + 15) / 15, 0.2), 1.0);
-  const humedadSuelo = Math.round(20 + factorLat * 40 + (esTemporadaLluvias ? 15 : -5)); // %
-
-  // Biomasa estimada (relacionada con NDVI)
-  const biomasa = ndvi ? Math.round(ndvi * 1200 + 100) : null; // g/m²
-
-  // Punto de rocío (estimado por temperatura y humedad)
+  const humedadSuelo = Math.round(20 + factorLat * 40 + (esTemporadaLluvias ? 15 : -5));
+  const biomasa = ndvi ? Math.round(ndvi * 1200 + 100) : null;
   const tempEstimada = 20 + factorLat * 8 - (esTemporadaLluvias ? 2 : 5);
-  const humedadEstimada = humedadSuelo || 50;
-  const puntoRocio = Math.round(tempEstimada - (100 - humedadEstimada) / 5); // °C
-
-  // Contenido de agua en suelo (relacionado con humedad y textura)
-  const contenidoAgua = Math.round(humedadSuelo * 0.8 + (esTemporadaLluvias ? 10 : 0)); // %
+  const puntoRocio = Math.round(tempEstimada - (100 - humedadSuelo) / 5);
+  const contenidoAgua = Math.round(humedadSuelo * 0.8 + (esTemporadaLluvias ? 10 : 0));
 
   return {
     clorofila: { valor: clorofila, unidad: 'mg/m²', interpretacion: clorofila > 50 ? 'Alta actividad fotosintética' : clorofila > 30 ? 'Actividad moderada' : 'Baja actividad' },
@@ -85,69 +865,159 @@ function calcularParametrosExtendidos(lat, lon, ndvi) {
   };
 }
 
-function calcularNDVIEstimado(lat, lon) {
-  const now = new Date();
-  const mes = now.getMonth() + 1;
-  const enTemporadaLluvias = mes >= 11 || mes <= 3;
-  const factorLatitud = Math.min(Math.max((lat + 15) / 15, 0.2), 1.0);
-  const factorTemporada = enTemporadaLluvias ? 0.85 : 0.55;
-  const ndvi = 0.1 + (factorLatitud * factorTemporada * 0.7);
-  return Math.min(Math.max(ndvi, 0.05), 0.85);
-}
-
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).end();
 
   const url = new URL(req.url, 'http://localhost');
-  const lat = parseFloat(url.searchParams.get('lat'));
-  const lon = parseFloat(url.searchParams.get('lon'));
-  const radiusKm = Math.min(parseFloat(url.searchParams.get('radius') || '2'), 10);
+  let lat = parseFloat(url.searchParams.get('lat'));
+  let lon = parseFloat(url.searchParams.get('lon'));
+  const radiusKm = Math.min(parseFloat(url.searchParams.get('radius') || '1'), 10);
+  const cultivo = url.searchParams.get('cultivo') || '';
+  const dias = parseInt(url.searchParams.get('dias') || '0', 10);
+  const parcelaId = url.searchParams.get('parcelaId') || '';
+  const coordenadas = parseCoordenadas(url.searchParams.get('coordenadas'));
 
-  if (isNaN(lat) || isNaN(lon)) {
-    return res.status(400).json({ error: 'lat y lon requeridos' });
+  if (coordenadas?.length >= 3) {
+    const centro = calcularCentroide(coordenadas);
+    lat = centro.lat;
+    lon = centro.lon;
   }
 
+  if (isNaN(lat) || isNaN(lon)) {
+    return res.status(400).json({ error: 'lat y lon requeridos (mapea la parcela o ingresa GPS numérico)' });
+  }
+
+  const coordsFuente = coordenadas?.length >= 3 ? 'poligono' : 'gps';
+
+  const hasSentinelAuth = !!(process.env.SENTINEL_CLIENT_ID && process.env.SENTINEL_CLIENT_SECRET);
+  let indicesCompletos = null;
+  let indicesSource = 'estimated';
+
   const SENTINEL_INSTANCE_ID = process.env.SENTINEL_INSTANCE_ID;
+  const sentinelDebug = {
+    instance_id_set: !!SENTINEL_INSTANCE_ID,
+    oauth_configured: hasSentinelAuth,
+  };
 
-  // Método 1: Sentinel Hub WMS
-  if (SENTINEL_INSTANCE_ID) {
-    try {
-      const delta = radiusKm / 111;
-      const wmsUrl = new URL(SENTINEL_WMS_URL);
-      wmsUrl.searchParams.set('SERVICE', 'WMS');
-      wmsUrl.searchParams.set('VERSION', '1.3.0');
-      wmsUrl.searchParams.set('REQUEST', 'GetMap');
-      wmsUrl.searchParams.set('LAYERS', '1_TRUE_COLOR');
-      wmsUrl.searchParams.set('CRS', 'EPSG:4326');
-      wmsUrl.searchParams.set('BBOX', `${lat - delta},${lon - delta},${lat + delta},${lon + delta}`);
-      wmsUrl.searchParams.set('WIDTH', '512');
-      wmsUrl.searchParams.set('HEIGHT', '512');
-      wmsUrl.searchParams.set('FORMAT', 'image/png');
-      wmsUrl.searchParams.set('TRANSPARENT', 'true');
-      wmsUrl.searchParams.set('INSTANCE_ID', SENTINEL_INSTANCE_ID);
+  let cachedToken = null;
 
-      const wmsRes = await fetch(wmsUrl.toString());
-      if (wmsRes.ok) {
-        const arrayBuffer = await wmsRes.arrayBuffer();
-        const base64 = Buffer.from(arrayBuffer).toString('base64');
-        const ndviSimulado = calcularNDVIEstimado(lat, lon);
-        const analisis = generarAnalisisCompleto(lat, lon, radiusKm, [ndviSimulado]);
+  if (hasSentinelAuth) {
+    const tokenResult = await obtenerTokenCDSE();
+    cachedToken = tokenResult.token;
+    sentinelDebug.oauth_ok = !!cachedToken;
+    if (tokenResult.error) sentinelDebug.oauth_error = tokenResult.error;
+
+    if (cachedToken) {
+      const [espectrales, processImg] = await Promise.all([
+        fetchIndicesEspectralesSentinel(
+          lat, lon, radiusKm, coordenadas, cultivo, dias, cachedToken,
+        ),
+        fetchImagenSentinelProcess(lat, lon, radiusKm, cachedToken, coordenadas),
+      ]);
+
+      if (espectrales && !espectrales.failed) {
+        indicesCompletos = espectrales;
+        indicesSource = 'sentinel-2-l2a';
+        sentinelDebug.indices = { ok: true, valid_pixels: espectrales.valid_pixels };
+      } else {
+        sentinelDebug.indices = espectrales || { failed: true };
+      }
+
+      if (processImg && !processImg.failed) {
+        if (!indicesCompletos) {
+          indicesCompletos = calcularIndicesCompletos(lat, lon, cultivo, dias, parcelaId, coordenadas);
+        }
+
+        const extra = {
+          msavi2_promedio: indicesCompletos.msavi2_promedio,
+          ndre_promedio: indicesCompletos.ndre_promedio,
+          indice_recomendado: indicesCompletos.indice_recomendado,
+          indices_recomendados: indicesCompletos.indices_recomendados,
+          etapa_cultivo: indicesCompletos.etapa_cultivo,
+          etapa: indicesCompletos.etapa,
+          nota_etapa: indicesCompletos.nota_etapa,
+          es_maiz_o_cana: indicesCompletos.es_maiz_o_cana,
+          indices_disponibles: indicesCompletos.indices_disponibles,
+          mapa_calor: indicesCompletos.mapa_calor,
+          dias_desde_siembra: indicesCompletos.dias_desde_siembra,
+          coords_usadas: indicesCompletos.coords_usadas,
+          coords_fuente: coordsFuente,
+          resolucion_m: 10,
+          indices_source: indicesSource,
+        };
+        const analisis = generarAnalisisCompleto(lat, lon, radiusKm, [indicesCompletos.ndvi], extra);
 
         return res.status(200).json({
-          source: 'sentinel-hub-wms',
-          satellite_image: `data:image/png;base64,${base64}`,
+          source: 'sentinel-hub-process',
+          indices_source: indicesSource,
+          sentinel_endpoint: processImg.endpoint,
+          sentinel_layer: processImg.layer,
+          satellite_image: `data:image/${processImg.mime || 'jpeg'};base64,${processImg.base64}`,
           ...analisis,
           generated_at: new Date().toISOString(),
+          note: indicesSource === 'sentinel-2-l2a'
+            ? 'Imagen e índices NDVI/MSAVI2/NDRE calculados desde bandas Sentinel-2 L2A (10 m).'
+            : undefined,
         });
       }
-    } catch (e) {
-      console.warn('Sentinel Hub WMS falló:', e.message);
+      sentinelDebug.process = processImg;
     }
   }
 
-  // Método 2: ESRI World Imagery
+  if (!indicesCompletos) {
+    indicesCompletos = calcularIndicesCompletos(lat, lon, cultivo, dias, parcelaId, coordenadas);
+    indicesSource = 'estimated';
+  }
+
+  const indicesExtra = {
+    msavi2_promedio: indicesCompletos.msavi2_promedio,
+    ndre_promedio: indicesCompletos.ndre_promedio,
+    indice_recomendado: indicesCompletos.indice_recomendado,
+    indices_recomendados: indicesCompletos.indices_recomendados,
+    etapa_cultivo: indicesCompletos.etapa_cultivo,
+    etapa: indicesCompletos.etapa,
+    nota_etapa: indicesCompletos.nota_etapa,
+    es_maiz_o_cana: indicesCompletos.es_maiz_o_cana,
+    indices_disponibles: indicesCompletos.indices_disponibles,
+    mapa_calor: indicesCompletos.mapa_calor,
+    dias_desde_siembra: indicesCompletos.dias_desde_siembra,
+    coords_usadas: indicesCompletos.coords_usadas,
+    coords_fuente: coordsFuente,
+    resolucion_m: null,
+    indices_source: indicesSource,
+  };
+
+  if (hasSentinelAuth && cachedToken && SENTINEL_INSTANCE_ID) {
+    const wms = await fetchImagenSentinelWMS(
+      SENTINEL_INSTANCE_ID,
+      lat,
+      lon,
+      radiusKm,
+      cachedToken,
+    );
+
+    if (wms && !wms.failed) {
+      indicesExtra.resolucion_m = 10;
+      const analisis = generarAnalisisCompleto(lat, lon, radiusKm, [indicesCompletos.ndvi], indicesExtra);
+
+      return res.status(200).json({
+        source: 'sentinel-hub-wms',
+        indices_source: indicesSource,
+        sentinel_endpoint: wms.endpoint,
+        sentinel_layer: wms.layer,
+        satellite_image: `data:image/${wms.mime || 'jpeg'};base64,${wms.base64}`,
+        ...analisis,
+        generated_at: new Date().toISOString(),
+      });
+    }
+
+    sentinelDebug.wms = wms?.debug || { failed: true };
+  } else if (!hasSentinelAuth) {
+    sentinelDebug.hint = 'Agrega SENTINEL_CLIENT_ID + SENTINEL_CLIENT_SECRET en Vercel (Production)';
+  }
+
   try {
-    const z = 16;
+    const z = coordenadas?.length >= 3 ? 17 : 16;
     const x = Math.floor((lon + 180) / 360 * Math.pow(2, z));
     const latRad = lat * Math.PI / 180;
     const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, z));
@@ -157,29 +1027,35 @@ export default async function handler(req, res) {
     if (tileRes.ok) {
       const arrayBuffer = await tileRes.arrayBuffer();
       const base64 = Buffer.from(arrayBuffer).toString('base64');
-      const ndviSimulado = calcularNDVIEstimado(lat, lon);
-      const analisis = generarAnalisisCompleto(lat, lon, radiusKm, [ndviSimulado]);
+      indicesExtra.resolucion_m = Math.round(156543.03 * Math.cos(latRad) / Math.pow(2, z));
+      const analisis = generarAnalisisCompleto(lat, lon, radiusKm, [indicesCompletos.ndvi], indicesExtra);
 
       return res.status(200).json({
         source: 'esri-world-imagery',
+        indices_source: indicesSource,
         satellite_image: `data:image/png;base64,${base64}`,
         ...analisis,
         generated_at: new Date().toISOString(),
+        sentinel_debug: sentinelDebug,
+        note: indicesSource === 'sentinel-2-l2a'
+          ? `Vista aérea ESRI (~${indicesExtra.resolucion_m}m/píxel). Índices NDVI/MSAVI2/NDRE reales Sentinel-2 L2A.`
+          : `Vista aérea ~${indicesExtra.resolucion_m}m/píxel. Índices estimados — revisa OAuth Copernicus.`,
       });
     }
   } catch (e) {
     console.warn('ESRI falló:', e.message);
   }
 
-  // Método 3: Solo análisis
-  const ndviSimulado = calcularNDVIEstimado(lat, lon);
-  const analisis = generarAnalisisCompleto(lat, lon, radiusKm, [ndviSimulado]);
+  const analisis = generarAnalisisCompleto(lat, lon, radiusKm, [indicesCompletos.ndvi], indicesExtra);
 
   return res.status(200).json({
     source: 'estimated',
+    indices_source: indicesSource,
     satellite_image: null,
     ...analisis,
     generated_at: new Date().toISOString(),
-    note: 'Parámetros estimados por ubicación. Configura SENTINEL_INSTANCE_ID para datos satelitales exactos.',
+    note: indicesSource === 'sentinel-2-l2a'
+      ? 'Índices Sentinel-2 disponibles; imagen satelital no disponible en este momento.'
+      : 'Índices calculados por ubicación exacta, edad del cultivo y polígono. Mapea la parcela para mayor precisión.',
   });
 }

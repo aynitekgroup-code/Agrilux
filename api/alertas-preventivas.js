@@ -1,10 +1,8 @@
 /**
  * api/alertas-preventivas.js
- * Sistema de diagnóstico PREVENTIVO — predice riesgos ANTES de que aparezcan.
- * Combina: clima + etapa del cultivo + historial + zona geográfica.
- *
- * GET body: ?lat=X&lon=Y&cultivo=Z&diasDesdeSiembra=N
- * Returns: { alertas: [], riesgoGeneral: string, recomendaciones: [] }
+ * Endpoints combinados:
+ *   GET  /api/alertas-preventivas?type=auth           → Validar clave admin
+ *   GET  /api/alertas-preventivas?lat=X&lon=Y&...     → Alertas preventivas
  */
 
 const ALERTAS_POR_CULTIVO = {
@@ -162,9 +160,22 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'GET') return res.status(405).end();
 
   const url = new URL(req.url, 'http://localhost');
+  const type = url.searchParams.get('type');
+
+  // ── Admin Auth (fusionado de admin-auth.js) ──
+  if (type === 'auth') {
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+    const { clave } = req.body || {};
+    if (!clave) return res.status(400).json({ error: 'Falta la clave' });
+    const ADMIN_KEY = process.env.ADMIN_KEY || process.env.VITE_ADMIN_KEY;
+    if (!ADMIN_KEY) return res.status(500).json({ error: 'ADMIN_KEY no configurada en el servidor' });
+    if (clave === ADMIN_KEY) return res.status(200).json({ ok: true });
+    return res.status(401).json({ ok: false, error: 'Clave incorrecta' });
+  }
+
+  if (req.method !== 'GET') return res.status(405).end();
   const lat = parseFloat(url.searchParams.get('lat')) || null;
   const lon = parseFloat(url.searchParams.get('lon')) || null;
   const cultivo = url.searchParams.get('cultivo') || 'papa';

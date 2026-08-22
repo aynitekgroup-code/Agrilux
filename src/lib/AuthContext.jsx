@@ -20,6 +20,14 @@ import {
 
 const AuthContext = createContext();
 
+const normalizarWhatsapp = (valor) => {
+  const soloNumeros = String(valor || '').replace(/\D/g, '');
+  if (!soloNumeros) return '';
+  if (soloNumeros.startsWith('51')) return soloNumeros;
+  if (soloNumeros.startsWith('0')) return `51${soloNumeros.slice(1)}`;
+  return `51${soloNumeros}`;
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
@@ -33,6 +41,7 @@ export const AuthProvider = ({ children }) => {
           uid:    firebaseUser.uid,
           email:  firebaseUser.email,
           nombre: firebaseUser.displayName || perfil.nombre || '',
+          whatsapp: perfil.whatsapp || '',
           status: perfil.status || 'aprobado', // default aprobado para admins creados
           ...perfil,
         });
@@ -45,7 +54,8 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // ── Registro: status = 'aprobado' (acceso inmediato) ──────
-  const register = async ({ nombre, email, password, ubicacion, coords }) => {
+  const register = async ({ nombre, email, password, ubicacion, coords, whatsapp }) => {
+    const whatsappNormalizado = normalizarWhatsapp(whatsapp);
     const cred = await createUserWithEmailAndPassword(
       auth,
       email.trim().toLowerCase(),
@@ -56,6 +66,7 @@ export const AuthProvider = ({ children }) => {
       nombre:    nombre.trim(),
       email:     email.trim().toLowerCase(),
       ubicacion: ubicacion || '',
+      whatsapp:  whatsappNormalizado || null,
       coords:    coords || null,
       rol:       'agricultor',
       status:    'aprobado',
@@ -67,6 +78,7 @@ export const AuthProvider = ({ children }) => {
       email:  email.trim().toLowerCase(),
       nombre: nombre.trim(),
       ubicacion: ubicacion || '',
+      whatsapp: whatsappNormalizado || '',
       coords:    coords || null,
       rol:    'agricultor',
       status: 'aprobado',
@@ -92,6 +104,32 @@ export const AuthProvider = ({ children }) => {
     setUser(prev => ({ ...prev, ubicacion, coords: coords || prev.coords }));
   };
 
+  const updatePerfil = async ({ nombre, ubicacion, whatsapp, coords = null }) => {
+    if (!user?.uid) throw new Error('No hay sesión');
+
+    const nombreFinal = (nombre ?? user.nombre ?? '').trim();
+    const ubicacionFinal = ubicacion ?? user.ubicacion ?? '';
+    const whatsappFinal = normalizarWhatsapp(whatsapp ?? user.whatsapp ?? '');
+
+    const data = {
+      nombre: nombreFinal,
+      ubicacion: ubicacionFinal,
+      whatsapp: whatsappFinal || null,
+      ...(coords ? { coords } : {}),
+    };
+
+    await setDoc(doc(db, 'usuarios', user.uid), data, { merge: true });
+    setUser(prev => ({
+      ...prev,
+      nombre: nombreFinal,
+      ubicacion: ubicacionFinal,
+      whatsapp: whatsappFinal,
+      coords: coords || prev.coords,
+    }));
+
+    return data;
+  };
+
   const logout = async () => {
     await signOut(auth);
     setUser(null);
@@ -101,7 +139,7 @@ export const AuthProvider = ({ children }) => {
   const isAprobado = user?.status === 'aprobado' || user?.rol === 'admin';
 
   return (
-    <AuthContext.Provider value={{ user, loading, register, login, logout, updateUbicacion, isAprobado }}>
+    <AuthContext.Provider value={{ user, loading, register, login, logout, updateUbicacion, updatePerfil, isAprobado }}>
       {children}
     </AuthContext.Provider>
   );

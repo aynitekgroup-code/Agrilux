@@ -21,7 +21,7 @@ async function generateIcon(size) {
   </defs>
   <rect width="${size}" height="${size}" rx="${cornerRadius}" fill="url(#bg)"/>
   <text x="${size/2}" y="${size * 0.58}" font-family="Arial,Helvetica,sans-serif" font-size="${size * 0.45}" font-weight="bold" fill="white" text-anchor="middle">A</text>
-  <text x="${size/2}" y="${size * 0.82}" font-family="Arial,Helvetica,sans-serif" font-size="${size * 0.1}" font-weight="bold" fill="#a8e6cf" text-anchor="middle">GRILUX</text>
+  <text x="${size/2}" y="${size * 0.82}" font-family="Arial,Helvetica,sans-serif" font-size="${size * 0.1}" font-weight="bold" fill="#a8e6cf" text-anchor="middle">AGRILUX</text>
 </svg>`;
 
   await sharp(Buffer.from(svg))
@@ -44,7 +44,7 @@ async function generateAppleTouchIcon() {
   </defs>
   <rect width="${size}" height="${size}" rx="${cornerRadius}" fill="url(#bg)"/>
   <text x="${size/2}" y="${size * 0.58}" font-family="Arial,Helvetica,sans-serif" font-size="${size * 0.45}" font-weight="bold" fill="white" text-anchor="middle">A</text>
-  <text x="${size/2}" y="${size * 0.82}" font-family="Arial,Helvetica,sans-serif" font-size="${size * 0.1}" font-weight="bold" fill="#a8e6cf" text-anchor="middle">GRILUX</text>
+  <text x="${size/2}" y="${size * 0.82}" font-family="Arial,Helvetica,sans-serif" font-size="${size * 0.1}" font-weight="bold" fill="#a8e6cf" text-anchor="middle">AGRILUX</text>
 </svg>`;
 
   await sharp(Buffer.from(svg))

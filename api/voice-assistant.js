@@ -259,6 +259,18 @@ REGLAS:
 - Si no hay ofertas registradas para lo que busca, di que no hay tiendas registradas con ese producto y sugiere registrar una tienda en Agrilux
 - Usa emojis moderados para hacer la conversación amigable`;
 
+const SYSTEM_PROMPT_PARCELA = `Eres el agente de parcela de Agrilux. Eres agrónomo experto en monitoreo de cultivos en Perú, especialmente caña de azúcar y maíz en la costa.
+
+REGLAS:
+- Responde SIEMPRE en español peruano, tono cálido y directo
+- Máximo 4 oraciones por respuesta (optimizado para voz)
+- Conoces la parcela activa: cultivo, días desde siembra, área, riesgos e índices satelitales
+- ÍNDICES POR ETAPA (Carlos Pérez): MSAVI2 en poco cultivo y agoste/cosecha; NDVI + NDRE en pleno crecimiento
+- Si hay mapa de calor con colores NO uniformes, alerta sobre zonas con problema (manchas rojas/amarillas = estrés, exceso humedad, etc.)
+- Identifica zonas_problema del contexto y sugiere inspección en campo en esas áreas específicas
+- Si preguntan por comprar productos, sugiere ir a Mercado en Agrilux
+- Usa emojis moderados`;
+
 const SYSTEM_PROMPT_BASE = `Eres PlaguIA, el asistente agrícola inteligente de Agrilux. Hablas como un agrónomo experto peruano, amigable y directo.
 
 REGLAS:
@@ -300,11 +312,54 @@ export default async function handler(req, res) {
   const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
   const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
-  const { mensaje, historial = [], lat, lon, ubicacion, nombre, agentType, ofertasRegistradas = [], productoRecomendado } = req.body;
+  const { mensaje, historial = [], lat, lon, ubicacion, nombre, agentType, parcelaContext, ofertasRegistradas = [], productoRecomendado } = req.body;
   if (!mensaje) return res.status(400).json({ error: 'Falta el campo mensaje' });
+
+  const latFinal = lat ?? parcelaContext?.lat ?? null;
+  const lonFinal = lon ?? parcelaContext?.lon ?? null;
+  const cultivoParcela = parcelaContext?.cultivo || 'papa';
+  const diasParcela = parcelaContext?.diasDesdeSiembra ?? 30;
 
   // ── Recopilar TODA la información disponible ──
   const contextoParts = [];
+
+  // 0. Contexto de parcela activa (agente parcela)
+  if (agentType === 'parcela' && parcelaContext) {
+    const p = parcelaContext;
+    contextoParts.push(`PARCELA ACTIVA: "${p.nombre || 'Sin nombre'}"`);
+    contextoParts.push(`CULTIVO: ${p.cultivoNombre || p.cultivo || 'no especificado'}${p.variedad ? `, variedad ${p.variedad}` : ''}`);
+    if (p.diasDesdeSiembra != null) contextoParts.push(`DÍAS DESDE SIEMBRA: ${p.diasDesdeSiembra} días`);
+    if (p.area) contextoParts.push(`ÁREA: ${p.area} hectáreas`);
+    if (p.fechaSiembra) contextoParts.push(`FECHA SIEMBRA: ${p.fechaSiembra}`);
+    if (p.registrosCount != null) contextoParts.push(`MONITOREOS REGISTRADOS: ${p.registrosCount}`);
+    if (p.ultimaRecomendacion) contextoParts.push(`ÚLTIMA RECOMENDACIÓN IA: ${p.ultimaRecomendacion.slice(0, 200)}`);
+    if (p.riesgo?.nivel) {
+      contextoParts.push(`NIVEL DE RIESGO PARCELA: ${p.riesgo.nivel} (${p.riesgo.puntos || 0} puntos)`);
+      if (p.riesgo.alertas?.length) {
+        contextoParts.push(`ALERTAS PARCELA: ${p.riesgo.alertas.map(a => a.nombre).join(', ')}`);
+      }
+    }
+    if (p.indices) {
+      const { ndvi, msavi2, ndre, indice_recomendado, indices_recomendados, nota_etapa, mapa_calor } = p.indices;
+      let idxText = 'ÍNDICES SATELITALES:';
+      if (ndvi != null) idxText += ` NDVI ${ndvi}`;
+      if (msavi2 != null) idxText += `, MSAVI2 ${msavi2}`;
+      if (ndre != null) idxText += `, NDRE ${ndre}`;
+      if (indice_recomendado) idxText += `. Principal: ${indice_recomendado.toUpperCase()}`;
+      if (indices_recomendados?.length > 1) idxText += ` (también: ${indices_recomendados.filter(i => i !== indice_recomendado).join(', ').toUpperCase()})`;
+      contextoParts.push(idxText);
+      if (nota_etapa) contextoParts.push(`NOTA ETAPA: ${nota_etapa}`);
+      if (mapa_calor) {
+        contextoParts.push(`MAPA DE CALOR: uniforme=${mapa_calor.uniforme ? 'sí' : 'NO'}. ${mapa_calor.alerta_uniformidad || ''}`);
+        if (mapa_calor.zonas_problema?.length) {
+          const zonas = mapa_calor.zonas_problema.slice(0, 3).map(z =>
+            `Zona ${z.id}: índice ${z.indice} (${z.severidad}) — ${z.causa_probable}`
+          ).join('; ');
+          contextoParts.push(`ZONAS CON PROBLEMA: ${zonas}`);
+        }
+      }
+    }
+  }
 
   // 1. Ubicación del usuario
   if (ubicacion) {
@@ -317,12 +372,12 @@ export default async function handler(req, res) {
   // 2. Estación meteorológica más cercana + altitud
   let estacionCercana = null;
   let altitudUsuario = null;
-  if (lat && lon) {
-    estacionCercana = encontrarEstacionCercana(lat, lon);
+  if (latFinal && lonFinal) {
+    estacionCercana = encontrarEstacionCercana(latFinal, lonFinal);
     contextoParts.push(`ESTACIÓN METEREOLÓGICA MÁS CERCANA: ${estacionCercana.nombre} (${estacionCercana.dept}), a ${estacionCercana.distanciaKm}km, altitud ${estacionCercana.alt}m`);
     // Obtener altitud real del terreno
     try {
-      const altRes = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lon}`, { signal: AbortSignal.timeout(2000) });
+      const altRes = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${latFinal}&longitude=${lonFinal}`, { signal: AbortSignal.timeout(2000) });
       const altData = await altRes.json();
       altitudUsuario = altData.elevation?.[0] || null;
       if (altitudUsuario) {
@@ -335,8 +390,8 @@ export default async function handler(req, res) {
 
   // 3. Clima en tiempo real (Open-Meteo)
   let clima = null;
-  if (lat && lon) {
-    clima = await obtenerClimaOpenMeteo(lat, lon);
+  if (latFinal && lonFinal) {
+    clima = await obtenerClimaOpenMeteo(latFinal, lonFinal);
     if (clima) {
       // Ajustar temperatura por altitud
       if (altitudUsuario && estacionCercana?.alt) {
@@ -362,17 +417,17 @@ export default async function handler(req, res) {
 
   // 4. Pronóstico SENAMHI (scraping) — siempre consultar si pregunta por clima
   const mencionaClima = /clima|tiempo|lluvia|temperatura|senamhi|pronóstico|pronostico|calor|frío|frio|hoy|mañana|manana/i.test(mensaje);
-  if (lat && lon) {
+  if (latFinal && lonFinal) {
     const ubicacionNombre = ubicacion?.split(',')[0]?.trim() || '';
-    const senamhi = await obtenerPronosticoSENAMHI(lat, lon, ubicacionNombre);
+    const senamhi = await obtenerPronosticoSENAMHI(latFinal, lonFinal, ubicacionNombre);
     if (senamhi) {
       contextoParts.push(`PRONÓSTICO OFICIAL SENAMHI (${senamhi.estacion} - ${senamhi.departamento}): Máx ${senamhi.tempMax}°C, Mín ${senamhi.tempMin}°C. ${senamhi.descripcion}`);
     }
   }
 
   // 5. Datos de suelo
-  if (lat && lon) {
-    const suelo = await obtenerSuelo(lat, lon);
+  if (latFinal && lonFinal) {
+    const suelo = await obtenerSuelo(latFinal, lonFinal);
     if (suelo) {
       let sueloText = 'SUELO DE LA ZONA:';
       if (suelo.ph) sueloText += ` pH ${suelo.ph}`;
@@ -383,17 +438,18 @@ export default async function handler(req, res) {
   }
 
   // 6. Alertas NASA
-  if (lat && lon) {
-    const nasa = await obtenerAlertasNASA(lat, lon);
+  if (latFinal && lonFinal) {
+    const nasa = await obtenerAlertasNASA(latFinal, lonFinal);
     if (nasa && nasa.riesgo !== 'ninguno') {
       contextoParts.push(`ALERTA NASA: ${nasa.incendios} focos de calor detectados, riesgo ${nasa.riesgo}`);
     }
   }
 
   // 7. Alertas preventivas (diagnóstico predictivo)
-  if (lat && lon) {
+  if (latFinal && lonFinal) {
     try {
-      const alertasRes = await fetch(`https://${req.headers.host || 'localhost'}/api/alertas-preventivas?lat=${lat}&lon=${lon}&cultivo=papa&diasDesdeSiembra=30`);
+      const host = req.headers.host || 'localhost';
+      const alertasRes = await fetch(`https://${host}/api/alertas-preventivas?lat=${latFinal}&lon=${lonFinal}&cultivo=${cultivoParcela}&diasDesdeSiembra=${diasParcela}`);
       const alertas = await alertasRes.json();
       if (alertas.alertas?.length > 0) {
         const alertasTexto = alertas.alertas.map(a => `${a.nombre} (${a.gravedad}): ${a.preventivo}`).join('; ');
@@ -403,12 +459,25 @@ export default async function handler(req, res) {
     } catch (e) { /* silencioso */ }
   }
 
-  // ── Ofertas de tiendas registradas (siempre para agente ventas) ──
-  let ofertasActivas = ofertasRegistradas;
-  if (agentType === 'ventas' && ofertasActivas.length === 0 && lat && lon) {
+  // 7b. Índices satelitales para agente parcela (si no vienen del cliente)
+  if (agentType === 'parcela' && latFinal && lonFinal && !parcelaContext?.indices) {
     try {
       const host = req.headers.host || 'localhost';
-      const ofRes = await fetch(`https://${host}/api/tiendas?type=ofertas&lat=${lat}&lon=${lon}`);
+      const cultivoIdx = encodeURIComponent(parcelaContext?.cultivo || cultivoParcela);
+      const sentRes = await fetch(`https://${host}/api/sentinel?lat=${latFinal}&lon=${lonFinal}&radius=2&cultivo=${cultivoIdx}`);
+      const sent = await sentRes.json();
+      if (sent.ndvi_promedio != null) {
+        contextoParts.push(`ÍNDICES SATELITALES: NDVI ${sent.ndvi_promedio}, MSAVI2 ${sent.msavi2_promedio}, NDRE ${sent.ndre_promedio}. Recomendado: ${(sent.indice_recomendado || 'ndvi').toUpperCase()}. ${sent.nota_etapa || ''}`);
+      }
+    } catch { /* silencioso */ }
+  }
+
+  // ── Ofertas de tiendas registradas (siempre para agente ventas) ──
+  let ofertasActivas = ofertasRegistradas;
+  if (agentType === 'ventas' && ofertasActivas.length === 0 && latFinal && lonFinal) {
+    try {
+      const host = req.headers.host || 'localhost';
+      const ofRes = await fetch(`https://${host}/api/tiendas?type=ofertas&lat=${latFinal}&lon=${lonFinal}`);
       const ofData = await ofRes.json();
       ofertasActivas = ofData.ofertas || [];
     } catch { /* silencioso */ }
@@ -449,7 +518,7 @@ export default async function handler(req, res) {
         whatsapp: o.whatsapp ? `https://wa.me/51${String(o.whatsapp).replace(/\D/g, '')}` : null,
       })) };
     }
-  } else if (buscaTienda && agentType !== 'ventas' && lat && lon) {
+  } else if (buscaTienda && agentType !== 'ventas' && latFinal && lonFinal) {
     // Extraer nombre del producto del mensaje
     const productoMatch = mensaje.match(/comprar\s+(.+?)(?:\s+en|\s+cerca|\s+de|\s+por|\s+para|\?|$)/i)
       || mensaje.match(/tienda\s+(?:de\s+)?(.+?)(?:\s+en|\s+cerca|\s+de|\s+por|\s+para|\?|$)/i)
@@ -465,7 +534,7 @@ export default async function handler(req, res) {
     
     try {
       // Buscar tiendas + precios + Fertisem + redes sociales
-      const busquedaRes = await fetch(`https://${req.headers.host || 'localhost'}/api/buscar-insumos?lat=${lat}&lon=${lon}&producto=${encodeURIComponent(producto)}&radio=50&ubicacion=${encodeURIComponent(ubicacion || '')}`);
+      const busquedaRes = await fetch(`https://${req.headers.host || 'localhost'}/api/buscar-insumos?lat=${latFinal}&lon=${lonFinal}&producto=${encodeURIComponent(producto)}&radio=50&ubicacion=${encodeURIComponent(ubicacion || '')}`);
       tiendasResult = await busquedaRes.json();
 
       if (tiendasResult.tiendas?.length > 0) {
@@ -497,7 +566,9 @@ export default async function handler(req, res) {
     ? `\n\nINFORMACIÓN EN TIEMPO REAL DEL AGRICULTOR:\n${contextoParts.join('\n')}\n\nUsa TODOS estos datos para tus recomendaciones. Si hay lluvia, prioriza fungicidas sistémicos. Si hay humedad alta, alerta sobre hongos. Si está frío, sugiere preventivos. Si el suelo es ácido, ajusta dosis. Menciona el pronóstico SENAMHI si el usuario pregunta por el clima.`
     : '';
 
-  const basePrompt = agentType === 'ventas' ? SYSTEM_PROMPT_VENTAS : SYSTEM_PROMPT_BASE;
+  const basePrompt = agentType === 'ventas' ? SYSTEM_PROMPT_VENTAS
+    : agentType === 'parcela' ? SYSTEM_PROMPT_PARCELA
+    : SYSTEM_PROMPT_BASE;
   const systemPrompt = basePrompt + contextoCompleto;
 
   // ── Construir historial de conversación ──

@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean-api": "cmd /c cleanup-api.bat",
+    "generate-android-icons": "node scripts/generate-android-icons.js",
     "deploy": "npm run build && git add -A && git commit -m \"deploy\" && git push"
   },
   "dependencies": {
@@ -16,6 +17,7 @@
     "@capacitor/core": "^8.4.2",
     "dompurify": "^3.4.11",
     "firebase": "^10.7.0",
+    "firebase-admin": "^14.3.0",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.475.0",
