@@ -178,6 +178,38 @@ export async function getClimaSenamhi(lat, lon) {
   return res.json();
 }
 
+// ─── Pronóstico 16 días para predicción de plagas (Open-Meteo gratuito) ──────
+export async function getPronosticoPlagas(lat, lon) {
+  const params = new URLSearchParams({
+    latitude: lat.toString(),
+    longitude: lon.toString(),
+    daily: 'temperature_2m_max,temperature_2m_min,relative_humidity_2m_max,relative_humidity_2m_min,precipitation_sum,wind_speed_10m_max',
+    current: 'temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m',
+    timezone: 'auto',
+    forecast_days: '16',
+  });
+  const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+  if (!res.ok) throw new Error('Error obteniendo pronóstico de plagas');
+  const data = await res.json();
+
+  const pronostico = (data.daily?.time || []).map((fecha, i) => ({
+    fecha,
+    temp: Math.round(((data.daily.temperature_2m_max[i] + data.daily.temperature_2m_min[i]) / 2) * 10) / 10,
+    humedad: Math.round(((data.daily.relative_humidity_2m_max[i] + data.daily.relative_humidity_2m_min[i]) / 2)),
+    lluvia: Math.round((data.daily.precipitation_sum[i] || 0) * 10) / 10,
+    viento: Math.round((data.daily.wind_speed_10m_max[i] || 0) * 10) / 10,
+  }));
+
+  const climaActual = data.current ? {
+    temp: data.current.temperature_2m,
+    humedad: data.current.relative_humidity_2m,
+    lluvia: data.current.precipitation,
+    viento: data.current.wind_speed_10m,
+  } : pronostico[0] || {};
+
+  return { pronostico, climaActual };
+}
+
 // ─── Buscar insumos — tiendas locales + redes sociales ──────────────────────
 export async function buscarInsumos({ lat, lon, producto, cultivo, ubicacion, radio = 30 }) {
   const params = new URLSearchParams({
