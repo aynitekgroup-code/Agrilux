@@ -9,7 +9,6 @@ import AgentStatus from './AgentStatus';
 const navItems = [
   { path: '/',        icon: Camera,  label: 'Diagnóstico' },
   { path: '/ciclo',   icon: Calendar, label: 'Ciclo' },
-  { path: '/prediccion', icon: Sparkles, label: 'Predicción' },
   { path: '/parcela', icon: Leaf,    label: 'Parcela' },
   { path: '/mercado', icon: Store,   label: 'Mercado' },
 ];

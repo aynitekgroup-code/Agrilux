@@ -8,7 +8,6 @@ import Registro from './pages/Registro';
 import Diagnostico from './pages/Diagnostico';
 import MiParcela from './pages/MiParcela';
 import CicloCultivo from './pages/CicloCultivo';
-import PrediccionPlagas from './pages/PrediccionPlagas';
 import MercadoPage from './pages/MercadoPage';
 import Admin from './pages/Admin';
 import PrivacyPolicy from './pages/PrivacyPolicy';
@@ -119,11 +118,6 @@ function AppRoutes() {
             {/* Ciclo — requiere login */}
             <Route path="/ciclo" element={
               user ? <CicloCultivo /> : <Navigate to="/registro" />
-            } />
-
-            {/* Predicción de plagas — accesible con login */}
-            <Route path="/prediccion" element={
-              user ? <PrediccionPlagas /> : <Navigate to="/registro" />
             } />
 
             {/* Mercado — ofertas + agente + mi tienda */}

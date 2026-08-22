@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Camera, Leaf, Calendar, TrendingUp, Loader2, Map, Download, Mic, Satellite, Trash2 } from 'lucide-react';
+import { Plus, Camera, Leaf, Calendar, TrendingUp, Loader2, Map, Download, Mic, Satellite, Trash2, Sparkles } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { useAgentes } from '../lib/AgentContext';
 import { CULTIVOS } from '../lib/constants';
@@ -15,6 +15,7 @@ import { GraficoMonitoreo } from '../components/GraficosCultivo';
 import NdviParcela from '../components/NdviParcela';
 import VistaMapaParcela from '../components/VistaMapaParcela';
 import VoiceAssistant from '../components/VoiceAssistant';
+import PrediccionPlagas from './PrediccionPlagas';
 
 export default function MiParcela() {
   const { user } = useAuth();
@@ -38,6 +39,7 @@ export default function MiParcela() {
   const [mostrarAgente, setMostrarAgente] = useState(false);
   const [mostrarNdvi, setMostrarNdvi] = useState(false);
   const [mostrarMapa, setMostrarMapa] = useState(false);
+  const [mostrarPrediccion, setMostrarPrediccion] = useState(false);
   const [indicesParcela, setIndicesParcela] = useState(null);
 
   // Auto-fill GPS con coordenadas exactas del usuario al abrir modal
@@ -432,6 +434,38 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                   </div>
                   <span className="text-amber-400">›</span>
                 </button>
+
+                {/* Botón predicción de plagas */}
+                <button onClick={() => setMostrarPrediccion(!mostrarPrediccion)}
+                  className={`w-full rounded-2xl p-4 flex items-center gap-3 transition-all ${
+                    mostrarPrediccion ? 'bg-red-50 border-2 border-red-300' : 'bg-purple-50 border border-purple-200 hover:bg-purple-100'
+                  }`}>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-xl ${
+                    mostrarPrediccion ? 'bg-red-500' : 'bg-purple-500'
+                  }`}>
+                    🔮
+                  </div>
+                  <div className="text-left flex-1">
+                    <p className={`font-bold text-sm ${mostrarPrediccion ? 'text-red-800' : 'text-purple-800'}`}>
+                      Predicción de plagas
+                    </p>
+                    <p className={`text-xs ${mostrarPrediccion ? 'text-red-600' : 'text-purple-600'}`}>
+                      Predice brotes 7-16 días antes según clima
+                    </p>
+                  </div>
+                  <span className={mostrarPrediccion ? 'text-red-400' : 'text-purple-400'}>{mostrarPrediccion ? '▲' : '›'}</span>
+                </button>
+
+                {/* Panel predicción */}
+                {mostrarPrediccion && parcelaActiva && (
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    <PrediccionPlagas
+                      cultivoInicial={parcelaActiva.cultivo}
+                      diasInicial={diasDesdeSiembra(parcelaActiva.fechaSiembra)}
+                      coordsIniciales={obtenerCoordenadas()}
+                    />
+                  </div>
+                )}
 
                 {/* Agente + Mapa + Satélite */}
                 <div className="grid grid-cols-3 gap-2">
