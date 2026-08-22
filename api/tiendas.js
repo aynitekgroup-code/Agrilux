@@ -16,21 +16,74 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
-// ── Firebase Admin (con manejo de errores) ──
+// ── Firebase Admin (lazy init + manejo de errores) ──
 let db = null;
-try {
-  if (!getApps().length) {
-    initializeApp({
-      credential: cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      }),
+let firebaseInitError = null;
+
+function normalizePrivateKey(raw) {
+  if (!raw) return null;
+  const key = raw.replace(/\\n/g, '\n').trim();
+  return key.includes('BEGIN PRIVATE KEY') ? key : null;
+}
+
+function initFirebaseAdmin() {
+  if (db) return db;
+  if (firebaseInitError) return null;
+
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
+
+  if (!projectId || !clientEmail || !privateKey) {
+    firebaseInitError = 'missing_env';
+    return null;
+  }
+
+  try {
+    if (!getApps().length) {
+      initializeApp({
+        credential: cert({ projectId, clientEmail, privateKey }),
+      });
+    }
+    db = getFirestore();
+    return db;
+  } catch (err) {
+    firebaseInitError = err.message;
+    console.error('Firebase Admin init error:', err.message);
+    return null;
+  }
+}
+
+function firebaseReady() {
+  return !!initFirebaseAdmin();
+}
+
+function respuestaFirebaseNoDisponible(res, type) {
+  const hint = 'Agrega FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL y FIREBASE_PRIVATE_KEY en Vercel (Settings → Environment Variables).';
+  const base = {
+    firebase_ok: false,
+    hint,
+    total: 0,
+  };
+
+  if (type === 'ofertas') {
+    return res.status(200).json({
+      ...base,
+      ofertas: [],
+      timestamp: new Date().toISOString(),
     });
   }
-  db = getFirestore();
-} catch (err) {
-  console.error('Firebase Admin init error:', err.message);
+  if (type === 'comunidad') {
+    return res.status(200).json({ ...base, tiendas: [] });
+  }
+  if (type === 'precios') {
+    return res.status(200).json({ ...base, precios: [], productos: PRODUCTOS });
+  }
+  if (type === 'admin') {
+    return res.status(503).json({ error: hint });
+  }
+
+  return res.status(503).json({ error: hint });
 }
 
 // ── Ciudades agrícolas ──
@@ -224,10 +277,17 @@ export default async function handler(req, res) {
     const url = new URL(req.url, 'http://localhost');
     const type = url.searchParams.get('type') || 'comunidad';
 
-    // Si Firebase no está configurado, solo permitir scraping
-    if (!db && type !== 'scraper') {
-      return res.status(503).json({ error: 'Firebase no configurado. Agrega FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL y FIREBASE_PRIVATE_KEY en Vercel.' });
+    if (!firebaseReady() && type !== 'scraper') {
+      if (req.method === 'GET') {
+        return respuestaFirebaseNoDisponible(res, type);
+      }
+      return res.status(503).json({
+        error: 'Firebase no configurado en el servidor. Agrega FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL y FIREBASE_PRIVATE_KEY en Vercel.',
+        firebase_ok: false,
+      });
     }
+
+    db = initFirebaseAdmin();
 
     // ── SCRAPING ──
     if (type === 'scraper') {
@@ -281,7 +341,7 @@ export default async function handler(req, res) {
             .sort((a, b) => (a.distanciaKm || 999) - (b.distanciaKm || 999));
         }
 
-        return res.status(200).json({ tiendas, total: tiendas.length });
+        return res.status(200).json({ tiendas, total: tiendas.length, firebase_ok: true });
       }
 
       if (req.method === 'POST') {
@@ -426,6 +486,7 @@ export default async function handler(req, res) {
         ofertas,
         total: ofertas.length,
         timestamp: new Date().toISOString(),
+        firebase_ok: true,
       });
     }
 
