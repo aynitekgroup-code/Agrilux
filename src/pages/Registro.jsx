@@ -5,8 +5,8 @@
  * Login:    correo + contraseña
  */
 
-import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
 import { Loader2, Eye, EyeOff, User, Mail, Lock, MapPin, Navigation } from 'lucide-react';
 import DOMPurify from 'dompurify';
@@ -28,8 +28,11 @@ function msgError(code) {
 }
 
 export default function Registro() {
-  const { register, login } = useAuth();
+  const { register, login, user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || '/';
+  const redirectTab = searchParams.get('tab');
 
   const [modo, setModo]           = useState('login');
   const [nombre, setNombre]       = useState('');
@@ -44,6 +47,12 @@ export default function Registro() {
   const [coords, setCoords]       = useState(null);
 
   const submittingRef = useRef(false);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const destino = redirectTab ? `${redirectTo}?tab=${redirectTab}` : redirectTo;
+    navigate(destino, { replace: true });
+  }, [user?.uid, navigate, redirectTo, redirectTab]);
 
   const cambiarModo = (m) => {
     setModo(m); setError('');

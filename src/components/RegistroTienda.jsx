@@ -5,13 +5,15 @@
  * Se almacena en Firestore colección 'tiendas_comunidad'
  */
 
-import React, { useState } from 'react';
-import { db } from '../lib/firebase';
-import { collection, addDoc } from 'firebase/firestore';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { db, storage } from '../lib/firebase';
+import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuth } from '../lib/AuthContext';
 import {
-  Store, MapPin, Phone, MessageCircle, Globe, Camera,
-  CheckCircle, Loader2, X, ChevronDown
+  Store, MapPin, Globe, Camera, Image as ImageIcon,
+  CheckCircle, Loader2, X, ChevronDown, Lock, Trash2,
 } from 'lucide-react';
 
 const DEPARTAMENTOS = [
@@ -28,9 +30,38 @@ const ESPECIALIDADES = [
   'Abonos orgánicos', 'Control biológico',
 ];
 
-export default function RegistroTienda({ onCerrado, onRegistrada }) {
+function tiendaAFormulario(tienda) {
+  const wa = String(tienda.whatsapp || tienda.whatsappFormateado || '').replace(/\D/g, '');
+  return {
+    nombre: tienda.nombre || '',
+    direccion: tienda.direccion || '',
+    distrito: tienda.distrito || '',
+    departamento: tienda.departamento || '',
+    lat: tienda.lat != null ? String(tienda.lat) : '',
+    lon: tienda.lon != null ? String(tienda.lon) : '',
+    whatsapp: wa.startsWith('51') ? wa.slice(2) : wa,
+    facebook: tienda.facebook || '',
+    instagram: tienda.instagram || '',
+    web: tienda.web || '',
+    especialidades: tienda.especialidades || [],
+    horario: tienda.horario || '',
+    descripcion: tienda.descripcion || '',
+    fotos: tienda.fotos || [],
+  };
+}
+
+function puedeEditarTienda(tienda, user) {
+  if (!user?.uid || !tienda) return false;
+  if (tienda.propietarioId === user.uid) return true;
+  if (user.email && tienda.propietarioEmail === user.email) return true;
+  return false;
+}
+
+export default function RegistroTienda({ onCerrado, onRegistrada, tienda = null }) {
   const { user } = useAuth();
-  const [form, setForm] = useState({
+  const navigate = useNavigate();
+  const esEdicion = !!tienda?.id;
+  const [form, setForm] = useState(() => (tienda ? tiendaAFormulario(tienda) : {
     nombre: '',
     direccion: '',
     distrito: '',
@@ -44,11 +75,17 @@ export default function RegistroTienda({ onCerrado, onRegistrada }) {
     especialidades: [],
     horario: '',
     descripcion: '',
-  });
+    fotos: [],
+  }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [exito, setExito] = useState(false);
   const [buscandoCoord, setBuscandoCoord] = useState(false);
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
+
+  useEffect(() => {
+    if (tienda) setForm(tiendaAFormulario(tienda));
+  }, [tienda]);
 
   const handleChange = (key, value) => {
     setForm(f => ({ ...f, [key]: value }));
@@ -87,52 +124,135 @@ export default function RegistroTienda({ onCerrado, onRegistrada }) {
     setBuscandoCoord(false);
   };
 
-  const registrar = async () => {
+  const subirFoto = async (e) => {
+    const archivo = e.target.files?.[0];
+    if (!archivo) return;
+    if (!archivo.type.startsWith('image/')) {
+      setError('Solo se permiten imágenes');
+      return;
+    }
+    if (archivo.size > 5 * 1024 * 1024) {
+      setError('La imagen no puede superar 5MB');
+      return;
+    }
+    if (form.fotos.length >= 5) {
+      setError('Maximo 5 fotos por tienda');
+      return;
+    }
+
+    setSubiendoFoto(true);
+    setError('');
+    try {
+      const userId = user.uid;
+      const timestamp = Date.now();
+      const extension = archivo.name.split('.').pop();
+      const storageRef = ref(storage, `tiendas/${userId}_${timestamp}.${extension}`);
+      await uploadBytes(storageRef, archivo);
+      const url = await getDownloadURL(storageRef);
+      setForm(f => ({ ...f, fotos: [...f.fotos, url] }));
+    } catch (err) {
+      setError('Error al subir imagen: ' + err.message);
+    }
+    setSubiendoFoto(false);
+    e.target.value = '';
+  };
+
+  const eliminarFoto = (index) => {
+    setForm(f => ({ ...f, fotos: f.fotos.filter((_, i) => i !== index) }));
+  };
+
+  const guardar = async () => {
+    if (!user?.uid) {
+      setError('Debes iniciar sesión para registrar tu tienda');
+      return;
+    }
+    if (esEdicion && !puedeEditarTienda(tienda, user)) {
+      setError('No tienes permiso para editar esta tienda');
+      return;
+    }
     if (!form.nombre.trim()) { setError('El nombre de la tienda es obligatorio'); return; }
     if (!form.whatsapp.trim()) { setError('El número de WhatsApp es obligatorio'); return; }
 
     setLoading(true);
     setError('');
     try {
-      const tiendaData = {
+      const whatsappLimpio = form.whatsapp.replace(/\D/g, '');
+      const payload = {
         nombre: form.nombre.trim(),
         direccion: form.direccion.trim() || null,
         distrito: form.distrito.trim() || null,
         departamento: form.departamento || null,
         lat: form.lat ? parseFloat(form.lat) : null,
         lon: form.lon ? parseFloat(form.lon) : null,
-        whatsapp: form.whatsapp.replace(/\D/g, ''),
-        whatsappFormateado: `51${form.whatsapp.replace(/\D/g, '')}`,
+        whatsapp: whatsappLimpio,
+        whatsappFormateado: `51${whatsappLimpio}`,
         facebook: form.facebook.trim() || null,
         instagram: form.instagram.trim() || null,
         web: form.web.trim() || null,
         especialidades: form.especialidades,
         horario: form.horario.trim() || null,
         descripcion: form.descripcion.trim() || null,
-        // Datos del propietario
-        propietarioId: user?.id || null,
-        propietarioNombre: user?.nombre || null,
-        propietarioEmail: user?.email || null,
-        // Metadatos
-        fuente: 'comunidad',
-        verificada: false,
-        activa: true,
-        ventas: 0,
-        ultimaConsulta: null,
-        createdAt: new Date().toISOString(),
+        fotos: form.fotos,
+        updatedAt: new Date().toISOString(),
       };
 
-      const docRef = await addDoc(collection(db, 'tiendas_comunidad'), tiendaData);
+      if (esEdicion) {
+        await updateDoc(doc(db, 'tiendas_comunidad', tienda.id), payload);
+        setExito(true);
+        if (onRegistrada) {
+          onRegistrada({ id: tienda.id, ...tienda, ...payload });
+        }
+      } else {
+        const tiendaData = {
+          ...payload,
+          propietarioId: user.uid,
+          propietarioNombre: user?.nombre || null,
+          propietarioEmail: user?.email || null,
+          fuente: 'comunidad',
+          verificada: false,
+          activa: true,
+          ventas: 0,
+          ultimaConsulta: null,
+          createdAt: new Date().toISOString(),
+        };
 
-      setExito(true);
-      if (onRegistrada) {
-        onRegistrada({ id: docRef.id, ...tiendaData });
+        const docRef = await addDoc(collection(db, 'tiendas_comunidad'), tiendaData);
+        setExito(true);
+        if (onRegistrada) {
+          onRegistrada({ id: docRef.id, ...tiendaData });
+        }
       }
     } catch (e) {
-      setError('Error al registrar: ' + e.message);
+      setError((esEdicion ? 'Error al actualizar: ' : 'Error al registrar: ') + e.message);
     }
     setLoading(false);
   };
+
+  if (!user?.uid) {
+    return (
+      <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-3xl w-full max-w-sm p-8 text-center space-y-4">
+          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
+            <Lock size={32} className="text-amber-600" />
+          </div>
+          <h3 className="text-xl font-bold text-gray-800">Inicia sesión primero</h3>
+          <p className="text-gray-500 text-sm">
+            Para registrar tu tienda agrícola necesitas una cuenta Agrilux.
+          </p>
+          <button
+            type="button"
+            onClick={() => { onCerrado(); navigate('/registro?redirect=/mercado&tab=mitienda'); }}
+            className="w-full bg-green-600 text-white font-bold py-3 rounded-xl"
+          >
+            Iniciar sesión / Crear cuenta
+          </button>
+          <button type="button" onClick={onCerrado} className="text-sm text-gray-400">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (exito) {
     return (
@@ -141,14 +261,18 @@ export default function RegistroTienda({ onCerrado, onRegistrada }) {
           <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto">
             <CheckCircle size={40} className="text-green-600" />
           </div>
-          <h3 className="text-xl font-bold text-gray-800">¡Tienda registrada!</h3>
+          <h3 className="text-xl font-bold text-gray-800">
+            {esEdicion ? '¡Tienda actualizada!' : '¡Tienda registrada!'}
+          </h3>
           <p className="text-gray-500 text-sm">
-            Tu tienda <strong>{form.nombre}</strong> fue registrada exitosamente.
-            Nuestro equipo la verificará pronto.
+            Tu tienda <strong>{form.nombre}</strong> fue {esEdicion ? 'actualizada' : 'registrada'} exitosamente.
+            {!esEdicion && ' Nuestro equipo la verificará pronto.'}
           </p>
+          {!esEdicion && (
           <p className="text-xs text-gray-400">
             Recibirás un mensaje de WhatsApp de bienvenida.
           </p>
+          )}
           <button
             onClick={onCerrado}
             className="w-full bg-green-600 text-white font-bold py-3 rounded-xl"
@@ -170,8 +294,12 @@ export default function RegistroTienda({ onCerrado, onRegistrada }) {
               <Store size={20} className="text-green-600" />
             </div>
             <div>
-              <h3 className="font-bold text-gray-800">Registrar mi tienda</h3>
-              <p className="text-xs text-gray-400">Aparecerá en el buscador de insumos</p>
+              <h3 className="font-bold text-gray-800">
+                {esEdicion ? 'Editar mi tienda' : 'Registrar mi tienda'}
+              </h3>
+              <p className="text-xs text-gray-400">
+                {esEdicion ? 'Actualiza los datos de tu tienda' : 'Aparecerá en el buscador de insumos'}
+              </p>
             </div>
           </div>
           <button onClick={onCerrado} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
@@ -389,27 +517,80 @@ export default function RegistroTienda({ onCerrado, onRegistrada }) {
             />
           </div>
 
+          {/* Fotos de la tienda */}
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-2">
+              Fotos de la tienda (max. 5)
+            </label>
+            {form.fotos.length > 0 && (
+              <div className="flex gap-2 mb-3 overflow-x-auto pb-2">
+                {form.fotos.map((foto, idx) => (
+                  <div key={idx} className="relative flex-shrink-0">
+                    <img
+                      src={foto}
+                      alt={`Foto ${idx + 1}`}
+                      className="w-20 h-20 object-cover rounded-xl border-2 border-gray-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => eliminarFoto(idx)}
+                      className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {form.fotos.length < 5 && (
+              <label className={`flex items-center justify-center gap-2 w-full border-2 border-dashed rounded-xl py-3 text-sm cursor-pointer transition-all ${
+                subiendoFoto ? 'border-green-300 bg-green-50 text-green-600' : 'border-gray-200 text-gray-500 hover:border-green-400 hover:bg-green-50'
+              }`}>
+                {subiendoFoto ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Subiendo...
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon size={16} />
+                    Seleccionar foto
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={subirFoto}
+                  disabled={subiendoFoto}
+                  className="hidden"
+                />
+              </label>
+            )}
+          </div>
+
           {/* Botón registrar */}
           <button
-            onClick={registrar}
+            onClick={guardar}
             disabled={loading || !form.nombre.trim() || !form.whatsapp.trim()}
             className="w-full bg-green-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-40 flex items-center justify-center gap-2"
           >
             {loading ? (
               <>
                 <Loader2 size={16} className="animate-spin" />
-                Registrando...
+                {esEdicion ? 'Guardando...' : 'Registrando...'}
               </>
             ) : (
               <>
                 <Store size={16} />
-                Registrar mi tienda
+                {esEdicion ? 'Guardar cambios' : 'Registrar mi tienda'}
               </>
             )}
           </button>
 
           <p className="text-xs text-gray-400 text-center">
-            Al registrar, aceptas que tu información sea pública en el buscador de insumos.
+            {esEdicion
+              ? 'Los cambios se reflejan de inmediato en Ofertas y Mi tienda.'
+              : 'Al registrar, aceptas que tu información sea pública en el buscador de insumos.'}
           </p>
         </div>
       </div>

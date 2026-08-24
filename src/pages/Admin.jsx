@@ -24,6 +24,7 @@ import {
   Megaphone, UserCheck, UserX, Bell
 } from 'lucide-react';
 import Marketing from '../components/Marketing';
+import { eliminarTodasTiendasComunidad } from '../lib/tiendasComunidad';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 const GOOGLE_CLIENT_ID   = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -730,6 +731,8 @@ export default function Admin() {
   const [modalAgregar, setModalAgregar] = useState(false);
   const [modalTienda, setModalTienda] = useState(null); // null = cerrado, 'nueva' = agregar, objeto = editar
   const [tiendas, setTiendas] = useState([]);
+  const [tiendasComunidad, setTiendasComunidad] = useState([]);
+  const [purgingMercado, setPurgingMercado] = useState(false);
 
   // Exportar
   const [exportState, setExportState]     = useState('idle');
@@ -776,6 +779,7 @@ export default function Admin() {
     cargar('usuarios', setUsuarios);
     cargar('diagnosticos', setDiagnosticos);
     cargar('tiendas', setTiendas);
+    cargar('tiendas_comunidad', setTiendasComunidad);
     return () => unsubs.forEach(u => u());
   }, [autorizado]);
 
@@ -900,6 +904,7 @@ export default function Admin() {
               { id: 'solicitudes', label: 'Solicitudes', icon: Bell },
               { id: 'usuarios', label: 'Usuarios', icon: Users },
               { id: 'tiendas', label: 'Tiendas', icon: Truck },
+              { id: 'mercado', label: 'Mercado', icon: Truck },
               { id: 'marketing', label: 'Marketing', icon: Megaphone },
               { id: 'diagnosticos', label: 'Diagnósticos', icon: Camera },
               { id: 'exportar', label: 'Exportar', icon: Download },
@@ -1123,6 +1128,73 @@ export default function Admin() {
                 }}
               />
             )}
+          </>
+        )}
+
+        {/* ── MERCADO (tiendas_comunidad) ─────────────────────────────────── */}
+        {tab === 'mercado' && (
+          <>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3">
+              <p className="text-xs text-amber-800">
+                Tiendas visibles en <strong>Mercado → Ofertas</strong>. Elimina aquí las tiendas de prueba.
+              </p>
+            </div>
+
+            <div className="flex gap-2 mb-3">
+              <p className="flex-1 text-xs text-gray-400 self-center">
+                {tiendasComunidad.length} tienda(s) en Firestore
+              </p>
+              <button
+                type="button"
+                disabled={purgingMercado || tiendasComunidad.length === 0}
+                onClick={async () => {
+                  if (!confirm(`¿Eliminar las ${tiendasComunidad.length} tiendas del mercado y sus precios?`)) return;
+                  setPurgingMercado(true);
+                  try {
+                    const r = await eliminarTodasTiendasComunidad();
+                    setTiendasComunidad([]);
+                    alert(`Eliminadas: ${r.tiendas} tiendas, ${r.precios} precios.`);
+                  } catch (e) {
+                    alert('Error: ' + e.message);
+                  }
+                  setPurgingMercado(false);
+                }}
+                className="bg-red-600 text-white rounded-xl px-4 py-2 text-xs font-bold disabled:opacity-40 flex items-center gap-1"
+              >
+                {purgingMercado ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
+                Eliminar todas
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {tiendasComunidad.length === 0 && (
+                <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
+                  <p className="text-gray-500 text-sm">No hay tiendas en el mercado.</p>
+                </div>
+              )}
+              {tiendasComunidad.map((t) => (
+                <div key={t.id} className="bg-white rounded-2xl shadow-sm p-4 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-gray-800 truncate">{t.nombre}</p>
+                    <p className="text-xs text-gray-400">
+                      {[t.distrito, t.departamento].filter(Boolean).join(', ') || 'Sin ubicación'}
+                      {t.propietarioId ? ' · con dueño' : ' · sin sesión'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm(`¿Eliminar "${t.nombre}"?`)) return;
+                      await deleteDoc(doc(db, 'tiendas_comunidad', t.id));
+                      setTiendasComunidad((prev) => prev.filter((x) => x.id !== t.id));
+                    }}
+                    className="p-2 bg-red-50 rounded-lg text-red-500"
+                  >
+                    <XCircle size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
           </>
         )}
 
