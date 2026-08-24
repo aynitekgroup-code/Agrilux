@@ -21,7 +21,7 @@ import {
   Search, X, MapPin, Phone, Calendar, TrendingUp, CloudUpload,
   CheckCircle, AlertCircle, Loader2, FolderOpen, ExternalLink,
   Plus, Eye, EyeOff, Lock, UserPlus, LogOut, Truck, XCircle,
-  Megaphone, UserCheck, UserX, Bell
+  Megaphone, UserCheck, UserX, Bell, Pencil, Trash2, MessageCircle
 } from 'lucide-react';
 import Marketing from '../components/Marketing';
 import { eliminarTodasTiendasComunidad } from '../lib/tiendasComunidad';
@@ -340,141 +340,454 @@ function ModalAgregarUsuario({ onCerrar, onAgregado }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SOLICITUDES PENDIENTES
+// MODAL EDITAR USUARIO
 // ═══════════════════════════════════════════════════════════════════════════════
-function SolicitudesPendientes({ usuarios, diagnosticos, onActualizar }) {
-  const [procesando, setProcesando] = useState(null);
+function ModalEditarUsuario({ usuario, onCerrar, onGuardado }) {
+  const [form, setForm] = useState({
+    nombre: usuario?.nombre || '',
+    email: usuario?.email || '',
+    celular: usuario?.celular || '',
+    ubicacion: usuario?.ubicacion || '',
+    rol: usuario?.rol || 'agricultor',
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const pendientes = usuarios.filter(u => u.status === 'pendiente');
-  const aprobados = usuarios.filter(u => u.status === 'aprobado' || (!u.status && u.creadoPor !== 'self'));
-  const rechazados = usuarios.filter(u => u.status === 'rechazado');
-
-  const aprobar = async (uid) => {
-    setProcesando(uid);
+  const guardar = async () => {
+    if (!form.nombre.trim()) { setError('El nombre es obligatorio'); return; }
+    setLoading(true);
+    setError('');
     try {
-      await updateDoc(doc(db, 'usuarios', uid), { status: 'aprobado' });
-      onActualizar(uid, 'aprobado');
+      const datos = {
+        nombre: form.nombre.trim(),
+        email: form.email.trim() || null,
+        celular: form.celular.trim() || null,
+        ubicacion: form.ubicacion.trim() || null,
+        rol: form.rol,
+        updatedAt: new Date().toISOString(),
+      };
+      await updateDoc(doc(db, 'usuarios', usuario.id), datos);
+      onGuardado({ id: usuario.id, ...usuario, ...datos });
     } catch (e) {
-      console.error('Error al aprobar:', e);
+      setError('Error al guardar: ' + e.message);
     }
-    setProcesando(null);
+    setLoading(false);
   };
 
-  const rechazar = async (uid) => {
-    setProcesando(uid);
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end justify-center">
+      <div className="bg-white rounded-t-3xl w-full max-w-[430px] max-h-[85vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white px-6 pt-6 pb-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+              <Pencil size={18} className="text-blue-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-800">Editar usuario</h3>
+              <p className="text-xs text-gray-400">{usuario?.email}</p>
+            </div>
+          </div>
+          <button onClick={onCerrar} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+            <X size={15} className="text-gray-500" />
+          </button>
+        </div>
+
+        <div className="px-6 py-4 space-y-4">
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+              <p className="text-red-600 text-sm">{error}</p>
+            </div>
+          )}
+
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">Nombre *</label>
+            <input
+              value={form.nombre}
+              onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
+              className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">Email</label>
+            <input
+              value={form.email}
+              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">Celular</label>
+            <input
+              value={form.celular}
+              onChange={e => setForm(f => ({ ...f, celular: e.target.value }))}
+              placeholder="Ej: 987654321"
+              className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">Ubicación</label>
+            <input
+              value={form.ubicacion}
+              onChange={e => setForm(f => ({ ...f, ubicacion: e.target.value }))}
+              placeholder="Ej: Cajamarca, Cutervo"
+              className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">Rol</label>
+            <div className="flex gap-2">
+              {[
+                { value: 'agricultor', label: '🌾 Agricultor' },
+                { value: 'agronomo', label: '👨‍🔬 Agrónomo' },
+              ].map(r => (
+                <button
+                  key={r.value}
+                  onClick={() => setForm(f => ({ ...f, rol: r.value }))}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                    form.rol === r.value
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={guardar}
+            disabled={loading || !form.nombre.trim()}
+            className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-40 flex items-center justify-center gap-2"
+          >
+            {loading ? <><Loader2 size={16} className="animate-spin" /> Guardando...</> : 'Guardar cambios'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ALIADOS - Contactos potenciales
+// ═══════════════════════════════════════════════════════════════════════════════
+function ModalAliado({ aliado, onCerrar, onGuardado }) {
+  const [form, setForm] = useState({
+    nombre: aliado?.nombre || '',
+    whatsapp: aliado?.whatsapp || '',
+    ubicacion: aliado?.ubicacion || '',
+    empresa: aliado?.empresa || '',
+    notas: aliado?.notas || '',
+    tipo: aliado?.tipo || 'agricultor',
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const esEdicion = !!aliado?.id;
+
+  const guardar = async () => {
+    if (!form.nombre.trim()) { setError('El nombre es obligatorio'); return; }
+    if (!form.whatsapp.trim()) { setError('El WhatsApp es obligatorio'); return; }
+    setLoading(true);
+    setError('');
     try {
-      await updateDoc(doc(db, 'usuarios', uid), { status: 'rechazado' });
-      onActualizar(uid, 'rechazado');
+      const datos = {
+        nombre: form.nombre.trim(),
+        whatsapp: form.whatsapp.trim().replace(/\D/g, ''),
+        ubicacion: form.ubicacion.trim() || null,
+        empresa: form.empresa.trim() || null,
+        notas: form.notas.trim() || null,
+        tipo: form.tipo,
+        updatedAt: new Date().toISOString(),
+      };
+      if (esEdicion) {
+        await updateDoc(doc(db, 'aliados', aliado.id), datos);
+        onGuardado({ id: aliado.id, ...aliado, ...datos });
+      } else {
+        const docRef = await addDoc(collection(db, 'aliados'), {
+          ...datos,
+          createdAt: new Date().toISOString(),
+        });
+        onGuardado({ id: docRef.id, ...datos, createdAt: new Date().toISOString() });
+      }
     } catch (e) {
-      console.error('Error al rechazar:', e);
+      setError('Error al guardar: ' + e.message);
     }
-    setProcesando(null);
+    setLoading(false);
   };
 
-  const restaurar = async (uid) => {
-    setProcesando(uid);
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end justify-center">
+      <div className="bg-white rounded-t-3xl w-full max-w-[430px] max-h-[85vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white px-6 pt-6 pb-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+              <UserPlus size={18} className="text-green-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-800">{esEdicion ? 'Editar aliado' : 'Nuevo aliado'}</h3>
+              <p className="text-xs text-gray-400">Contacto potencial para seguimiento</p>
+            </div>
+          </div>
+          <button onClick={onCerrar} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+            <X size={15} className="text-gray-500" />
+          </button>
+        </div>
+
+        <div className="px-6 py-4 space-y-4">
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+              <p className="text-red-600 text-sm">{error}</p>
+            </div>
+          )}
+
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">Nombre *</label>
+            <input
+              value={form.nombre}
+              onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
+              placeholder="Ej: Juan Pérez"
+              className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-green-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">WhatsApp *</label>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400 text-sm">+51</span>
+              <input
+                value={form.whatsapp}
+                onChange={e => setForm(f => ({ ...f, whatsapp: e.target.value }))}
+                placeholder="987654321"
+                type="tel"
+                className="flex-1 border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-green-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">Empresa / Tienda</label>
+            <input
+              value={form.empresa}
+              onChange={e => setForm(f => ({ ...f, empresa: e.target.value }))}
+              placeholder="Ej: AgroCutervo"
+              className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-green-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">Ubicación</label>
+            <input
+              value={form.ubicacion}
+              onChange={e => setForm(f => ({ ...f, ubicacion: e.target.value }))}
+              placeholder="Ej: Cutervo, Cajamarca"
+              className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-green-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">Tipo</label>
+            <div className="flex gap-2">
+              {[
+                { value: 'agricultor', label: '🌾 Agricultor' },
+                { value: 'aliado', label: '🤝 Aliado comercial' },
+                { value: 'distribuidor', label: '🚛 Distribuidor' },
+                { value: 'otro', label: '📋 Otro' },
+              ].map(t => (
+                <button
+                  key={t.value}
+                  onClick={() => setForm(f => ({ ...f, tipo: t.value }))}
+                  className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    form.tipo === t.value
+                      ? 'bg-green-600 text-white'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">Notas</label>
+            <textarea
+              value={form.notas}
+              onChange={e => setForm(f => ({ ...f, notas: e.target.value }))}
+              placeholder="Ej: Interesado en fertilizantes, cultivo de papa..."
+              rows={2}
+              className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-green-500 resize-none"
+            />
+          </div>
+
+          <button
+            onClick={guardar}
+            disabled={loading || !form.nombre.trim() || !form.whatsapp.trim()}
+            className="w-full bg-green-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-40 flex items-center justify-center gap-2"
+          >
+            {loading ? <><Loader2 size={16} className="animate-spin" /> Guardando...</> : esEdicion ? 'Guardar cambios' : 'Agregar aliado'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AliadosPanel({ onActualizar }) {
+  const [aliados, setAliados] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busqueda, setBusqueda] = useState('');
+  const [modalAliado, setModalAliado] = useState(null);
+  const [eliminando, setEliminando] = useState(null);
+
+  useEffect(() => {
+    const q = query(collection(db, 'aliados'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q,
+      snap => { setAliados(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false); },
+      async () => {
+        const snap = await getDocs(collection(db, 'aliados')).catch(() => ({ docs: [] }));
+        setAliados(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  const eliminar = async (id) => {
+    if (!confirm('¿Eliminar este aliado?')) return;
+    setEliminando(id);
     try {
-      await updateDoc(doc(db, 'usuarios', uid), { status: 'aprobado' });
-      onActualizar(uid, 'aprobado');
+      await deleteDoc(doc(db, 'aliados', id));
+      setAliados(prev => prev.filter(a => a.id !== id));
     } catch (e) {
-      console.error('Error al restaurar:', e);
+      console.error('Error al eliminar:', e);
     }
-    setProcesando(null);
+    setEliminando(null);
+  };
+
+  const filtrados = aliados.filter(a => {
+    if (!busqueda) return true;
+    const b = busqueda.toLowerCase();
+    return (a.nombre || '').toLowerCase().includes(b) ||
+           (a.empresa || '').toLowerCase().includes(b) ||
+           (a.ubicacion || '').toLowerCase().includes(b) ||
+           (a.whatsapp || '').includes(b);
+  });
+
+  const tipoLabel = (tipo) => {
+    const map = { agricultor: '🌾 Agricultor', aliado: '🤝 Aliado', distribuidor: '🚛 Distribuidor', otro: '📋 Otro' };
+    return map[tipo] || '📋 Sin tipo';
   };
 
   return (
     <>
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          { label: 'Pendientes', val: pendientes.length, emoji: '⏳', color: 'bg-amber-50 text-amber-700' },
-          { label: 'Aprobados', val: aprobados.length, emoji: '✅', color: 'bg-green-50 text-green-700' },
-          { label: 'Rechazados', val: rechazados.length, emoji: '❌', color: 'bg-red-50 text-red-700' },
-        ].map(s => (
-          <div key={s.label} className={`${s.color} rounded-xl p-3 text-center`}>
-            <p className="text-lg">{s.emoji}</p>
-            <p className="text-lg font-bold">{s.val}</p>
-            <p className="text-xs opacity-70">{s.label}</p>
-          </div>
-        ))}
+      {modalAliado !== null && (
+        <ModalAliado
+          aliado={modalAliado === 'nuevo' ? null : modalAliado}
+          onCerrar={() => setModalAliado(null)}
+          onGuardado={(a) => {
+            if (modalAliado === 'nuevo') {
+              setAliados(prev => [a, ...prev]);
+            } else {
+              setAliados(prev => prev.map(al => al.id === a.id ? { ...al, ...a } : al));
+            }
+            setModalAliado(null);
+          }}
+        />
+      )}
+
+      <div className="flex gap-2">
+        <div className="flex-1 flex items-center bg-white rounded-xl px-3 gap-2 shadow-sm border border-gray-100">
+          <Search size={14} className="text-gray-400" />
+          <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
+            placeholder="Buscar aliado..."
+            className="flex-1 py-2.5 text-sm outline-none" />
+          {busqueda && <button onClick={() => setBusqueda('')}><X size={14} className="text-gray-400" /></button>}
+        </div>
+        <button
+          onClick={() => setModalAliado('nuevo')}
+          className="bg-green-600 text-white rounded-xl px-4 flex items-center gap-1.5 text-sm font-bold shadow-sm">
+          <Plus size={16} /> Agregar
+        </button>
       </div>
 
-      {/* Pendientes */}
-      {pendientes.length > 0 && (
-        <div>
-          <p className="text-xs font-bold text-amber-600 uppercase tracking-wide mb-2">⏳ Esperando aprobación ({pendientes.length})</p>
-          <div className="space-y-2">
-            {pendientes.map(u => (
-              <div key={u.id} className="bg-white rounded-2xl shadow-sm p-4 border border-amber-200">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-lg font-bold text-amber-700">
-                    {u.nombre?.[0]?.toUpperCase() || '?'}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-gray-800 truncate">{u.nombre}</p>
-                    <p className="text-xs text-gray-400">{u.email}</p>
-                    {u.celular && <p className="text-xs text-gray-400">📱 {u.celular}</p>}
-                    <p className="text-xs text-gray-300 mt-1">📅 {formatFecha(u.createdAt)}</p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => aprobar(u.id)}
-                    disabled={procesando === u.id}
-                    className="flex-1 bg-green-600 text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
-                  >
-                    {procesando === u.id ? <Loader2 size={14} className="animate-spin" /> : <UserCheck size={14} />}
-                    Aprobar
-                  </button>
-                  <button
-                    onClick={() => rechazar(u.id)}
-                    disabled={procesando === u.id}
-                    className="flex-1 bg-red-100 text-red-600 font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
-                  >
-                    {procesando === u.id ? <Loader2 size={14} className="animate-spin" /> : <UserX size={14} />}
-                    Rechazar
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <p className="text-xs text-gray-400">{filtrados.length} aliado{filtrados.length !== 1 ? 's' : ''} registrado{filtrados.length !== 1 ? 's' : ''}</p>
 
-      {pendientes.length === 0 && (
+      {loading ? (
+        <div className="flex justify-center py-8"><Loader2 size={24} className="animate-spin text-gray-400" /></div>
+      ) : filtrados.length === 0 ? (
         <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
-          <p className="text-4xl mb-3">✅</p>
-          <p className="text-gray-500 text-sm">No hay solicitudes pendientes.</p>
-          <p className="text-gray-400 text-xs mt-1">Cuando un usuario se registre, aparecerá aquí.</p>
+          <p className="text-4xl mb-3">🤝</p>
+          <p className="text-gray-500 text-sm">
+            {busqueda ? 'No se encontraron aliados.' : 'No hay aliados registrados.'}
+          </p>
+          <p className="text-gray-400 text-xs mt-1">{busqueda ? 'Intenta con otro término' : 'Agrega tu primer aliado para contactarlo por WhatsApp'}</p>
+          {!busqueda && (
+            <button onClick={() => setModalAliado('nuevo')}
+              className="mt-4 bg-green-600 text-white font-bold px-6 py-2.5 rounded-xl text-sm">
+              + Agregar el primero
+            </button>
+          )}
         </div>
-      )}
-
-      {/* Rechazados (opcional) */}
-      {rechazados.length > 0 && (
-        <div>
-          <p className="text-xs font-bold text-red-400 uppercase tracking-wide mb-2">❌ Rechazados ({rechazados.length})</p>
-          <div className="space-y-2">
-            {rechazados.map(u => (
-              <div key={u.id} className="bg-white rounded-2xl shadow-sm p-4 border border-red-100 opacity-60">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-red-50 rounded-full flex items-center justify-center text-sm font-bold text-red-400">
-                    {u.nombre?.[0]?.toUpperCase() || '?'}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-gray-600 truncate">{u.nombre}</p>
-                    <p className="text-xs text-gray-400">{u.email}</p>
-                  </div>
-                  <button
-                    onClick={() => restaurar(u.id)}
-                    disabled={procesando === u.id}
-                    className="text-xs bg-green-100 text-green-600 px-3 py-1.5 rounded-lg font-semibold"
-                  >
-                    Restaurar
-                  </button>
+      ) : (
+        <div className="space-y-2">
+          {filtrados.map(a => (
+            <div key={a.id} className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
+              <div className="flex items-start gap-3">
+                <div className="w-11 h-11 bg-green-100 rounded-full flex items-center justify-center text-base font-bold text-green-700 flex-shrink-0">
+                  {a.nombre?.[0]?.toUpperCase() || '?'}
                 </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-gray-800 truncate">{a.nombre}</p>
+                  {a.empresa && <p className="text-xs text-gray-500 truncate">{a.empresa}</p>}
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <span className="text-[10px] bg-green-50 text-green-600 px-2 py-0.5 rounded-full font-medium">
+                      {tipoLabel(a.tipo)}
+                    </span>
+                    {a.ubicacion && (
+                      <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
+                        <MapPin size={9} /> {a.ubicacion}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-300">{formatFecha(a.createdAt)}</p>
               </div>
-            ))}
-          </div>
+
+              {a.notas && (
+                <p className="text-xs text-gray-500 mt-2 bg-gray-50 rounded-lg p-2">{a.notas}</p>
+              )}
+
+              <div className="flex gap-2 mt-3">
+                {a.whatsapp && (
+                  <a
+                    href={`https://wa.me/51${a.whatsapp}?text=${encodeURIComponent('Hola ' + a.nombre + ', te escribo desde Agrilux.')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex-1 flex items-center justify-center gap-1.5 bg-green-500 text-white rounded-xl py-2.5 text-sm font-semibold"
+                  >
+                    <MessageCircle size={14} /> WhatsApp
+                  </a>
+                )}
+                <button
+                  onClick={() => setModalAliado(a)}
+                  className="bg-blue-100 text-blue-600 rounded-xl px-3 py-2.5 text-sm font-semibold"
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  onClick={() => eliminar(a.id)}
+                  disabled={eliminando === a.id}
+                  className="bg-red-100 text-red-500 rounded-xl px-3 py-2.5 text-sm font-semibold disabled:opacity-50"
+                >
+                  {eliminando === a.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </>
@@ -729,6 +1042,7 @@ export default function Admin() {
   const [busqueda, setBusqueda]     = useState('');
   const [expandido, setExpandido]   = useState(null);
   const [modalAgregar, setModalAgregar] = useState(false);
+  const [modalEditarUsuario, setModalEditarUsuario] = useState(null);
   const [modalTienda, setModalTienda] = useState(null); // null = cerrado, 'nueva' = agregar, objeto = editar
   const [tiendas, setTiendas] = useState([]);
   const [tiendasComunidad, setTiendasComunidad] = useState([]);
@@ -850,7 +1164,6 @@ export default function Admin() {
   );
 
   const enProceso = ['preparando', 'zipeando', 'subiendo_drive'].includes(exportState);
-  const pendientesCount = usuarios.filter(u => u.status === 'pendiente').length;
 
   if (!autorizado) return <LoginAdmin onAcceso={handleAcceso} />;
 
@@ -867,6 +1180,17 @@ export default function Admin() {
         <ModalAgregarUsuario
           onCerrar={() => setModalAgregar(false)}
           onAgregado={u => setUsuarios(prev => [u, ...prev])}
+        />
+      )}
+
+      {modalEditarUsuario && (
+        <ModalEditarUsuario
+          usuario={modalEditarUsuario}
+          onCerrar={() => setModalEditarUsuario(null)}
+          onGuardado={(u) => {
+            setUsuarios(prev => prev.map(usr => usr.id === u.id ? { ...usr, ...u } : usr));
+            setModalEditarUsuario(null);
+          }}
         />
       )}
 
@@ -901,7 +1225,7 @@ export default function Admin() {
         <div className="relative">
           <div id="admin-tabs" className="flex gap-1 bg-white/10 rounded-xl p-1 overflow-x-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.3) transparent' }}>
             {[
-              { id: 'solicitudes', label: 'Solicitudes', icon: Bell },
+              { id: 'aliados', label: 'Aliados', icon: Bell },
               { id: 'usuarios', label: 'Usuarios', icon: Users },
               { id: 'tiendas', label: 'Tiendas', icon: Truck },
               { id: 'mercado', label: 'Mercado', icon: Truck },
@@ -913,11 +1237,6 @@ export default function Admin() {
                 className={`flex-shrink-0 flex flex-col items-center py-2 px-3 rounded-lg text-xs font-semibold gap-0.5 transition-all min-w-[70px] relative ${tab === id ? 'bg-white text-gray-900' : 'text-white/60'}`}>
                 <Icon size={14} />
                 {label}
-                {id === 'solicitudes' && pendientesCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                    {pendientesCount}
-                  </span>
-                )}
               </button>
             ))}
           </div>
@@ -929,15 +1248,9 @@ export default function Admin() {
 
       <div className="px-4 py-4 space-y-3">
 
-        {/* ── SOLICITUDES PENDIENTES ───────────────────────────────────────── */}
-        {tab === 'solicitudes' && (
-          <SolicitudesPendientes
-            usuarios={usuarios}
-            diagnosticos={diagnosticos}
-            onActualizar={(uid, nuevoStatus) => {
-              setUsuarios(prev => prev.map(u => u.id === uid ? { ...u, status: nuevoStatus } : u));
-            }}
-          />
+        {/* ── ALIADOS ───────────────────────────────────────────────────────── */}
+        {tab === 'aliados' && (
+          <AliadosPanel onActualizar={() => {}} />
         )}
 
         {/* ── USUARIOS ──────────────────────────────────────────────────────── */}
@@ -1023,6 +1336,13 @@ export default function Admin() {
                           <p className="text-xs text-blue-700 mt-0.5">Contraseña: <strong>{u.passwordDefault}</strong></p>
                         )}
                       </div>
+
+                      <button
+                        onClick={() => setModalEditarUsuario(u)}
+                        className="flex items-center justify-center gap-2 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold"
+                      >
+                        <Pencil size={14} /> Editar usuario
+                      </button>
 
                       {u.celular && (
                         <a href={`https://wa.me/51${u.celular.replace(/\D/g, '')}`} target="_blank" rel="noreferrer"

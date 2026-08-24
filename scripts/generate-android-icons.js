@@ -7,6 +7,10 @@ const resDir = join(process.cwd(), 'android', 'app', 'src', 'main', 'res');
 // SVG template for the full icon (ic_launcher & ic_launcher_round)
 function getFullIconSvg(size) {
   const cornerRadius = Math.round(size * 0.195);
+  const letterASize = Math.round(size * 0.42);
+  const letterAY = Math.round(size * 0.52);
+  const brandSize = Math.round(size * 0.09);
+  const brandY = Math.round(size * 0.88);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -15,18 +19,21 @@ function getFullIconSvg(size) {
     </linearGradient>
   </defs>
   <rect width="${size}" height="${size}" rx="${cornerRadius}" fill="url(#bg)"/>
-  <text x="${size/2}" y="${size * 0.58}" font-family="Arial,Helvetica,sans-serif" font-size="${size * 0.45}" font-weight="bold" fill="white" text-anchor="middle">A</text>
-  <text x="${size/2}" y="${size * 0.82}" font-family="Arial,Helvetica,sans-serif" font-size="${size * 0.1}" font-weight="bold" fill="#a8e6cf" text-anchor="middle">AGRILUX</text>
+  <text x="${size/2}" y="${letterAY}" font-family="Arial,Helvetica,sans-serif" font-size="${letterASize}" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="central">A</text>
+  <rect x="${size*0.2}" y="${brandY - brandSize}" width="${size*0.6}" height="${brandSize * 1.3}" fill="#0f4a25" rx="${brandSize * 0.2}"/>
+  <text x="${size/2}" y="${brandY}" font-family="Arial,Helvetica,sans-serif" font-size="${brandSize}" font-weight="bold" fill="#a8e6cf" text-anchor="middle" dominant-baseline="central" letter-spacing="${size * 0.02}">AGRILUX</text>
 </svg>`;
 }
 
 // SVG template for adaptive foreground (centered transparent background, 108x108 grid system)
 function getForegroundIconSvg(size) {
+  const letterASize = Math.round(size * 0.42);
+  const letterAY = Math.round(size * 0.45);
+  const brandSize = Math.round(size * 0.08);
+  const brandY = Math.round(size * 0.85);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-  <g transform="translate(${size * 0.15}, ${size * 0.15}) scale(0.7)">
-    <text x="${size/2}" y="${size * 0.55}" font-family="Arial,Helvetica,sans-serif" font-size="${size * 0.45}" font-weight="bold" fill="white" text-anchor="middle">A</text>
-    <text x="${size/2}" y="${size * 0.80}" font-family="Arial,Helvetica,sans-serif" font-size="${size * 0.1}" font-weight="bold" fill="#a8e6cf" text-anchor="middle">AGRILUX</text>
-  </g>
+  <text x="${size/2}" y="${letterAY}" font-family="Arial,Helvetica,sans-serif" font-size="${letterASize}" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="central">A</text>
+  <text x="${size/2}" y="${brandY}" font-family="Arial,Helvetica,sans-serif" font-size="${brandSize}" font-weight="bold" fill="#a8e6cf" text-anchor="middle" dominant-baseline="central" letter-spacing="${size * 0.02}">AGRILUX</text>
 </svg>`;
 }
 
