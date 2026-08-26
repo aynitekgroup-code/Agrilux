@@ -706,12 +706,28 @@ function AliadosPanel({ onActualizar }) {
   const [eliminando, setEliminando] = useState(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'aliados'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'aliados'));
     const unsub = onSnapshot(q,
-      snap => { setAliados(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false); },
+      snap => {
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        data.sort((a, b) => {
+          const fa = a.createdAt || '';
+          const fb = b.createdAt || '';
+          return fa > fb ? -1 : fa < fb ? 1 : 0;
+        });
+        setAliados(data);
+        setLoading(false);
+      },
       async () => {
         const snap = await getDocs(collection(db, 'aliados')).catch(() => ({ docs: [] }));
-        setAliados(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false);
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        data.sort((a, b) => {
+          const fa = a.createdAt || '';
+          const fb = b.createdAt || '';
+          return fa > fb ? -1 : fa < fb ? 1 : 0;
+        });
+        setAliados(data);
+        setLoading(false);
       }
     );
     return () => unsub();
