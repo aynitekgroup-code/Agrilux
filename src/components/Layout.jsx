@@ -23,7 +23,7 @@ export default function Layout({ children }) {
   const [adminClave, setAdminClave] = useState('');
   const [adminError, setAdminError] = useState('');
 
-  const ADMIN_EMAIL = 'jose.llanos.d@uni.pe';
+  const ADMIN_EMAIL = 'aynitek.group@gmail.com';
   const esAdmin = user?.email === ADMIN_EMAIL;
 
   const handleLogout = async () => {

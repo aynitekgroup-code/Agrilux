@@ -111,7 +111,7 @@ async function subirArchivoADrive(token, carpetaId, nombre, blob) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // PANTALLA DE LOGIN ADMIN
 // ═══════════════════════════════════════════════════════════════════════════════
-const ADMIN_EMAIL = 'jose.llanos.d@uni.pe';
+const ADMIN_EMAIL = 'aynitek.group@gmail.com';
 
 function LoginAdmin({ onAcceso }) {
   const [email, setEmail]     = useState('');
@@ -178,7 +178,7 @@ function LoginAdmin({ onAcceso }) {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && verificarEmail()}
-                  placeholder="jose.llanos.d@uni.pe"
+                  placeholder="aynitek.group@gmail.com"
                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-600"
                 />
               </div>
