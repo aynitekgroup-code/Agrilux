@@ -479,6 +479,10 @@ function ModalAliado({ aliado, onCerrar, onGuardado }) {
   const [form, setForm] = useState({
     nombre: aliado?.nombre || '',
     whatsapp: aliado?.whatsapp || '',
+    facebook: aliado?.facebook || '',
+    instagram: aliado?.instagram || '',
+    tiktok: aliado?.tiktok || '',
+    web: aliado?.web || '',
     ubicacion: aliado?.ubicacion || '',
     empresa: aliado?.empresa || '',
     notas: aliado?.notas || '',
@@ -489,15 +493,21 @@ function ModalAliado({ aliado, onCerrar, onGuardado }) {
 
   const esEdicion = !!aliado?.id;
 
+  const tieneContacto = form.whatsapp.trim() || form.facebook.trim() || form.instagram.trim() || form.tiktok.trim() || form.web.trim();
+
   const guardar = async () => {
     if (!form.nombre.trim()) { setError('El nombre es obligatorio'); return; }
-    if (!form.whatsapp.trim()) { setError('El WhatsApp es obligatorio'); return; }
+    if (!tieneContacto) { setError('Agrega al menos un medio de contacto (WhatsApp o red social)'); return; }
     setLoading(true);
     setError('');
     try {
       const datos = {
         nombre: form.nombre.trim(),
-        whatsapp: form.whatsapp.trim().replace(/\D/g, ''),
+        whatsapp: form.whatsapp.trim().replace(/\D/g, '') || null,
+        facebook: form.facebook.trim() || null,
+        instagram: form.instagram.trim() || null,
+        tiktok: form.tiktok.trim() || null,
+        web: form.web.trim() || null,
         ubicacion: form.ubicacion.trim() || null,
         empresa: form.empresa.trim() || null,
         notas: form.notas.trim() || null,
@@ -556,7 +566,7 @@ function ModalAliado({ aliado, onCerrar, onGuardado }) {
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-1">WhatsApp *</label>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">WhatsApp</label>
             <div className="flex items-center gap-2">
               <span className="text-gray-400 text-sm">+51</span>
               <input
@@ -567,6 +577,57 @@ function ModalAliado({ aliado, onCerrar, onGuardado }) {
                 className="flex-1 border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-green-500"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">Redes sociales</label>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs">📘</span>
+                </div>
+                <input
+                  value={form.facebook}
+                  onChange={e => setForm(f => ({ ...f, facebook: e.target.value }))}
+                  placeholder="Facebook (nombre de página o URL)"
+                  className="flex-1 border-2 border-gray-100 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-green-500"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-pink-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs">📷</span>
+                </div>
+                <input
+                  value={form.instagram}
+                  onChange={e => setForm(f => ({ ...f, instagram: e.target.value }))}
+                  placeholder="Instagram (@usuario)"
+                  className="flex-1 border-2 border-gray-100 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-green-500"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-gray-800 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs text-white">♪</span>
+                </div>
+                <input
+                  value={form.tiktok}
+                  onChange={e => setForm(f => ({ ...f, tiktok: e.target.value }))}
+                  placeholder="TikTok (@usuario)"
+                  className="flex-1 border-2 border-gray-100 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-green-500"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs">🌐</span>
+                </div>
+                <input
+                  value={form.web}
+                  onChange={e => setForm(f => ({ ...f, web: e.target.value }))}
+                  placeholder="Sitio web (https://...)"
+                  className="flex-1 border-2 border-gray-100 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-green-500"
+                />
+              </div>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">Agrega al menos un medio de contacto</p>
           </div>
 
           <div>
@@ -626,7 +687,7 @@ function ModalAliado({ aliado, onCerrar, onGuardado }) {
 
           <button
             onClick={guardar}
-            disabled={loading || !form.nombre.trim() || !form.whatsapp.trim()}
+            disabled={loading || !form.nombre.trim() || !tieneContacto}
             className="w-full bg-green-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-40 flex items-center justify-center gap-2"
           >
             {loading ? <><Loader2 size={16} className="animate-spin" /> Guardando...</> : esEdicion ? 'Guardar cambios' : 'Agregar aliado'}
@@ -724,7 +785,7 @@ function AliadosPanel({ onActualizar }) {
           <p className="text-gray-500 text-sm">
             {busqueda ? 'No se encontraron aliados.' : 'No hay aliados registrados.'}
           </p>
-          <p className="text-gray-400 text-xs mt-1">{busqueda ? 'Intenta con otro término' : 'Agrega tu primer aliado para contactarlo por WhatsApp'}</p>
+          <p className="text-gray-400 text-xs mt-1">{busqueda ? 'Intenta con otro término' : 'Agrega tu primer aliado para contactarlo por WhatsApp o redes sociales'}</p>
           {!busqueda && (
             <button onClick={() => setModalAliado('nuevo')}
               className="mt-4 bg-green-600 text-white font-bold px-6 py-2.5 rounded-xl text-sm">
@@ -761,17 +822,60 @@ function AliadosPanel({ onActualizar }) {
                 <p className="text-xs text-gray-500 mt-2 bg-gray-50 rounded-lg p-2">{a.notas}</p>
               )}
 
-              <div className="flex gap-2 mt-3">
+              <div className="flex gap-2 mt-3 flex-wrap">
                 {a.whatsapp && (
                   <a
                     href={`https://wa.me/51${a.whatsapp}?text=${encodeURIComponent('Hola ' + a.nombre + ', te escribo desde Agrilux.')}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex-1 flex items-center justify-center gap-1.5 bg-green-500 text-white rounded-xl py-2.5 text-sm font-semibold"
+                    className="flex items-center justify-center gap-1.5 bg-green-500 text-white rounded-xl px-3 py-2 text-sm font-semibold"
                   >
-                    <MessageCircle size={14} /> WhatsApp
+                    <MessageCircle size={13} /> WhatsApp
                   </a>
                 )}
+                {a.facebook && (
+                  <a
+                    href={a.facebook.startsWith('http') ? a.facebook : `https://facebook.com/${a.facebook.replace('@', '')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-center gap-1.5 bg-blue-600 text-white rounded-xl px-3 py-2 text-sm font-semibold"
+                  >
+                    📘 Facebook
+                  </a>
+                )}
+                {a.instagram && (
+                  <a
+                    href={a.instagram.startsWith('http') ? a.instagram : `https://instagram.com/${a.instagram.replace('@', '')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-center gap-1.5 bg-pink-500 text-white rounded-xl px-3 py-2 text-sm font-semibold"
+                  >
+                    📷 Instagram
+                  </a>
+                )}
+                {a.tiktok && (
+                  <a
+                    href={a.tiktok.startsWith('http') ? a.tiktok : `https://tiktok.com/${a.tiktok.replace('@', '')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-center gap-1.5 bg-gray-800 text-white rounded-xl px-3 py-2 text-sm font-semibold"
+                  >
+                    ♪ TikTok
+                  </a>
+                )}
+                {a.web && (
+                  <a
+                    href={a.web.startsWith('http') ? a.web : `https://${a.web}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-center gap-1.5 bg-gray-200 text-gray-700 rounded-xl px-3 py-2 text-sm font-semibold"
+                  >
+                    🌐 Web
+                  </a>
+                )}
+              </div>
+
+              <div className="flex gap-2 mt-2">
                 <button
                   onClick={() => setModalAliado(a)}
                   className="bg-blue-100 text-blue-600 rounded-xl px-3 py-2.5 text-sm font-semibold"
