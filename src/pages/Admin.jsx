@@ -765,12 +765,7 @@ function AliadosPanel({ onActualizar }) {
         <ModalAliado
           aliado={modalAliado === 'nuevo' ? null : modalAliado}
           onCerrar={() => setModalAliado(null)}
-          onGuardado={(a) => {
-            if (modalAliado === 'nuevo') {
-              setAliados(prev => [a, ...prev]);
-            } else {
-              setAliados(prev => prev.map(al => al.id === a.id ? { ...al, ...a } : al));
-            }
+          onGuardado={() => {
             setModalAliado(null);
           }}
         />
