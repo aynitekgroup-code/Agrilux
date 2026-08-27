@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, Leaf, Calendar, Store, LogOut, Menu, X, MapPin, Shield, User, Sparkles } from 'lucide-react';
+import { Camera, Leaf, Calendar, Store, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 import SelectorUbicacion from './SelectorUbicacion';
 import OnlineStatus from './OnlineStatus';
 import AgentStatus from './AgentStatus';
@@ -22,8 +24,13 @@ export default function Layout({ children }) {
   const [adminModal, setAdminModal] = useState(false);
   const [adminClave, setAdminClave] = useState('');
   const [adminError, setAdminError] = useState('');
+  const [modalClave, setModalClave] = useState(false);
+  const [claveEmail, setClaveEmail] = useState('');
+  const [claveLoading, setClaveLoading] = useState(false);
+  const [claveExito, setClaveExito] = useState(false);
+  const [claveError, setClaveError] = useState('');
 
-  const ADMIN_EMAIL = 'jose.llanos.d@uni.pe';
+  const ADMIN_EMAIL = 'aynitek.group@gmail.com';
   const esAdmin = user?.email === ADMIN_EMAIL;
 
   const handleLogout = async () => {
@@ -57,6 +64,26 @@ export default function Layout({ children }) {
     } catch {
       setAdminError('Error de conexión');
     }
+  };
+
+  const enviarRecuperacion = async () => {
+    if (!claveEmail.trim()) { setClaveError('Ingresa tu correo'); return; }
+    setClaveLoading(true);
+    setClaveError('');
+    setClaveExito(false);
+    try {
+      await sendPasswordResetEmail(auth, claveEmail.trim());
+      setClaveExito(true);
+    } catch (e) {
+      if (e.code === 'auth/user-not-found') {
+        setClaveError('No existe una cuenta con ese correo');
+      } else if (e.code === 'auth/invalid-email') {
+        setClaveError('Correo inválido');
+      } else {
+        setClaveError('Error al enviar. Intenta de nuevo.');
+      }
+    }
+    setClaveLoading(false);
   };
 
   return (
@@ -99,6 +126,12 @@ export default function Layout({ children }) {
               </button>
               {user ? (
                 <>
+                  <button
+                    onClick={() => { setMenuOpen(false); setClaveEmail(user.email || ''); setModalClave(true); setClaveExito(false); setClaveError(''); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-amber-50 hover:text-amber-700 transition-colors text-sm font-medium rounded-lg">
+                    <Key size={18} />
+                    Cambiar contraseña
+                  </button>
                   {esAdmin && (
                     <button
                       onClick={handleActuarAdmin}
@@ -182,6 +215,55 @@ export default function Layout({ children }) {
             <div className="flex gap-3 mt-4">
               <button onClick={() => setAdminModal(false)} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancelar</button>
               <button onClick={handleAdminLogin} className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">Entrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalClave && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setModalClave(false)}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-800 mb-1 flex items-center gap-2">
+              <Key size={20} className="text-amber-600" />
+              Cambiar contraseña
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Te enviaremos un enlace a tu correo para restablecer la contraseña.
+            </p>
+
+            {claveExito ? (
+              <div className="text-center py-4">
+                <CheckCircle size={48} className="text-green-500 mx-auto mb-3" />
+                <p className="text-sm font-semibold text-gray-800">Correo enviado</p>
+                <p className="text-xs text-gray-500 mt-1">Revisa tu bandeja de entrada y sigue las instrucciones.</p>
+              </div>
+            ) : (
+              <>
+                <label className="text-xs font-semibold text-gray-600 block mb-1">Correo electrónico</label>
+                <input
+                  type="email"
+                  value={claveEmail}
+                  onChange={e => { setClaveEmail(e.target.value); setClaveError(''); }}
+                  placeholder="tu@email.com"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                />
+                {claveError && <p className="text-red-500 text-xs mt-1">{claveError}</p>}
+              </>
+            )}
+
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setModalClave(false)} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+                {claveExito ? 'Cerrar' : 'Cancelar'}
+              </button>
+              {!claveExito && (
+                <button
+                  onClick={enviarRecuperacion}
+                  disabled={claveLoading || !claveEmail.trim()}
+                  className="flex-1 py-2.5 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {claveLoading ? <><Loader2 size={14} className="animate-spin" /> Enviando...</> : 'Enviar enlace'}
+                </button>
+              )}
             </div>
           </div>
         </div>

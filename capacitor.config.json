@@ -5,6 +5,10 @@
   "server": {
     "androidScheme": "https"
   },
+  "android": {
+    "iconPath": "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+    "iconBackgroundColor": "#1a6b3c"
+  },
   "plugins": {
     "SplashScreen": {
       "launchShowDuration": 2000,

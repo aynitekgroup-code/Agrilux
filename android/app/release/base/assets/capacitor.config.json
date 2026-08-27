@@ -1,0 +1,27 @@
+{
+	"appId": "com.agrilux.app",
+	"appName": "Agrilux",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https"
+	},
+	"android": {
+		"iconPath": "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+		"iconBackgroundColor": "#1a6b3c"
+	},
+	"plugins": {
+		"SplashScreen": {
+			"launchShowDuration": 2000,
+			"backgroundColor": "#22C55E",
+			"showSpinner": false
+		},
+		"Geolocation": {
+			"highAccuracy": true
+		},
+		"Camera": {
+			"androidPermissions": [
+				"android.permission.CAMERA"
+			]
+		}
+	}
+}

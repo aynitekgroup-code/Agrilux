@@ -10,6 +10,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
 import { Loader2, Eye, EyeOff, User, Mail, Lock, MapPin, Navigation } from 'lucide-react';
 import DOMPurify from 'dompurify';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 
 const ERRORES = {
   'auth/email-already-in-use':     'Este correo ya está registrado.',
@@ -45,6 +47,9 @@ export default function Registro() {
   const [error, setError]         = useState('');
   const [detectandoGPS, setDetectandoGPS] = useState(false);
   const [coords, setCoords]       = useState(null);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState('');
 
   const submittingRef = useRef(false);
 
@@ -57,6 +62,28 @@ export default function Registro() {
   const cambiarModo = (m) => {
     setModo(m); setError('');
     setNombre(''); setWhatsapp(''); setEmail(''); setUbicacion(''); setPassword(''); setCoords(null);
+    setResetSent(false); setResetError('');
+  };
+
+  const handleResetPassword = async () => {
+    if (!email.trim()) {
+      setResetError('Ingresa tu correo electrónico primero.');
+      return;
+    }
+    setResetLoading(true);
+    setResetError('');
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setResetSent(true);
+    } catch (e) {
+      setResetError(
+        e.code === 'auth/user-not-found'
+          ? 'No existe una cuenta con este correo.'
+          : 'Error al enviar el correo. Intenta de nuevo.'
+      );
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   const detectarGPS = () => {
@@ -273,6 +300,31 @@ export default function Registro() {
               </button>
             </div>
           </div>
+
+          {/* ── OLVIDÉ MI CONTRASEÑA ── */}
+          {modo === 'login' && (
+            <div className="text-right -mt-1">
+              {resetSent ? (
+                <p className="text-xs text-green-600 font-semibold">
+                  ✓ Correo enviado. Revisa tu bandeja de entrada.
+                </p>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleResetPassword}
+                    disabled={resetLoading}
+                    className="text-xs text-primary font-semibold hover:underline disabled:opacity-50"
+                  >
+                    {resetLoading ? 'Enviando...' : '¿Olvidaste tu contraseña?'}
+                  </button>
+                  {resetError && (
+                    <p className="text-xs text-red-500 mt-1">{resetError}</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {/* Botón */}
           <button
