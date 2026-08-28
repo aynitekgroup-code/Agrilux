@@ -3,15 +3,8 @@
     android:height="108dp"
     android:viewportHeight="108"
     android:viewportWidth="108">
-    <!-- Letter A - centered in 108dp grid -->
+    <!-- Letter A - bold and clean -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,18 L40,68 L45,68 L48,58 L60,58 L63,68 L68,68 L54,18 Z M48.5,52 L54,34 L59.5,52 Z"/>
-    <!-- Text AGRILUX -->
-    <path
-        android:fillColor="#0f4a25"
-        android:pathData="M24,80 L84,80 L84,86 L24,86 Z"/>
-    <path
-        android:fillColor="#a8e6cf"
-        android:pathData="M27,81 L29,81 L29,85 L27,85 Z M31,81 L33,81 L33,85 L31,85 Z M35,81 L37,81 L37,85 L35,85 Z M39,81 L49,81 L49,82 L44,82 L44,85 L39,85 Z M51,81 L53,81 L53,85 L51,85 Z M55,81 L57,81 L57,85 L55,85 Z M59,81 L61,81 L61,85 L59,85 Z M63,81 L73,81 L73,82 L68,82 L68,85 L63,85 Z M75,81 L77,81 L77,85 L75,85 Z M79,81 L81,81 L81,85 L79,85 Z"/>
+        android:pathData="M54,24 L32,80 L41,80 L45.5,67 L62.5,67 L67,80 L76,80 L54,24 Z M49,60 L54,40 L59,60 Z"/>
 </vector>
