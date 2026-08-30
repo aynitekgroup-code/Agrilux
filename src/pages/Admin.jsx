@@ -12,8 +12,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { db } from '../lib/firebase';
-import { collection, getDocs, addDoc, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, updateDoc, where } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import JSZip from 'jszip';
 import {
@@ -245,7 +244,8 @@ function ModalAgregarUsuario({ onCerrar, onAgregado }) {
     try {
       const emailSintetico = nombreToEmail(form.nombre.trim());
       const uid = `manual_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      await setDoc(doc(db, 'usuarios', uid), {
+      const { error } = await supabase.from('usuarios').insert({
+        id: uid,
         nombre:         form.nombre.trim(),
         emailSintetico,
         rol:            form.rol,
@@ -255,6 +255,7 @@ function ModalAgregarUsuario({ onCerrar, onAgregado }) {
         creadoPor:      'admin',
         createdAt:      new Date().toISOString(),
       });
+      if (error) throw error;
       onAgregado({ id: uid, ...form, emailSintetico, creadoPor: 'admin' });
       onCerrar();
     } catch (e) {
@@ -366,7 +367,8 @@ function ModalEditarUsuario({ usuario, onCerrar, onGuardado }) {
         rol: form.rol,
         updatedAt: new Date().toISOString(),
       };
-      await updateDoc(doc(db, 'usuarios', usuario.id), datos);
+      const { error } = await supabase.from('usuarios').update(datos).eq('id', usuario.id);
+      if (error) throw error;
       onGuardado({ id: usuario.id, ...usuario, ...datos });
     } catch (e) {
       setError('Error al guardar: ' + e.message);
@@ -515,14 +517,14 @@ function ModalAliado({ aliado, onCerrar, onGuardado }) {
         updatedAt: new Date().toISOString(),
       };
       if (esEdicion) {
-        await updateDoc(doc(db, 'aliados', aliado.id), datos);
+        const { error } = await supabase.from('aliados').update(datos).eq('id', aliado.id);
+        if (error) throw error;
         onGuardado({ id: aliado.id, ...aliado, ...datos });
       } else {
-        const docRef = await addDoc(collection(db, 'aliados'), {
-          ...datos,
-          createdAt: new Date().toISOString(),
-        });
-        onGuardado({ id: docRef.id, ...datos, createdAt: new Date().toISOString() });
+        const payload = { ...datos, createdAt: new Date().toISOString() };
+        const { data, error } = await supabase.from('aliados').insert(payload).select().single();
+        if (error) throw error;
+        onGuardado({ id: data.id, ...datos, createdAt: new Date().toISOString() });
       }
     } catch (e) {
       setError('Error al guardar: ' + e.message);
@@ -706,38 +708,32 @@ function AliadosPanel({ onActualizar }) {
   const [eliminando, setEliminando] = useState(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'aliados'));
-    const unsub = onSnapshot(q,
-      snap => {
-        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        data.sort((a, b) => {
-          const fa = a.createdAt || '';
-          const fb = b.createdAt || '';
-          return fa > fb ? -1 : fa < fb ? 1 : 0;
-        });
-        setAliados(data);
-        setLoading(false);
-      },
-      async () => {
-        const snap = await getDocs(collection(db, 'aliados')).catch(() => ({ docs: [] }));
-        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        data.sort((a, b) => {
-          const fa = a.createdAt || '';
-          const fb = b.createdAt || '';
-          return fa > fb ? -1 : fa < fb ? 1 : 0;
-        });
-        setAliados(data);
-        setLoading(false);
-      }
-    );
-    return () => unsub();
+    let mounted = true;
+    const cargar = async () => {
+      try {
+        const { data, error } = await supabase.from('aliados').select('*').order('createdAt', { ascending: false });
+        if (error) throw error;
+        if (mounted) {
+          const sorted = (data || []).sort((a, b) => {
+            const fa = a.createdAt || '';
+            const fb = b.createdAt || '';
+            return fa > fb ? -1 : fa < fb ? 1 : 0;
+          });
+          setAliados(sorted);
+        }
+      } catch {}
+      if (mounted) setLoading(false);
+    };
+    cargar();
+    return () => { mounted = false; };
   }, []);
 
   const eliminar = async (id) => {
     if (!confirm('¿Eliminar este aliado?')) return;
     setEliminando(id);
     try {
-      await deleteDoc(doc(db, 'aliados', id));
+      const { error } = await supabase.from('aliados').delete().eq('id', id);
+      if (error) throw error;
       setAliados(prev => prev.filter(a => a.id !== id));
     } catch (e) {
       console.error('Error al eliminar:', e);
@@ -974,14 +970,15 @@ function ModalTienda({ tienda, onCerrar, onGuardado }) {
       };
 
       if (esEdicion) {
-        const ref = doc(db, 'tiendas', tienda.id);
-        await updateDoc(ref, datos);
+        const { error } = await supabase.from('tiendas').update(datos).eq('id', tienda.id);
+        if (error) throw error;
         onGuardado({ id: tienda.id, ...datos, createdAt: tienda.createdAt });
       } else {
         datos.createdAt = new Date().toISOString();
         datos.creadoPor = 'admin';
-        const ref = await addDoc(collection(db, 'tiendas'), datos);
-        onGuardado({ id: ref.id, ...datos });
+        const { data, error } = await supabase.from('tiendas').insert(datos).select().single();
+        if (error) throw error;
+        onGuardado({ id: data.id, ...datos });
       }
     } catch (e) {
       setError('Error al guardar: ' + e.message);
@@ -1189,27 +1186,23 @@ export default function Admin() {
   useEffect(() => {
     if (!autorizado) return;
     setLoading(true);
-    const unsubs = [];
-
-    const cargar = (colName, setter) => {
+    let mounted = true;
+    const cargar = async (table, setter) => {
       try {
-        const q = query(collection(db, colName), orderBy('createdAt', 'desc'));
-        const unsub = onSnapshot(q,
-          snap => { setter(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false); },
-          async () => {
-            const snap = await getDocs(collection(db, colName)).catch(() => ({ docs: [] }));
-            setter(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false);
-          }
-        );
-        unsubs.push(unsub);
-      } catch { setLoading(false); }
+        const { data, error } = await supabase.from(table).select('*').order('createdAt', { ascending: false });
+        if (error) throw error;
+        if (mounted) setter(data || []);
+      } catch {
+        if (mounted) setter([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
     };
-
     cargar('usuarios', setUsuarios);
     cargar('diagnosticos', setDiagnosticos);
     cargar('tiendas', setTiendas);
     cargar('tiendas_comunidad', setTiendasComunidad);
-    return () => unsubs.forEach(u => u());
+    return () => { mounted = false; };
   }, [autorizado]);
 
   // ── Exportar ────────────────────────────────────────────────────────────────
@@ -1528,7 +1521,7 @@ export default function Admin() {
                       <button
                         onClick={async () => {
                           if (!confirm(`¿Eliminar tienda "${t.nombre}"?`)) return;
-                          await deleteDoc(doc(db, 'tiendas', t.id));
+                          await supabase.from('tiendas').delete().eq('id', t.id);
                           setTiendas(prev => prev.filter(x => x.id !== t.id));
                         }}
                         className="p-2 bg-red-50 rounded-lg text-red-500 hover:bg-red-100">
@@ -1620,7 +1613,7 @@ export default function Admin() {
                     type="button"
                     onClick={async () => {
                       if (!confirm(`¿Eliminar "${t.nombre}"?`)) return;
-                      await deleteDoc(doc(db, 'tiendas_comunidad', t.id));
+                      await supabase.from('tiendas_comunidad').delete().eq('id', t.id);
                       setTiendasComunidad((prev) => prev.filter((x) => x.id !== t.id));
                     }}
                     className="p-2 bg-red-50 rounded-lg text-red-500"

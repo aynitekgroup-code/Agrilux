@@ -8,8 +8,7 @@ import {
 import { useAuth } from '../lib/AuthContext';
 import { useAgentes } from '../lib/AgentContext';
 import { CULTIVOS } from '../lib/constants';
-import { db } from '../lib/firebase';
-import { collection, getDocs, query, where, orderBy, addDoc } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { getWeather, getSoilData, getCicloRecomendaciones, getPronosticoSENAMHI } from '../lib/externalApis';
 import { invokeGemini } from '../lib/gemini';
 import TimelineEtapa from '../components/TimelineEtapa';
@@ -63,9 +62,10 @@ export default function CicloCultivo() {
     const cargar = async () => {
       if (!user) { setLoading(false); return; }
       try {
-        const q = query(collection(db, 'parcelas'), where('userId', '==', user.uid));
-        const snap = await getDocs(q);
-        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const uid = user?.id || user?.uid;
+        const { data: rows, error } = await supabase.from('parcelas').select('*').eq('userId', uid);
+        if (error) throw error;
+        const data = rows || [];
         setParcelas(data);
 
         // Si hay parcelaId en URL, seleccionarla
@@ -85,9 +85,9 @@ export default function CicloCultivo() {
   // Cargar registros de monitoreo
   const cargarRegistros = async (pId) => {
     try {
-      const q = query(collection(db, 'registrosParcela'), where('parcelaId', '==', pId), orderBy('fecha', 'desc'));
-      const snap = await getDocs(q);
-      setRegistros(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const { data, error } = await supabase.from('registros_parcela').select('*').eq('parcelaId', pId).order('fecha', { ascending: false });
+      if (error) throw error;
+      setRegistros((data || []).map(d => ({ ...d })));
     } catch { setRegistros([]); }
   };
 
@@ -110,7 +110,7 @@ export default function CicloCultivo() {
     }).catch(() => setCargandoClima(false));
 
     // Cargar historial clínico de la parcela
-    if (user?.uid) {
+    if (user?.id || user?.uid) {
       getResumenProblemas(parcelaActiva.id)
         .then(setHistorialClinico)
         .catch(() => setHistorialClinico(null));
@@ -122,7 +122,7 @@ export default function CicloCultivo() {
       .then(r => r.json())
       .then(setAlertasRiesgo)
       .catch(() => setAlertasRiesgo(null));
-  }, [parcelaActiva, user?.uid]);
+  }, [parcelaActiva, user?.id, user?.uid]);
 
   // Calcular etapa actual
   const cultivoObj = CULTIVOS.find(c => c.id === parcelaActiva?.cultivo);

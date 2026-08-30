@@ -5,8 +5,7 @@ import { useAgentes } from '../lib/AgentContext';
 import { CULTIVOS } from '../lib/constants';
 import { getSentinelNDVI } from '../lib/externalApis';
 import { obtenerCoordsParcela } from '../lib/parcelaCoords';
-import { db } from '../lib/firebase';
-import { collection, addDoc, deleteDoc, doc, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { invokeGemini } from '../lib/gemini';
 import { useNavigate } from 'react-router-dom';
 import MapaParcela from '../components/MapaParcela';
@@ -136,10 +135,11 @@ export default function MiParcela() {
 
   const cargarParcelas = async () => {
     try {
-      const q = query(collection(db, 'parcelas'), where('userId', '==', user?.uid));
-      const snap = await getDocs(q);
-      const data = snap.docs.map(d => {
-        const doc = { id: d.id, ...d.data() };
+      const uid = user?.id || user?.uid;
+      const { data: rows, error } = await supabase.from('parcelas').select('*').eq('userId', uid);
+      if (error) throw error;
+      const data = (rows || []).map(d => {
+        const doc = { ...d };
         // Parsear coordenadas si vienen como string JSON
         if (typeof doc.coordenadas === 'string' && doc.coordenadas) {
           try { doc.coordenadas = JSON.parse(doc.coordenadas); } catch { doc.coordenadas = []; }
@@ -157,9 +157,9 @@ export default function MiParcela() {
 
   const cargarRegistros = async (parcelaId) => {
     try {
-      const q = query(collection(db, 'registrosParcela'), where('parcelaId', '==', parcelaId), orderBy('fecha', 'desc'));
-      const snap = await getDocs(q);
-      setRegistros(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const { data, error } = await supabase.from('registros_parcela').select('*').eq('parcelaId', parcelaId).order('fecha', { ascending: false });
+      if (error) throw error;
+      setRegistros((data || []).map(d => ({ ...d })));
     } catch (e) { setRegistros([]); }
   };
 
@@ -168,21 +168,21 @@ export default function MiParcela() {
     setGuardando(true);
     try {
       const cultObj = CULTIVOS.find(c => c.id === form.cultivo);
-      // Firestore no soporta arrays anidados — convertir coordenadas a string
       const coordenadasStr = poligono?.coordenadas?.length
         ? JSON.stringify(poligono.coordenadas)
         : '';
-      const doc = await addDoc(collection(db, 'parcelas'), {
-        userId: user?.uid, userName: user?.nombre,
+      const { data, error } = await supabase.from('parcelas').insert({
+        userId: user?.id || user?.uid, userName: user?.nombre,
         nombre: form.nombre, cultivo: form.cultivo, cultivoNombre: cultObj?.nombre,
         cultivoEmoji: cultObj?.emoji, variedad: form.variedad,
         area: poligono ? String(poligono.area) : form.area,
         fechaSiembra: form.fechaSiembra, gps: form.gps || user?.ubicacion || '',
         coordenadas: coordenadasStr,
         createdAt: new Date().toISOString(),
-      });
+      }).select().single();
+      if (error) throw error;
       const nueva = {
-        id: doc.id, ...form, cultivoNombre: cultObj?.nombre, cultivoEmoji: cultObj?.emoji,
+        id: data.id, ...form, cultivoNombre: cultObj?.nombre, cultivoEmoji: cultObj?.emoji,
         area: poligono ? String(poligono.area) : form.area,
         coordenadas: poligono?.coordenadas || [],
       };
@@ -202,10 +202,8 @@ export default function MiParcela() {
     if (!parcelaActiva) return;
     if (!confirm(`¿Eliminar la parcela "${parcelaActiva.nombre}"? Se borrarán también sus registros de monitoreo.`)) return;
     try {
-      const regQ = query(collection(db, 'registrosParcela'), where('parcelaId', '==', parcelaActiva.id));
-      const regSnap = await getDocs(regQ);
-      await Promise.all(regSnap.docs.map(d => deleteDoc(d.ref)));
-      await deleteDoc(doc(db, 'parcelas', parcelaActiva.id));
+      await supabase.from('registros_parcela').delete().eq('parcelaId', parcelaActiva.id);
+      await supabase.from('parcelas').delete().eq('id', parcelaActiva.id);
       const restantes = parcelas.filter(p => p.id !== parcelaActiva.id);
       setParcelas(restantes);
       setParcelaActiva(restantes[0] || null);
@@ -260,8 +258,8 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
 
         setRecomendacion(resp);
 
-        await addDoc(collection(db, 'registrosParcela'), {
-          parcelaId: parcelaActiva.id, userId: user?.uid,
+        await supabase.from('registros_parcela').insert({
+          parcelaId: parcelaActiva.id, userId: user?.id || user?.uid,
           foto: compressed, recomendacion: resp,
           diasDesdeSiembra,
           fecha: new Date().toISOString(),

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
-import { collection, getDocs, addDoc, deleteDoc, doc, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import {
   Megaphone, Hash, MessageSquare, Users, Download, Copy, Check,
   Loader2, Plus, Trash2, ExternalLink, Search, X, FileText,
@@ -72,16 +71,17 @@ export default function Marketing() {
       localStorage.setItem('agrilux_hashtags', JSON.stringify(HASHTAGS_DEFAULT));
     }
 
-    const unsub = onSnapshot(
-      query(collection(db, 'contactos_marketing'), orderBy('createdAt', 'desc')),
-      snap => {
-        setContactos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        setLoading(false);
-      },
-      () => setLoading(false)
-    );
-
-    return () => unsub();
+    let mounted = true;
+    const cargar = async () => {
+      try {
+        const { data, error } = await supabase.from('contactos_marketing').select('*').order('createdAt', { ascending: false });
+        if (error) throw error;
+        if (mounted) setContactos(data || []);
+      } catch {}
+      if (mounted) setLoading(false);
+    };
+    cargar();
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
@@ -130,7 +130,8 @@ export default function Marketing() {
 
   const eliminarContacto = async (id) => {
     if (!confirm('¿Eliminar este contacto?')) return;
-    await deleteDoc(doc(db, 'contactos_marketing', id));
+    const { error } = await supabase.from('contactos_marketing').delete().eq('id', id);
+    if (!error) setContactos(prev => prev.filter(c => c.id !== id));
   };
 
   const exportarContactos = () => {

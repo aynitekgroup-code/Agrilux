@@ -6,17 +6,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { auth, db } from './firebase';
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
-  updateProfile,
-} from 'firebase/auth';
-import {
-  doc, setDoc, getDoc,
-} from 'firebase/firestore';
+import { supabase } from './supabase';
 
 const AuthContext = createContext();
 
@@ -32,17 +22,40 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const fetchPerfil = async (sessionUser) => {
+    if (!sessionUser) return null;
+    const { data } = await supabase.from('usuarios').select('*').eq('id', sessionUser.id).single();
+    return data || {};
+  };
+
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const snap = await getDoc(doc(db, 'usuarios', firebaseUser.uid));
-        const perfil = snap.exists() ? snap.data() : {};
+    // Cargar sesión inicial
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const perfil = await fetchPerfil(session.user);
         setUser({
-          uid:    firebaseUser.uid,
-          email:  firebaseUser.email,
-          nombre: firebaseUser.displayName || perfil.nombre || '',
+          id: session.user.id,
+          uid: session.user.id,
+          email: session.user.email,
+          nombre: perfil.nombre || session.user.user_metadata?.nombre || '',
           whatsapp: perfil.whatsapp || '',
-          status: perfil.status || 'aprobado', // default aprobado para admins creados
+          status: perfil.status || 'aprobado',
+          ...perfil,
+        });
+      }
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        const perfil = await fetchPerfil(session.user);
+        setUser({
+          id: session.user.id,
+          uid: session.user.id,
+          email: session.user.email,
+          nombre: perfil.nombre || session.user.user_metadata?.nombre || '',
+          whatsapp: perfil.whatsapp || '',
+          status: perfil.status || 'aprobado',
           ...perfil,
         });
       } else {
@@ -50,75 +63,79 @@ export const AuthProvider = ({ children }) => {
       }
       setLoading(false);
     });
-    return () => unsub();
+    return () => subscription.unsubscribe();
   }, []);
 
   // ── Registro: status = 'aprobado' (acceso inmediato) ──────
   const register = async ({ nombre, email, password, ubicacion, coords, whatsapp }) => {
     const whatsappNormalizado = normalizarWhatsapp(whatsapp);
-    const cred = await createUserWithEmailAndPassword(
-      auth,
-      email.trim().toLowerCase(),
-      password
-    );
-    await updateProfile(cred.user, { displayName: nombre.trim() });
-    await setDoc(doc(db, 'usuarios', cred.user.uid), {
-      nombre:    nombre.trim(),
-      email:     email.trim().toLowerCase(),
-      ubicacion: ubicacion || '',
-      whatsapp:  whatsappNormalizado || null,
-      coords:    coords || null,
-      rol:       'agricultor',
-      status:    'aprobado',
-      creadoPor: 'self',
-      createdAt: new Date().toISOString(),
+    const emailNorm = email.trim().toLowerCase();
+    const { data, error } = await supabase.auth.signUp({
+      email: emailNorm,
+      password,
+      options: { data: { nombre: nombre.trim() } }
     });
+    if (error) throw error;
+    const uid = data.user?.id;
+    if (!uid) throw new Error('No se pudo crear el usuario');
+    const perfil = {
+      id: uid,
+      nombre: nombre.trim(),
+      email: emailNorm,
+      ubicacion: ubicacion || '',
+      whatsapp: whatsappNormalizado || null,
+      coords: coords || null,
+      rol: 'agricultor',
+      status: 'aprobado',
+      creado_por: 'self',
+    };
+    await supabase.from('usuarios').insert(perfil);
     setUser({
-      uid:    cred.user.uid,
-      email:  email.trim().toLowerCase(),
+      id: uid,
+      uid,
+      email: emailNorm,
       nombre: nombre.trim(),
       ubicacion: ubicacion || '',
       whatsapp: whatsappNormalizado || '',
-      coords:    coords || null,
-      rol:    'agricultor',
+      coords: coords || null,
+      rol: 'agricultor',
       status: 'aprobado',
+      ...perfil,
     });
-    return cred.user;
+    return data.user;
   };
 
   // ── Login: correo + contraseña ─────────────────────────────────────────────
   const login = async ({ email, password }) => {
-    const cred = await signInWithEmailAndPassword(
-      auth,
-      email.trim().toLowerCase(),
-      password
-    );
-    return cred.user;
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    });
+    if (error) throw error;
+    return data.user;
   };
 
   const updateUbicacion = async (ubicacion, coords = null) => {
-    if (!user?.uid) throw new Error('No hay sesión');
-    const data = { ubicacion };
-    if (coords) data.coords = coords;
-    await setDoc(doc(db, 'usuarios', user.uid), data, { merge: true });
+    const uid = user?.id || user?.uid;
+    if (!uid) throw new Error('No hay sesión');
+    const data = { ubicacion, ...(coords ? { coords } : {}) };
+    await supabase.from('usuarios').update(data).eq('id', uid);
     setUser(prev => ({ ...prev, ubicacion, coords: coords || prev.coords }));
   };
 
   const updatePerfil = async ({ nombre, ubicacion, whatsapp, coords = null }) => {
-    if (!user?.uid) throw new Error('No hay sesión');
-
+    const uid = user?.id || user?.uid;
+    if (!uid) throw new Error('No hay sesión');
     const nombreFinal = (nombre ?? user.nombre ?? '').trim();
     const ubicacionFinal = ubicacion ?? user.ubicacion ?? '';
     const whatsappFinal = normalizarWhatsapp(whatsapp ?? user.whatsapp ?? '');
-
     const data = {
       nombre: nombreFinal,
       ubicacion: ubicacionFinal,
       whatsapp: whatsappFinal || null,
       ...(coords ? { coords } : {}),
     };
-
-    await setDoc(doc(db, 'usuarios', user.uid), data, { merge: true });
+    await supabase.from('usuarios').update(data).eq('id', uid);
     setUser(prev => ({
       ...prev,
       nombre: nombreFinal,
@@ -126,12 +143,11 @@ export const AuthProvider = ({ children }) => {
       whatsapp: whatsappFinal,
       coords: coords || prev.coords,
     }));
-
     return data;
   };
 
   const logout = async () => {
-    await signOut(auth);
+    await supabase.auth.signOut();
     setUser(null);
   };
 

@@ -1,24 +1,20 @@
-import { db } from './firebase';
-import {
-  collection,
-  getDocs,
-  writeBatch,
-} from 'firebase/firestore';
-
-const BATCH_SIZE = 450;
+import { supabase } from './supabase';
 
 async function eliminarColeccion(nombre) {
-  const snap = await getDocs(collection(db, nombre));
-  const docs = snap.docs;
+  const { data, error } = await supabase.from(nombre).select('id');
+  if (error) throw error;
+  const docs = data || [];
+  if (docs.length === 0) return 0;
+  const ids = docs.map(d => d.id);
+  // Supabase delete requires filter; delete in chunks
+  const BATCH = 200;
   let eliminados = 0;
-
-  for (let i = 0; i < docs.length; i += BATCH_SIZE) {
-    const batch = writeBatch(db);
-    docs.slice(i, i + BATCH_SIZE).forEach((d) => batch.delete(d.ref));
-    await batch.commit();
-    eliminados += Math.min(BATCH_SIZE, docs.length - i);
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const chunk = ids.slice(i, i + BATCH);
+    const { error: delErr } = await supabase.from(nombre).delete().in('id', chunk);
+    if (delErr) throw delErr;
+    eliminados += chunk.length;
   }
-
   return eliminados;
 }
 

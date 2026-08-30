@@ -1,7 +1,5 @@
 /**
- * api/tiendas.js — API unificada de tiendas agrícolas
- *
- * Combina: scraper + comunidad + precios + ofertas
+ * api/tiendas.js — API unificada de tiendas agrícolas (Supabase)
  *
  * Endpoints:
  *   GET  /api/tiendas?type=scraper     → Scraping de tiendas
@@ -13,54 +11,33 @@
  *   POST /api/tiendas?type=precios     → Guardar precio
  */
 
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { createClient } from '@supabase/supabase-js';
 
-// ── Firebase Admin (lazy init + manejo de errores) ──
-let db = null;
-let firebaseInitError = null;
+// ── Supabase (lazy) ──
+let supabaseClient = null;
+let supabaseInitError = null;
 
-function normalizePrivateKey(raw) {
-  if (!raw) return null;
-  const key = raw.replace(/\\n/g, '\n').trim();
-  return key.includes('BEGIN PRIVATE KEY') ? key : null;
-}
-
-function initFirebaseAdmin() {
-  if (db) return db;
-  if (firebaseInitError) return null;
-
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
-
-  if (!projectId || !clientEmail || !privateKey) {
-    firebaseInitError = 'missing_env';
+function getSupabase() {
+  if (supabaseClient) return supabaseClient;
+  if (supabaseInitError) return null;
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !key) {
+    supabaseInitError = 'missing_env';
     return null;
   }
-
-  try {
-    if (!getApps().length) {
-      initializeApp({
-        credential: cert({ projectId, clientEmail, privateKey }),
-      });
-    }
-    db = getFirestore();
-    return db;
-  } catch (err) {
-    firebaseInitError = err.message;
-    console.error('Firebase Admin init error:', err.message);
-    return null;
-  }
+  supabaseClient = createClient(url, key);
+  return supabaseClient;
 }
 
-function firebaseReady() {
-  return !!initFirebaseAdmin();
+function supabaseReady() {
+  return !!getSupabase();
 }
 
-function respuestaFirebaseNoDisponible(res, type) {
-  const hint = 'Agrega FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL y FIREBASE_PRIVATE_KEY en Vercel (Settings → Environment Variables).';
+function respuestaSupabaseNoDisponible(res, type) {
+  const hint = 'Agrega SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en Vercel (Settings → Environment Variables).';
   const base = {
+    supabase_ok: false,
     firebase_ok: false,
     hint,
     total: 0,
@@ -229,7 +206,6 @@ async function scrapingCompleto() {
     scrapingDiproagro(), scrapingPeruYello(), scrapingAgrotiena(),
   ]);
 
-  // Google Maps para ciudades principales
   const googleMaps = [];
   if (process.env.GOOGLE_PLACES_API_KEY) {
     for (const c of CIUDES_AGRICOLAS.slice(0, 8)) {
@@ -277,17 +253,18 @@ export default async function handler(req, res) {
     const url = new URL(req.url, 'http://localhost');
     const type = url.searchParams.get('type') || 'comunidad';
 
-    if (!firebaseReady() && type !== 'scraper') {
+    if (!supabaseReady() && type !== 'scraper') {
       if (req.method === 'GET') {
-        return respuestaFirebaseNoDisponible(res, type);
+        return respuestaSupabaseNoDisponible(res, type);
       }
       return res.status(503).json({
-        error: 'Firebase no configurado en el servidor. Agrega FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL y FIREBASE_PRIVATE_KEY en Vercel.',
+        error: 'Supabase no configurado en el servidor. Agrega SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en Vercel.',
+        supabase_ok: false,
         firebase_ok: false,
       });
     }
 
-    db = initFirebaseAdmin();
+    const sb = getSupabase();
 
     // ── SCRAPING ──
     if (type === 'scraper') {
@@ -321,11 +298,11 @@ export default async function handler(req, res) {
         const dept = url.searchParams.get('departamento');
         const busqueda = url.searchParams.get('q')?.toLowerCase();
 
-        let query = db.collection('tiendas_comunidad').where('activa', '==', true);
-        if (dept) query = query.where('departamento', '==', dept);
-
-        const snap = await query.get();
-        let tiendas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        let q = sb.from('tiendas_comunidad').select('*').eq('activa', true);
+        if (dept) q = q.eq('departamento', dept);
+        const { data, error } = await q;
+        if (error) throw error;
+        let tiendas = data || [];
 
         if (busqueda) {
           tiendas = tiendas.filter(t =>
@@ -341,7 +318,7 @@ export default async function handler(req, res) {
             .sort((a, b) => (a.distanciaKm || 999) - (b.distanciaKm || 999));
         }
 
-        return res.status(200).json({ tiendas, total: tiendas.length, firebase_ok: true });
+        return res.status(200).json({ tiendas, total: tiendas.length, supabase_ok: true, firebase_ok: true });
       }
 
       if (req.method === 'POST') {
@@ -373,8 +350,9 @@ export default async function handler(req, res) {
           createdAt: new Date().toISOString(),
         };
 
-        const docRef = await db.collection('tiendas_comunidad').add(tienda);
-        return res.status(201).json({ id: docRef.id, ...tienda });
+        const { data: inserted, error } = await sb.from('tiendas_comunidad').insert(tienda).select().single();
+        if (error) throw error;
+        return res.status(201).json({ id: inserted.id, ...tienda });
       }
     }
 
@@ -388,14 +366,14 @@ export default async function handler(req, res) {
         const fechaLimite = new Date();
         fechaLimite.setDate(fechaLimite.getDate() - dias);
 
-        let query = db.collection('precios_historicos').where('fecha', '>=', fechaLimite.toISOString());
-        if (tiendaId) query = query.where('tiendaId', '==', tiendaId);
-        if (producto) query = query.where('producto', '==', producto);
+        let q = sb.from('precios_historicos').select('*').gte('fecha', fechaLimite.toISOString()).order('fecha', { ascending: false }).limit(100);
+        if (tiendaId) q = q.eq('tiendaId', tiendaId);
+        if (producto) q = q.eq('producto', producto);
 
-        const snap = await query.orderBy('fecha', 'desc').limit(100).get();
-        const precios = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const { data, error } = await q;
+        if (error) throw error;
 
-        return res.status(200).json({ precios, total: precios.length, productos: PRODUCTOS });
+        return res.status(200).json({ precios: data || [], total: (data || []).length, productos: PRODUCTOS });
       }
 
       if (req.method === 'POST') {
@@ -419,15 +397,16 @@ export default async function handler(req, res) {
           fecha: new Date().toISOString(),
         };
 
-        const docRef = await db.collection('precios_historicos').add(precio);
+        const { data: inserted, error } = await sb.from('precios_historicos').insert(precio).select().single();
+        if (error) throw error;
 
         // Actualizar precio actual en la tienda
-        await db.collection('tiendas_comunidad').doc(data.tiendaId).update({
-          [`preciosActuales.${data.producto}`]: { precio: precio.precio, fecha: precio.fecha },
-          ultimaActualizacion: precio.fecha,
-        });
+        const { data: tienda } = await sb.from('tiendas_comunidad').select('preciosActuales').eq('id', data.tiendaId).single();
+        const preciosActuales = tienda?.preciosActuales || {};
+        preciosActuales[data.producto] = { precio: precio.precio, fecha: precio.fecha };
+        await sb.from('tiendas_comunidad').update({ preciosActuales, ultimaActualizacion: precio.fecha }).eq('id', data.tiendaId);
 
-        return res.status(201).json({ id: docRef.id, ...precio });
+        return res.status(201).json({ id: inserted.id, ...precio });
       }
     }
 
@@ -437,27 +416,17 @@ export default async function handler(req, res) {
       const lon = parseFloat(url.searchParams.get('lon'));
       const cultivo = url.searchParams.get('cultivo') || '';
 
-      // Buscar precios recientes de tiendas cercanas
-      let query = db.collection('precios_historicos')
-        .orderBy('fecha', 'desc')
-        .limit(100);
+      const { data: precios, error } = await sb.from('precios_historicos').select('*').order('fecha', { ascending: false }).limit(100);
+      if (error) throw error;
 
-      const snap = await query.get();
-      let precios = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-      // Obtener info de tiendas
-      const tiendaIds = [...new Set(precios.map(p => p.tiendaId))];
+      const tiendaIds = [...new Set((precios || []).map(p => p.tiendaId))];
       const tiendasMap = {};
       for (const id of tiendaIds) {
-        const docSnap = await db.collection('tiendas_comunidad').doc(id).get();
-        if (docSnap.exists) {
-          const data = docSnap.data();
-          if (data.propietarioId) tiendasMap[id] = { id: docSnap.id, ...data };
-        }
+        const { data } = await sb.from('tiendas_comunidad').select('*').eq('id', id).single();
+        if (data && data.propietarioId) tiendasMap[id] = data;
       }
 
-      // Formatear como ofertas (solo tiendas con dueño registrado)
-      let ofertas = precios
+      let ofertas = (precios || [])
         .filter((p) => tiendasMap[p.tiendaId])
         .map(p => ({
         tienda: p.tiendaNombre || tiendasMap[p.tiendaId]?.nombre || 'Tienda',
@@ -472,7 +441,6 @@ export default async function handler(req, res) {
         descuento: null,
       }));
 
-      // Filtrar por distancia
       if (lat && lon) {
         ofertas = ofertas
           .map(o => ({ ...o, distanciaKm: o.lat && o.lon ? Math.round(haversine(lat, lon, o.lat, o.lon) * 10) / 10 : null }))
@@ -480,7 +448,6 @@ export default async function handler(req, res) {
           .sort((a, b) => (a.distanciaKm || 999) - (b.distanciaKm || 999));
       }
 
-      // Filtrar por cultivo
       if (cultivo) {
         ofertas = ofertas.filter(o =>
           o.producto?.toLowerCase().includes(cultivo.toLowerCase())
@@ -491,6 +458,7 @@ export default async function handler(req, res) {
         ofertas,
         total: ofertas.length,
         timestamp: new Date().toISOString(),
+        supabase_ok: true,
         firebase_ok: true,
       });
     }
@@ -505,32 +473,34 @@ export default async function handler(req, res) {
       const action = url.searchParams.get('action');
 
       if (action === 'purge_comunidad' && req.method === 'POST') {
-        const snapTiendas = await db.collection('tiendas_comunidad').get();
-        const snapPrecios = await db.collection('precios_historicos').get();
-        const allDocs = [...snapTiendas.docs, ...snapPrecios.docs];
+        const { data: tiendas } = await sb.from('tiendas_comunidad').select('id');
+        const { data: precios } = await sb.from('precios_historicos').select('id');
+        const allTiendaIds = (tiendas || []).map(d => d.id);
+        const allPrecioIds = (precios || []).map(d => d.id);
         let eliminados = 0;
-
-        for (let i = 0; i < allDocs.length; i += 450) {
-          const batch = db.batch();
-          allDocs.slice(i, i + 450).forEach((d) => batch.delete(d.ref));
-          await batch.commit();
-          eliminados += Math.min(450, allDocs.length - i);
+        for (const chunk of chunkArray(allTiendaIds, 200)) {
+          const { error } = await sb.from('tiendas_comunidad').delete().in('id', chunk);
+          if (!error) eliminados += chunk.length;
+        }
+        for (const chunk of chunkArray(allPrecioIds, 200)) {
+          const { error } = await sb.from('precios_historicos').delete().in('id', chunk);
+          if (!error) eliminados += chunk.length;
         }
 
         return res.status(200).json({
           ok: true,
           eliminados,
-          tiendas: snapTiendas.size,
-          precios: snapPrecios.size,
+          tiendas: allTiendaIds.length,
+          precios: allPrecioIds.length,
         });
       }
 
-      const snap = await db.collection('tiendas_comunidad').orderBy('createdAt', 'desc').get();
-      const tiendas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const { data: tiendas, error } = await sb.from('tiendas_comunidad').select('*').order('createdAt', { ascending: false });
+      if (error) throw error;
 
       return res.status(200).json({
-        tiendas,
-        total: tiendas.length,
+        tiendas: tiendas || [],
+        total: (tiendas || []).length,
       });
     }
 
@@ -539,4 +509,10 @@ export default async function handler(req, res) {
     console.error('Tiendas error:', error);
     return res.status(500).json({ error: error.message });
   }
+}
+
+function chunkArray(arr, size) {
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+  return chunks;
 }
