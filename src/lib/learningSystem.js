@@ -1,12 +1,7 @@
-import { 
-  collection, addDoc, query, where, orderBy, limit, 
-  getDocs, updateDoc, doc, serverTimestamp, 
-  onSnapshot, Timestamp
-} from 'firebase/firestore';
-import { db } from './firebase';
+import { supabase } from './supabase';
 
 /**
- * Sistema de Aprendizaje Agrilux
+ * Sistema de Aprendizaje Agrilux (Supabase)
  * Maneja historial clínico, feedback y patrones por parcela/zona
  */
 
@@ -30,14 +25,12 @@ export async function guardarHistorialClinico({
   lon = null
 }) {
   try {
-    const docRef = await addDoc(collection(db, 'historialClinico'), {
+    const payload = {
       userId,
       parcelaId,
       parcelaNombre: parcelaNombre || '',
       cultivo,
       variedad: variedad || '',
-      
-      // Datos del diagnóstico
       tieneProblema: diagnostico.tiene_problema,
       problema: diagnostico.nombre_problema || '',
       problemaCientifico: diagnostico.nombre_cientifico || '',
@@ -45,37 +38,27 @@ export async function guardarHistorialClinico({
       severidad: diagnostico.porcentaje_severidad || 0,
       causa: diagnostico.causa || '',
       recomendacion: diagnostico.que_hacer || '',
-      
-      // Producto aplicado (si el usuario indica)
       productoAplicado,
       fechaAplicacion: null,
-      
-      // Resultado (se actualiza después)
-      resultado: null, // 'mejoro' | 'empeoro' | 'sin_cambio' | 'resuelto'
+      resultado: null,
       fechaResultado: null,
       observacionesResultado: null,
-      
-      // Calidad del diagnóstico (feedback)
-      calificacion: null, // 1-5 estrellas
-      util: null, // true | false | null
+      calificacion: null,
+      util: null,
       comentarioFeedback: null,
-      
-      // Contexto ambiental
       clima: null,
       suelo: null,
-      
-      // Metadatos
-      fuente: 'diagnostico', // 'diagnostico' | 'monitoreo' | 'voz'
+      fuente: 'diagnostico',
       fotoUrl,
       lat,
       lon,
-      
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    
-    console.log('[Historial] Guardado:', docRef.id);
-    return docRef.id;
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    const { data, error } = await supabase.from('historial_clinico').insert(payload).select().single();
+    if (error) throw error;
+    console.log('[Historial] Guardado:', data.id);
+    return data.id;
   } catch (error) {
     console.error('[Historial] Error al guardar:', error);
     throw error;
@@ -87,14 +70,13 @@ export async function guardarHistorialClinico({
  */
 export async function calificarDiagnostico(historialId, calificacion, util, comentario = '') {
   try {
-    const docRef = doc(db, 'historialClinico', historialId);
-    await updateDoc(docRef, {
+    const { error } = await supabase.from('historial_clinico').update({
       calificacion,
       util,
       comentarioFeedback: comentario,
-      updatedAt: serverTimestamp()
-    });
-    
+      updatedAt: new Date().toISOString()
+    }).eq('id', historialId);
+    if (error) throw error;
     console.log('[Historial] Feedback guardado:', historialId);
     return true;
   } catch (error) {
@@ -108,14 +90,13 @@ export async function calificarDiagnostico(historialId, calificacion, util, come
  */
 export async function actualizarResultado(historialId, resultado, observaciones = '') {
   try {
-    const docRef = doc(db, 'historialClinico', historialId);
-    await updateDoc(docRef, {
+    const { error } = await supabase.from('historial_clinico').update({
       resultado,
-      fechaResultado: serverTimestamp(),
+      fechaResultado: new Date().toISOString(),
       observacionesResultado: observaciones,
-      updatedAt: serverTimestamp()
-    });
-    
+      updatedAt: new Date().toISOString()
+    }).eq('id', historialId);
+    if (error) throw error;
     console.log('[Historial] Resultado actualizado:', historialId);
     return true;
   } catch (error) {
@@ -129,13 +110,12 @@ export async function actualizarResultado(historialId, resultado, observaciones 
  */
 export async function registrarProductoAplicado(historialId, producto) {
   try {
-    const docRef = doc(db, 'historialClinico', historialId);
-    await updateDoc(docRef, {
+    const { error } = await supabase.from('historial_clinico').update({
       productoAplicado: producto,
-      fechaAplicacion: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    
+      fechaAplicacion: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }).eq('id', historialId);
+    if (error) throw error;
     return true;
   } catch (error) {
     console.error('[Historial] Error al registrar producto:', error);
@@ -152,20 +132,14 @@ export async function registrarProductoAplicado(historialId, producto) {
  */
 export async function getHistorialParcela(parcelaId, limite = 20) {
   try {
-    const q = query(
-      collection(db, 'historialClinico'),
-      where('parcelaId', '==', parcelaId),
-      orderBy('createdAt', 'desc'),
-      limit(limite)
-    );
-    
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt?.toDate(),
-      fechaAplicacion: doc.data().fechaAplicacion?.toDate(),
-      fechaResultado: doc.data().fechaResultado?.toDate()
+    const { data, error } = await supabase.from('historial_clinico').select('*').eq('parcelaId', parcelaId).order('createdAt', { ascending: false }).limit(limite);
+    if (error) throw error;
+    return (data || []).map(d => ({
+      id: d.id,
+      ...d,
+      createdAt: d.createdAt ? new Date(d.createdAt) : null,
+      fechaAplicacion: d.fechaAplicacion ? new Date(d.fechaAplicacion) : null,
+      fechaResultado: d.fechaResultado ? new Date(d.fechaResultado) : null
     }));
   } catch (error) {
     console.error('[Historial] Error al consultar:', error);
@@ -189,7 +163,6 @@ export async function getResumenProblemas(parcelaId) {
     };
   }
   
-  // Contar problemas frecuentes
   const conteoProblemas = {};
   historial.forEach(d => {
     if (d.tieneProblema && d.problema) {
@@ -198,16 +171,13 @@ export async function getResumenProblemas(parcelaId) {
     }
   });
   
-  // Ordenar por frecuencia
   const problemasFrecuentes = Object.entries(conteoProblemas)
     .sort(([,a], [,b]) => b - a)
     .slice(0, 5)
     .map(([problema, veces]) => ({ problema, veces }));
   
-  // Último diagnóstico
   const ultimoDiagnostico = historial[0];
   
-  // Detectar tendencia
   const diagnosticosConProblema = historial.filter(d => d.tieneProblema);
   const recientes = diagnosticosConProblema.slice(0, 3);
   const anteriores = diagnosticosConProblema.slice(3, 6);
@@ -224,7 +194,6 @@ export async function getResumenProblemas(parcelaId) {
     }
   }
   
-  // Problemas activos (sin resolver)
   const problemasActivos = historial.filter(d => 
     d.tieneProblema && 
     d.resultado !== 'resuelto' &&
@@ -253,7 +222,6 @@ export async function getContextoHistorial(parcelaId, cultivo) {
   
   let contexto = `\n\n📋 HISTORIAL DE LA PARCELA (${resumen.totalDiagnosticos} diagnósticos anteriores):\n`;
   
-  // Último diagnóstico
   if (resumen.ultimoDiagnostico) {
     const ultimo = resumen.ultimoDiagnostico;
     const fecha = ultimo.createdAt ? ultimo.createdAt.toLocaleDateString('es-PE') : 'desconocida';
@@ -268,7 +236,6 @@ export async function getContextoHistorial(parcelaId, cultivo) {
     }
   }
   
-  // Problemas frecuentes
   if (resumen.problemasFrecuentes.length > 0) {
     contexto += `\n\n• Problemas más frecuentes en esta parcela:`;
     resumen.problemasFrecuentes.forEach(p => {
@@ -276,14 +243,12 @@ export async function getContextoHistorial(parcelaId, cultivo) {
     });
   }
   
-  // Tendencia
   if (resumen.tendencia === 'empeorando') {
     contexto += `\n\n⚠️ ALERTA: El cultivo está EMPEORANDO según los últimos diagnósticos.`;
   } else if (resumen.tendencia === 'mejorando') {
     contexto += `\n\n✅ El cultivo está MEJORANDO según los últimos diagnósticos.`;
   }
   
-  // Problemas activos
   if (resumen.problemasActivos.length > 0) {
     contexto += `\n\n• Problemas ACTIVOS sin resolver:`;
     resumen.problemasActivos.forEach(p => {
@@ -298,71 +263,48 @@ export async function getContextoHistorial(parcelaId, cultivo) {
 // 3. PATRONES POR ZONA
 // ═══════════════════════════════════════════════════════════════
 
-/**
- * Analizar patrones de una zona específica
- */
 export async function analizarPatronesZona(region, cultivo = null) {
   try {
-    let q = query(
-      collection(db, 'historialClinico'),
-      where('parcelaNombre', '>=', region),
-      where('parcelaNombre', '<=', region + '\uf8ff'),
-      orderBy('parcelaNombre'),
-      orderBy('createdAt', 'desc'),
-      limit(100)
-    );
-    
+    let data = [];
     if (cultivo) {
-      q = query(
-        collection(db, 'historialClinico'),
-        where('cultivo', '==', cultivo),
-        orderBy('createdAt', 'desc'),
-        limit(200)
-      );
+      const { data: rows, error } = await supabase.from('historial_clinico').select('*').eq('cultivo', cultivo).order('createdAt', { ascending: false }).limit(200);
+      if (error) throw error;
+      data = rows || [];
+    } else {
+      const { data: rows, error } = await supabase.from('historial_clinico').select('*').order('createdAt', { ascending: false }).limit(100);
+      if (error) throw error;
+      const lower = (region || '').toLowerCase();
+      data = (rows || []).filter(d => (d.parcelaNombre || '').toLowerCase().includes(lower));
     }
     
-    const snapshot = await getDocs(q);
-    const diagnosticos = snapshot.docs.map(doc => doc.data());
+    if (data.length === 0) return null;
     
-    if (diagnosticos.length === 0) {
-      return null;
-    }
-    
-    // Analizar distribución de problemas
     const problemasPorMes = {};
     const problemasPorCultivo = {};
     const severidadPromedio = {};
     
-    diagnosticos.forEach(d => {
+    data.forEach(d => {
       if (!d.tieneProblema || !d.problema) return;
-      
-      const mes = d.createdAt?.toDate().getMonth() || 0;
+      const mes = d.createdAt ? new Date(d.createdAt).getMonth() : 0;
       const problema = d.problema.toLowerCase();
-      
-      // Por mes
       if (!problemasPorMes[mes]) problemasPorMes[mes] = {};
       problemasPorMes[mes][problema] = (problemasPorMes[mes][problema] || 0) + 1;
-      
-      // Por cultivo
       if (!problemasPorCultivo[d.cultivo]) problemasPorCultivo[d.cultivo] = {};
       problemasPorCultivo[d.cultivo][problema] = (problemasPorCultivo[d.cultivo][problema] || 0) + 1;
-      
-      // Severidad
       if (!severidadPromedio[problema]) severidadPromedio[problema] = { total: 0, count: 0 };
       severidadPromedio[problema].total += d.severidad || 0;
       severidadPromedio[problema].count += 1;
     });
     
-    // Calcular promedios de severidad
     const severidad = {};
-    Object.entries(severidadPromedio).forEach(([problema, data]) => {
-      severidad[problema] = Math.round(data.total / data.count);
+    Object.entries(severidadPromedio).forEach(([problema, d]) => {
+      severidad[problema] = Math.round(d.total / d.count);
     });
     
     return {
       region,
       cultivo,
-      totalDiagnosticos: diagnosticos.length,
+      totalDiagnosticos: data.length,
       problemasPorMes,
       problemasPorCultivo,
       severidadPromedio: severidad,
@@ -375,16 +317,12 @@ export async function analizarPatronesZona(region, cultivo = null) {
   }
 }
 
-/**
- * Obtener alertas tempranas basadas en patrones
- */
 export async function getAlertasTempranas(parcelaId, cultivo, region) {
   const resumen = await getResumenProblemas(parcelaId);
   const patrones = await analizarPatronesZona(region, cultivo);
   
   const alertas = [];
   
-  // Alerta por tendencia
   if (resumen.tendencia === 'empeorando') {
     alertas.push({
       tipo: 'tendencia',
@@ -394,7 +332,6 @@ export async function getAlertasTempranas(parcelaId, cultivo, region) {
     });
   }
   
-  // Alerta por problema recurrente
   if (resumen.problemasFrecuentes.length > 0) {
     const masFrecuente = resumen.problemasFrecuentes[0];
     if (masFrecuente.veces >= 3) {
@@ -407,15 +344,12 @@ export async function getAlertasTempranas(parcelaId, cultivo, region) {
     }
   }
   
-  // Alerta por patrones de zona
   if (patrones && patrones.problemasPorMes) {
     const mesActual = new Date().getMonth();
     const problemasMes = patrones.problemasPorMes[mesActual];
     
     if (problemasMes) {
-      const topProblema = Object.entries(problemasMes)
-        .sort(([,a], [,b]) => b - a)[0];
-      
+      const topProblema = Object.entries(problemasMes).sort(([,a], [,b]) => b - a)[0];
       if (topProblema && topProblema[1] >= 5) {
         alertas.push({
           tipo: 'zona',
@@ -434,16 +368,14 @@ export async function getAlertasTempranas(parcelaId, cultivo, region) {
 // 4. MEMORIA DEL ASISTENTE DE VOZ
 // ═══════════════════════════════════════════════════════════════
 
-/**
- * Guardar conversación del asistente de voz
- */
 export async function guardarConversacion(userId, mensajes) {
   try {
-    await addDoc(collection(db, 'conversacionesVoz'), {
+    const { error } = await supabase.from('conversaciones_voz').insert({
       userId,
-      mensajes: mensajes.slice(-20), // Últimos 20 mensajes
-      createdAt: serverTimestamp()
+      mensajes: mensajes.slice(-20),
+      createdAt: new Date().toISOString()
     });
+    if (error) throw error;
     return true;
   } catch (error) {
     console.error('[Conversación] Error al guardar:', error);
@@ -451,23 +383,14 @@ export async function guardarConversacion(userId, mensajes) {
   }
 }
 
-/**
- * Obtener historial de conversaciones del usuario
- */
 export async function getHistorialConversaciones(userId, limite = 5) {
   try {
-    const q = query(
-      collection(db, 'conversacionesVoz'),
-      where('userId', '==', userId),
-      orderBy('createdAt', 'desc'),
-      limit(limite)
-    );
-    
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt?.toDate()
+    const { data, error } = await supabase.from('conversaciones_voz').select('*').eq('userId', userId).order('createdAt', { ascending: false }).limit(limite);
+    if (error) throw error;
+    return (data || []).map(d => ({
+      id: d.id,
+      ...d,
+      createdAt: d.createdAt ? new Date(d.createdAt) : null
     }));
   } catch (error) {
     console.error('[Conversación] Error al consultar:', error);
@@ -475,9 +398,6 @@ export async function getHistorialConversaciones(userId, limite = 5) {
   }
 }
 
-/**
- * Obtener contexto de conversaciones previas para el LLM
- */
 export async function getContextoConversacional(userId) {
   const historial = await getHistorialConversaciones(userId, 3);
   
@@ -487,9 +407,9 @@ export async function getContextoConversacional(userId) {
   
   historial.forEach((conv, i) => {
     contexto += `\nConversación ${i + 1} (${conv.createdAt?.toLocaleDateString('es-PE')}):`;
-    conv.mensajes.slice(-6).forEach(m => {
+    (conv.mensajes || []).slice(-6).forEach(m => {
       const rol = m.role === 'user' ? 'Usuario' : 'PlaguIA';
-      const contenido = m.content.substring(0, 100);
+      const contenido = (m.content || '').substring(0, 100);
       contexto += `\n  ${rol}: ${contenido}`;
     });
   });

@@ -10,8 +10,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
 import { Loader2, Eye, EyeOff, User, Mail, Lock, MapPin, Navigation } from 'lucide-react';
 import DOMPurify from 'dompurify';
-import { sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 
 const ERRORES = {
   'auth/email-already-in-use':     'Este correo ya está registrado.',
@@ -73,11 +72,12 @@ export default function Registro() {
     setResetLoading(true);
     setResetError('');
     try {
-      await sendPasswordResetEmail(auth, email.trim());
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+      if (error) throw error;
       setResetSent(true);
     } catch (e) {
       setResetError(
-        e.code === 'auth/user-not-found'
+        e.message?.includes('not found') || e.code === 'user_not_found'
           ? 'No existe una cuenta con este correo.'
           : 'Error al enviar el correo. Intenta de nuevo.'
       );

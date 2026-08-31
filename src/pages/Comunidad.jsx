@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, AlertTriangle, Lightbulb, MessageSquare, X } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
-import { db } from '../lib/firebase';
-import { collection, addDoc, getDocs, orderBy, query, updateDoc, doc, increment } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 
 const CATEGORIAS = [
   { id: 'todas', label: 'Todas', emoji: '📋' },
@@ -33,9 +32,9 @@ export default function Comunidad() {
 
   const cargarMensajes = async () => {
     try {
-      const q = query(collection(db, 'comunidad'), orderBy('fecha', 'desc'));
-      const snap = await getDocs(q);
-      setMensajes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const { data, error } = await supabase.from('comunidad').select('*').order('fecha', { ascending: false });
+      if (error) throw error;
+      setMensajes((data || []).map(d => ({ ...d })));
     } catch (e) { setMensajes([]); }
     setLoading(false);
   };
@@ -44,11 +43,10 @@ export default function Comunidad() {
     if (!form.titulo || !form.contenido) { alert('Completa título y contenido'); return; }
     setPublicando(true);
     try {
-      const docRef = await addDoc(collection(db, 'comunidad'), {
-        ...form, autor: user?.nombre, autorId: user?.uid,
-        fecha: new Date().toISOString(), likes: 0,
-      });
-      setMensajes(prev => [{ id: docRef.id, ...form, autor: user?.nombre, fecha: new Date().toISOString(), likes: 0 }, ...prev]);
+      const payload = { ...form, autor: user?.nombre, autorId: user?.id || user?.uid, fecha: new Date().toISOString(), likes: 0 };
+      const { data, error } = await supabase.from('comunidad').insert(payload).select().single();
+      if (error) throw error;
+      setMensajes(prev => [{ id: data.id, ...payload }, ...prev]);
       setModal(false);
       setForm({ categoria: 'general', titulo: '', contenido: '', ubicacion: user?.ubicacion || '' });
     } catch (e) { alert('Error al publicar'); }
@@ -57,8 +55,11 @@ export default function Comunidad() {
 
   const darLike = async (id) => {
     try {
-      await updateDoc(doc(db, 'comunidad', id), { likes: increment(1) });
-      setMensajes(prev => prev.map(m => m.id === id ? { ...m, likes: (m.likes || 0) + 1 } : m));
+      const current = mensajes.find(m => m.id === id);
+      const newLikes = (current?.likes || 0) + 1;
+      const { error } = await supabase.from('comunidad').update({ likes: newLikes }).eq('id', id);
+      if (error) throw error;
+      setMensajes(prev => prev.map(m => m.id === id ? { ...m, likes: newLikes } : m));
     } catch (e) {}
   };
 

@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Camera, Leaf, Calendar, Store, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
-import { sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 import SelectorUbicacion from './SelectorUbicacion';
 import OnlineStatus from './OnlineStatus';
 import AgentStatus from './AgentStatus';
@@ -72,12 +71,14 @@ export default function Layout({ children }) {
     setClaveError('');
     setClaveExito(false);
     try {
-      await sendPasswordResetEmail(auth, claveEmail.trim());
+      const { error } = await supabase.auth.resetPasswordForEmail(claveEmail.trim());
+      if (error) throw error;
       setClaveExito(true);
     } catch (e) {
-      if (e.code === 'auth/user-not-found') {
+      const msg = e.message || '';
+      if (msg.includes('not found')) {
         setClaveError('No existe una cuenta con ese correo');
-      } else if (e.code === 'auth/invalid-email') {
+      } else if (msg.includes('invalid')) {
         setClaveError('Correo inválido');
       } else {
         setClaveError('Error al enviar. Intenta de nuevo.');

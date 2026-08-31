@@ -9,8 +9,7 @@ import { useAuth } from '../lib/AuthContext';
 import { cargarOfertasRegistradas } from '../lib/ofertasRegistradas';
 import VoiceAssistant from '../components/VoiceAssistant';
 import RegistroTienda from '../components/RegistroTienda';
-import { db } from '../lib/firebase';
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 
 const FILTROS_REGION = ['todas', 'cajamarca', 'lambayeque', 'piura', 'ica', 'junín'];
 
@@ -34,22 +33,22 @@ export default function MercadoPage() {
   const [confirmEliminar, setConfirmEliminar] = useState(null);
 
   const abrirRegistro = useCallback(() => {
-    if (!user?.uid) {
+    if (!(user?.id || user?.uid)) {
       navigate('/registro?redirect=/mercado&tab=mitienda');
       return;
     }
     setTiendaEditando(null);
     setMostrarRegistro(true);
-  }, [user?.uid, navigate]);
+  }, [user?.id, user?.uid, navigate]);
 
   const abrirEdicion = useCallback((tienda) => {
-    if (!user?.uid) {
+    if (!(user?.id || user?.uid)) {
       navigate('/registro?redirect=/mercado&tab=mitienda');
       return;
     }
     setTiendaEditando(tienda);
     setMostrarRegistro(true);
-  }, [user?.uid, navigate]);
+  }, [user?.id, user?.uid, navigate]);
 
   useEffect(() => {
     const t = searchParams.get('tab');
@@ -76,30 +75,20 @@ export default function MercadoPage() {
   useEffect(() => { recargarOfertas(); }, [recargarOfertas]);
 
   const cargarMisTiendas = useCallback(async () => {
-    if (!user?.uid) {
+    const uid = user?.id || user?.uid;
+    if (!uid) {
       setMisTiendas([]);
       return;
     }
     setCargandoTiendas(true);
     try {
-      const porUid = query(
-        collection(db, 'tiendas_comunidad'),
-        where('propietarioId', '==', user.uid),
-      );
-      const snap = await getDocs(porUid);
-      let tiendas = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((t) => t.activa !== false);
+      const { data: porUidData, error } = await supabase.from('tiendas_comunidad').select('*').eq('propietarioId', uid);
+      if (error) throw error;
+      let tiendas = (porUidData || []).filter((t) => t.activa !== false);
 
       if (tiendas.length === 0 && user.email) {
-        const porEmail = query(
-          collection(db, 'tiendas_comunidad'),
-          where('propietarioEmail', '==', user.email),
-        );
-        const snapEmail = await getDocs(porEmail);
-        tiendas = snapEmail.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((t) => t.activa !== false);
+        const { data: porEmailData } = await supabase.from('tiendas_comunidad').select('*').eq('propietarioEmail', user.email);
+        tiendas = (porEmailData || []).filter((t) => t.activa !== false);
       }
 
       tiendas.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
@@ -109,7 +98,7 @@ export default function MercadoPage() {
       setMisTiendas([]);
     }
     setCargandoTiendas(false);
-  }, [user?.uid, user?.email]);
+  }, [user?.id, user?.uid, user?.email]);
 
   useEffect(() => {
     cargarMisTiendas();
@@ -118,11 +107,11 @@ export default function MercadoPage() {
   const eliminarTienda = async (tienda) => {
     setEliminandoId(tienda.id);
     try {
-      await updateDoc(doc(db, 'tiendas_comunidad', tienda.id), {
+      await supabase.from('tiendas_comunidad').update({
         activa: false,
         eliminadaAt: new Date().toISOString(),
-        eliminadaPor: user.uid,
-      });
+        eliminadaPor: user?.id || user?.uid,
+      }).eq('id', tienda.id);
       setMisTiendas((prev) => prev.filter((t) => t.id !== tienda.id));
       setConfirmEliminar(null);
       recargarOfertas(true);
@@ -332,7 +321,7 @@ export default function MercadoPage() {
       {/* ── TAB MI TIENDA ── */}
       {tab === 'mitienda' && (
         <div>
-          {!user?.uid ? (
+          {!(user?.id || user?.uid) ? (
             <div className="text-center py-8 mb-4 bg-white rounded-2xl border border-gray-100 p-6">
               <Store size={40} className="text-gray-300 mx-auto mb-3" />
               <h2 className="font-bold text-gray-700 mb-1">Inicia sesión</h2>

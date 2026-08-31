@@ -1,18 +1,8 @@
 /**
  * Ofertas de tiendas registradas en Agrilux (tiendas_comunidad + precios_historicos).
- * Intenta API server-side; si Firebase Admin no está en Vercel, usa Firestore del cliente.
+ * Intenta API server-side; si no disponible, usa Supabase directo.
  */
-import { db } from './firebase';
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  where,
-} from 'firebase/firestore';
+import { supabase } from './supabase';
 
 const PRODUCTOS = {
   urea: 'Urea 46-0-0',
@@ -63,22 +53,17 @@ async function cargarOfertasFirestore({ lat, lon, cultivo = '' } = {}) {
   const ofertas = [];
 
   try {
-    const preciosSnap = await getDocs(
-      query(collection(db, 'precios_historicos'), orderBy('fecha', 'desc'), limit(100)),
-    );
+    const { data: preciosData, error: preciosError } = await supabase.from('precios_historicos').select('*').order('fecha', { ascending: false }).limit(100);
+    if (preciosError) throw preciosError;
 
-    const tiendaIds = [...new Set(preciosSnap.docs.map((d) => d.data().tiendaId).filter(Boolean))];
+    const tiendaIds = [...new Set((preciosData || []).map((d) => d.tiendaId).filter(Boolean))];
     const tiendasMap = {};
     await Promise.all(tiendaIds.map(async (id) => {
-      const tiendaDoc = await getDoc(doc(db, 'tiendas_comunidad', id));
-      if (tiendaDoc.exists()) {
-        const data = tiendaDoc.data();
-        if (data.propietarioId) tiendasMap[id] = { id: tiendaDoc.id, ...data };
-      }
+      const { data } = await supabase.from('tiendas_comunidad').select('*').eq('id', id).single();
+      if (data && data.propietarioId) tiendasMap[id] = data;
     }));
 
-    for (const precioDoc of preciosSnap.docs) {
-      const p = precioDoc.data();
+    for (const p of (preciosData || [])) {
       const tienda = tiendasMap[p.tiendaId];
       ofertas.push({
         tienda: p.tiendaNombre || tienda?.nombre || 'Tienda',
@@ -94,17 +79,15 @@ async function cargarOfertasFirestore({ lat, lon, cultivo = '' } = {}) {
       });
     }
   } catch {
-    // Sin índice o permisos en precios_historicos — seguir con tiendas
+    // Sin datos precios_historicos — seguir con tiendas
   }
 
   if (ofertas.length === 0) {
     try {
-      const tiendasSnap = await getDocs(
-        query(collection(db, 'tiendas_comunidad'), where('activa', '==', true), limit(50)),
-      );
+      const { data: tiendasData, error } = await supabase.from('tiendas_comunidad').select('*').eq('activa', true).limit(50);
+      if (error) throw error;
 
-      for (const tiendaDoc of tiendasSnap.docs) {
-        const tienda = tiendaDoc.data();
+      for (const tienda of (tiendasData || [])) {
         if (!tienda.propietarioId) continue;
         const preciosActuales = tienda.preciosActuales || {};
         const entries = Object.entries(preciosActuales);
@@ -141,7 +124,7 @@ async function cargarOfertasFirestore({ lat, lon, cultivo = '' } = {}) {
         }
       }
     } catch (e) {
-      console.warn('Firestore ofertas fallback:', e.message);
+      console.warn('Supabase ofertas fallback:', e.message);
     }
   }
 
@@ -150,7 +133,7 @@ async function cargarOfertasFirestore({ lat, lon, cultivo = '' } = {}) {
     ofertas: filtradas,
     total: filtradas.length,
     timestamp: new Date().toISOString(),
-    source: 'firestore-client',
+    source: 'supabase-client',
   };
 }
 
@@ -164,7 +147,7 @@ export async function cargarOfertasRegistradas({ lat, lon, cultivo = '' } = {}) 
     const res = await fetch(`/api/tiendas?${params}`);
     const data = await res.json().catch(() => ({}));
 
-    if (res.ok && data.firebase_ok !== false) {
+    if (res.ok && data.firebase_ok !== false && data.supabase_ok !== false) {
       return {
         ofertas: data.ofertas || [],
         total: data.total || 0,

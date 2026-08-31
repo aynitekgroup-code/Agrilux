@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/api/supabase-proxy/:path*", "destination": "https://rtznwwggggjcjfjzqsax.supabase.co/:path*" },
     { "source": "/api/senamhi-scraper", "destination": "/api/senamhi" },
     { "source": "/api/voice-sales", "destination": "/api/voice-assistant" },
     { "source": "/api/plant-disease", "destination": "/api/analizar-imagen" },

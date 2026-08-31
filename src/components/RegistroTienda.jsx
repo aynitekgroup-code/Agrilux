@@ -2,14 +2,12 @@
  * src/components/RegistroTienda.jsx
  *
  * Formulario para que usuarios registren su tienda agrícola
- * Se almacena en Firestore colección 'tiendas_comunidad'
+ * Se almacena en Supabase tabla 'tiendas_comunidad'
  */
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { db, storage } from '../lib/firebase';
-import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import {
   Store, MapPin, Globe, Camera, Image as ImageIcon,
@@ -51,8 +49,9 @@ function tiendaAFormulario(tienda) {
 }
 
 function puedeEditarTienda(tienda, user) {
-  if (!user?.uid || !tienda) return false;
-  if (tienda.propietarioId === user.uid) return true;
+  const uid = user?.id || user?.uid;
+  if (!uid || !tienda) return false;
+  if (tienda.propietarioId === uid) return true;
   if (user.email && tienda.propietarioEmail === user.email) return true;
   return false;
 }
@@ -143,13 +142,14 @@ export default function RegistroTienda({ onCerrado, onRegistrada, tienda = null 
     setSubiendoFoto(true);
     setError('');
     try {
-      const userId = user.uid;
+      const userId = user?.id || user?.uid;
       const timestamp = Date.now();
       const extension = archivo.name.split('.').pop();
-      const storageRef = ref(storage, `tiendas/${userId}_${timestamp}.${extension}`);
-      await uploadBytes(storageRef, archivo);
-      const url = await getDownloadURL(storageRef);
-      setForm(f => ({ ...f, fotos: [...f.fotos, url] }));
+      const fileName = `${userId}_${timestamp}.${extension}`;
+      const { error: uploadError } = await supabase.storage.from('tiendas').upload(fileName, archivo, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage.from('tiendas').getPublicUrl(fileName);
+      setForm(f => ({ ...f, fotos: [...f.fotos, publicUrl] }));
     } catch (err) {
       setError('Error al subir imagen: ' + err.message);
     }
@@ -162,7 +162,8 @@ export default function RegistroTienda({ onCerrado, onRegistrada, tienda = null 
   };
 
   const guardar = async () => {
-    if (!user?.uid) {
+    const uid = user?.id || user?.uid;
+    if (!uid) {
       setError('Debes iniciar sesión para registrar tu tienda');
       return;
     }
@@ -197,7 +198,8 @@ export default function RegistroTienda({ onCerrado, onRegistrada, tienda = null 
       };
 
       if (esEdicion) {
-        await updateDoc(doc(db, 'tiendas_comunidad', tienda.id), payload);
+        const { error } = await supabase.from('tiendas_comunidad').update(payload).eq('id', tienda.id);
+        if (error) throw error;
         setExito(true);
         if (onRegistrada) {
           onRegistrada({ id: tienda.id, ...tienda, ...payload });
@@ -205,7 +207,7 @@ export default function RegistroTienda({ onCerrado, onRegistrada, tienda = null 
       } else {
         const tiendaData = {
           ...payload,
-          propietarioId: user.uid,
+          propietarioId: uid,
           propietarioNombre: user?.nombre || null,
           propietarioEmail: user?.email || null,
           fuente: 'comunidad',
@@ -216,10 +218,11 @@ export default function RegistroTienda({ onCerrado, onRegistrada, tienda = null 
           createdAt: new Date().toISOString(),
         };
 
-        const docRef = await addDoc(collection(db, 'tiendas_comunidad'), tiendaData);
+        const { data, error } = await supabase.from('tiendas_comunidad').insert(tiendaData).select().single();
+        if (error) throw error;
         setExito(true);
         if (onRegistrada) {
-          onRegistrada({ id: docRef.id, ...tiendaData });
+          onRegistrada({ id: data.id, ...tiendaData });
         }
       }
     } catch (e) {
@@ -228,7 +231,7 @@ export default function RegistroTienda({ onCerrado, onRegistrada, tienda = null 
     setLoading(false);
   };
 
-  if (!user?.uid) {
+  if (!(user?.id || user?.uid)) {
     return (
       <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-6">
         <div className="bg-white rounded-3xl w-full max-w-sm p-8 text-center space-y-4">

@@ -17,8 +17,7 @@ import {
   getPronosticoSENAMHI,
 } from '../lib/externalApis';
 import { CULTIVOS }      from '../lib/constants';
-import { db }            from '../lib/firebase';
-import { collection, addDoc } from 'firebase/firestore';
+import { supabase }      from '../lib/supabase';
 
 import { SISTEMA_PROMPT, CHAT_SYSTEM, ANALISIS_SCHEMA } from './diagnostico/diagnosticoPrompts';
 import SelectorUbicacion  from '../components/SelectorUbicacion';
@@ -288,7 +287,7 @@ Responde SOLO con este JSON (sin markdown):
 
       try {
         const diagnosticoData = {
-          userId:        user?.uid    ?? null,
+          userId:        (user?.id || user?.uid) ?? null,
           userName:      user?.nombre ?? null,
           userEmail:     user?.email  ?? null,
           cultivo:       cultivo.id,
@@ -310,16 +309,17 @@ Responde SOLO con este JSON (sin markdown):
         };
 
         if (isOnline()) {
-          await addDoc(collection(db, 'diagnosticos'), diagnosticoData);
+          const uid = user?.id || user?.uid || null;
+          await supabase.from('diagnosticos').insert({ ...diagnosticoData, userId: uid }).select();
         } else {
           await guardarDiagnosticoOffline(diagnosticoData);
         }
 
         // Guardar en historial clínico para sistema de aprendizaje
-        if (user?.uid && analisis.tiene_problema) {
+        if ((user?.id || user?.uid) && analisis.tiene_problema) {
           try {
             const historialIdResult = await guardarHistorialClinico({
-              userId: user.uid,
+              userId: user.id || user.uid,
               parcelaId: null, // Se puede asociar después
               parcelaNombre: user?.ubicacion || '',
               cultivo: cultivo.id,
@@ -514,10 +514,10 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
   };
 
   const cargarHistorialParcela = async () => {
-    if (!user?.uid) return;
+    if (!(user?.id || user?.uid)) return;
     
     try {
-      const resumen = await getResumenProblemas(user.uid);
+      const resumen = await getResumenProblemas(user.id || user.uid);
       setResumenHistorial(resumen);
     } catch (error) {
       console.error('Error al cargar historial:', error);
@@ -526,10 +526,10 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
 
   // Cargar historial al montar
   useEffect(() => {
-    if (user?.uid) {
+    if (user?.id || user?.uid) {
       cargarHistorialParcela();
     }
-  }, [user?.uid]);
+  }, [user?.id, user?.uid]);
 
   /* ═══════════════════════════════════════════════
      PANTALLA RESULTADO
