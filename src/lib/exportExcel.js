@@ -10,12 +10,12 @@ export function exportarParcelasExcel(parcelas, registros) {
   // Hoja de parcelas
   const datosParcelas = parcelas.map(p => ({
     'Nombre': p.nombre,
-    'Cultivo': p.cultivoNombre || p.cultivo,
+    'Cultivo': p.cultivo_nombre || p.cultivo,
     'Variedad': p.variedad || '-',
     'Área (ha)': p.area || '-',
-    'Fecha siembra': p.fechaSiembra || '-',
-    'Días desde siembra': p.fechaSiembra
-      ? Math.floor((new Date() - new Date(p.fechaSiembra)) / (1000 * 60 * 60 * 24))
+    'Fecha siembra': p.fecha_siembra || '-',
+    'Días desde siembra': p.fecha_siembra
+      ? Math.floor((new Date() - new Date(p.fecha_siembra)) / (1000 * 60 * 60 * 24))
       : '-',
     'Puntos mapeados': p.coordenadas?.length || 0,
     'Estado': 'Activa',

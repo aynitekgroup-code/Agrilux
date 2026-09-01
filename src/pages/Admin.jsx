@@ -244,16 +244,16 @@ function ModalAgregarUsuario({ onCerrar, onAgregado }) {
     try {
       const emailSintetico = nombreToEmail(form.nombre.trim());
       const uid = `manual_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      const { error } = await supabase.from('usuarios').insert({
+        const { error } = await supabase.from('usuarios').insert({
         id: uid,
         nombre:         form.nombre.trim(),
-        emailSintetico,
+        email_sintetico: emailSintetico,
         rol:            form.rol,
         celular:        form.celular || null,
         ubicacion:      form.ubicacion || null,
-        passwordDefault: pass,
-        creadoPor:      'admin',
-        createdAt:      new Date().toISOString(),
+        password_default: pass,
+        creado_por:      'admin',
+        created_at:      new Date().toISOString(),
       });
       if (error) throw error;
       onAgregado({ id: uid, ...form, emailSintetico, creadoPor: 'admin' });
@@ -365,7 +365,7 @@ function ModalEditarUsuario({ usuario, onCerrar, onGuardado }) {
         celular: form.celular.trim() || null,
         ubicacion: form.ubicacion.trim() || null,
         rol: form.rol,
-        updatedAt: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
       const { error } = await supabase.from('usuarios').update(datos).eq('id', usuario.id);
       if (error) throw error;
@@ -514,14 +514,14 @@ function ModalAliado({ aliado, onCerrar, onGuardado }) {
         empresa: form.empresa.trim() || null,
         notas: form.notas.trim() || null,
         tipo: form.tipo,
-        updatedAt: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
       if (esEdicion) {
         const { error } = await supabase.from('aliados').update(datos).eq('id', aliado.id);
         if (error) throw error;
         onGuardado({ id: aliado.id, ...aliado, ...datos });
       } else {
-        const payload = { ...datos, createdAt: new Date().toISOString() };
+        const payload = { ...datos, created_at: new Date().toISOString() };
         const { data, error } = await supabase.from('aliados').insert(payload).select().single();
         if (error) throw error;
         onGuardado({ id: data.id, ...datos, createdAt: new Date().toISOString() });
@@ -711,12 +711,12 @@ function AliadosPanel({ onActualizar }) {
     let mounted = true;
     const cargar = async () => {
       try {
-        const { data, error } = await supabase.from('aliados').select('*').order('createdAt', { ascending: false });
+        const { data, error } = await supabase.from('aliados').select('*').order('created_at', { ascending: false });
         if (error) throw error;
         if (mounted) {
           const sorted = (data || []).sort((a, b) => {
-            const fa = a.createdAt || '';
-            const fb = b.createdAt || '';
+            const fa = a.created_at || '';
+            const fb = b.created_at || '';
             return fa > fb ? -1 : fa < fb ? 1 : 0;
           });
           setAliados(sorted);
@@ -822,7 +822,7 @@ function AliadosPanel({ onActualizar }) {
                     )}
                   </div>
                 </div>
-                <p className="text-[10px] text-gray-300">{formatFecha(a.createdAt)}</p>
+                <p className="text-[10px] text-gray-300">{formatFecha(a.created_at)}</p>
               </div>
 
               {a.notas && (
@@ -966,16 +966,16 @@ function ModalTienda({ tienda, onCerrar, onGuardado }) {
         productos: form.productos.trim() || null,
         horario:   form.horario.trim() || null,
         notas:     form.notas.trim() || null,
-        actualizadoEn: new Date().toISOString(),
+        actualizado_en: new Date().toISOString(),
       };
 
       if (esEdicion) {
         const { error } = await supabase.from('tiendas').update(datos).eq('id', tienda.id);
         if (error) throw error;
-        onGuardado({ id: tienda.id, ...datos, createdAt: tienda.createdAt });
+        onGuardado({ id: tienda.id, ...datos, created_at: tienda.created_at });
       } else {
-        datos.createdAt = new Date().toISOString();
-        datos.creadoPor = 'admin';
+        datos.created_at = new Date().toISOString();
+        datos.creado_por = 'admin';
         const { data, error } = await supabase.from('tiendas').insert(datos).select().single();
         if (error) throw error;
         onGuardado({ id: data.id, ...datos });
@@ -1189,7 +1189,7 @@ export default function Admin() {
     let mounted = true;
     const cargar = async (table, setter) => {
       try {
-        const { data, error } = await supabase.from(table).select('*').order('createdAt', { ascending: false });
+        const { data, error } = await supabase.from(table).select('*').order('created_at', { ascending: false });
         if (error) throw error;
         if (mounted) setter(data || []);
       } catch {
@@ -1217,7 +1217,7 @@ export default function Admin() {
       const diagSer  = diagnosticos.map(serializarDoc);
       const userSer  = usuarios.map(d => {
         // No exportar passwordDefault por seguridad
-        const { passwordDefault, ...resto } = serializarDoc(d);
+        const { password_default, ...resto } = serializarDoc(d);
         return resto;
       });
 
@@ -1415,7 +1415,7 @@ export default function Admin() {
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <p className="text-xs text-gray-300">{formatFecha(u.createdAt)}</p>
+                       <p className="text-xs text-gray-300">{formatFecha(u.created_at)}</p>
                       {expandido === u.id ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
                     </div>
                   </button>
@@ -1426,8 +1426,8 @@ export default function Admin() {
                         {[
                           { icon: MapPin, label: 'Ubicación', val: u.ubicacion || '—' },
                           { icon: Phone, label: 'Celular', val: u.celular || '—' },
-                          { icon: Calendar, label: 'Registro', val: formatFecha(u.createdAt) },
-                          { icon: Users, label: 'Diagnósticos', val: diagnosticos.filter(d => d.userId === u.id).length },
+                           { icon: Calendar, label: 'Registro', val: formatFecha(u.created_at) },
+                           { icon: Users, label: 'Diagnósticos', val: diagnosticos.filter(d => d.user_id === u.id).length },
                         ].map(({ icon: Icon, label, val }) => (
                           <div key={label} className="bg-gray-50 rounded-xl p-3">
                             <div className="flex items-center gap-1 mb-1"><Icon size={11} className="text-gray-400" /><p className="text-xs text-gray-400">{label}</p></div>
@@ -1440,8 +1440,8 @@ export default function Admin() {
                       <div className="bg-blue-50 rounded-xl p-3">
                         <p className="text-xs font-bold text-blue-600 mb-1">🔑 Datos de acceso (solo tú ves esto)</p>
                         <p className="text-xs text-blue-700">Nombre: <strong>{u.nombre}</strong></p>
-                        {u.passwordDefault && (
-                          <p className="text-xs text-blue-700 mt-0.5">Contraseña: <strong>{u.passwordDefault}</strong></p>
+                        {u.password_default && (
+                          <p className="text-xs text-blue-700 mt-0.5">Contraseña: <strong>{u.password_default}</strong></p>
                         )}
                       </div>
 
@@ -1643,7 +1643,7 @@ export default function Admin() {
 
             <div className="space-y-2">
               {diagFiltrados.map(d => {
-                const autorNombre = usuarios.find(u => u.id === d.userId)?.nombre || d.userName || 'Desconocido';
+                const autorNombre = usuarios.find(u => u.id === d.user_id)?.nombre || d.user_name || 'Desconocido';
                 const res = d.resultado || {};
                 return (
                   <div key={d.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -1654,16 +1654,16 @@ export default function Admin() {
                       </span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="font-semibold text-sm text-gray-800 capitalize">{d.cultivoNombre || d.cultivo || 'General'}</p>
+                          <p className="font-semibold text-sm text-gray-800 capitalize">{d.cultivo_nombre || d.cultivo || 'General'}</p>
                           {res.tiene_problema !== undefined && (
                             <span className={`text-xs px-1.5 py-0.5 rounded-full ${res.tiene_problema ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
                               {res.tiene_problema ? '⚠ ' + (res.gravedad || 'problema') : '✓ sano'}
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-400 truncate">{autorNombre} · {res.nombre_problema || d.consultaTexto || '—'}</p>
+                        <p className="text-xs text-gray-400 truncate">{autorNombre} · {res.nombre_problema || d.consulta_texto || '—'}</p>
                       </div>
-                      <p className="text-xs text-gray-300 flex-shrink-0">{formatFecha(d.fecha || d.createdAt)}</p>
+                      <p className="text-xs text-gray-300 flex-shrink-0">{formatFecha(d.fecha || d.created_at)}</p>
                     </button>
 
                     {expandido === d.id && (
@@ -1675,7 +1675,7 @@ export default function Admin() {
                           </div>
                           <div className="bg-gray-50 rounded-xl p-3">
                             <p className="text-xs text-gray-400 mb-1">Fecha</p>
-                            <p className="text-sm font-semibold text-gray-700">{formatFecha(d.fecha || d.createdAt)}</p>
+                            <p className="text-sm font-semibold text-gray-700">{formatFecha(d.fecha || d.created_at)}</p>
                           </div>
                         </div>
                         {res.nombre_problema && (
@@ -1686,10 +1686,10 @@ export default function Admin() {
                             <p className="text-xs text-gray-600 mt-1">{res.que_tiene}</p>
                           </div>
                         )}
-                        {d.climaContexto && (
+                        {d.clima_contexto && (
                           <div className="bg-blue-50 rounded-xl p-3">
                             <p className="text-xs font-bold text-blue-600 mb-1">🌡 Contexto climático usado</p>
-                            <p className="text-xs text-blue-700">{d.climaContexto}</p>
+                            <p className="text-xs text-blue-700">{d.clima_contexto}</p>
                           </div>
                         )}
                         {res.productos?.length > 0 && (
@@ -1719,7 +1719,7 @@ export default function Admin() {
                   { emoji: '👥', val: usuarios.length, label: 'Usuarios' },
                   { emoji: '🔬', val: diagnosticos.length, label: 'Diagnósticos' },
                   { emoji: '🤖', val: diagnosticos.filter(d => (d.resultado?.nombre_problema || d.pregunta) && d.resultado?.que_hacer).length, label: 'Pares training' },
-                  { emoji: '🌡', val: diagnosticos.filter(d => d.climaContexto).length, label: 'Con contexto clima' },
+                  { emoji: '🌡', val: diagnosticos.filter(d => d.clima_contexto).length, label: 'Con contexto clima' },
                 ].map(s => (
                   <div key={s.label} className="bg-white/10 rounded-xl p-3">
                     <p className="text-xl">{s.emoji}</p>

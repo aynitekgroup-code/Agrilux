@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Importar datos a Supabase</title>
+<style>
+body{font-family:monospace;background:#1a1a2e;color:#e0e0e0;padding:20px}
+h1{color:#00d2ff}
+#log{background:#0d1117;border:1px solid #333;padding:10px;height:400px;overflow-y:auto;font-size:12px;white-space:pre-wrap}
+.btn{background:#00d2ff;color:#000;border:none;padding:10px 20px;font-size:16px;cursor:pointer;border-radius:5px;margin:5px}
+.btn:hover{background:#00b8d9}
+.btn:disabled{background:#555;cursor:not-allowed}
+.ok{color:#00ff88}.err{color:#ff4444}.info{color:#00d2ff}
+</style>
+</head>
+<body>
+<h1>Importar datos a Supabase - Agrilux</h1>
+<p>Haz clic en "Importar" para subir todos los datos via REST API.</p>
+<button class="btn" id="btnImport" onclick="startImport()">Importar datos</button>
+<button class="btn" onclick="clearLog()">Limpiar log</button>
+<div id="log"></div>
+
+<script>
+const SUPABASE_URL = 'https://rtznwwggggjcjfjzqsax.supabase.co';
+const SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0em53d2dnZ2dqY2pmanpxc2F4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4ODAxMzA0NSwiZXhwIjoyMTAzNTg5MDQ1fQ.nhTr5RfIlPBI0FL4k9ZIwewsbnq2bNOosgWDDYWCE2M';
+
+const logEl = document.getElementById('log');
+function log(msg, cls='info') {
+  logEl.innerHTML += '<span class="'+cls+'">'+msg+'</span>\n';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function clearLog() { logEl.innerHTML = ''; }
+
+// All data to import (snake_case columns matching DB schema)
+const DATA = {
+  usuarios: [
+    {"id":"1fJJYyrXCJUTQC1a17ZsjYXgJnX2","nombre":"Ayni tek","email":"aynitek.group@gmail.com","ubicacion":"cutervo, cajamarca","whatsapp":"51920789045","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-08-26T02:34:21.098Z"},
+    {"id":"1zeKGra1FQdBpQ2oPbGfFwxn2dS2","nombre":"Serapio Dávila Díaz","email":"davilaserapio@7a.com","ubicacion":"976969279","whatsapp":"976969279","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-06-02T06:58:01.849Z","celular":"976969279"},
+    {"id":"44uWYKITa3c3Ooa4xtemrCex3Ym2","nombre":"jose llanos davila","email":"jose.llanos.d@uni.pe","whatsapp":"920277794","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-07-27T08:03:09.292Z","celular":"920277794"},
+    {"id":"7m6qge64Byd8vrkvNepF7KYGzZy2","nombre":"Rockny Roberto","email":"chrockny@gmail.com","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-05-21T03:30:12.442Z"},
+    {"id":"9tqhoyQnbWbXDb2pBCLGUgLckR52","nombre":"Ayni tek","email":"aynitek.group@gmail.com","ubicacion":"cutervo, cajamarca","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-07-28T05:37:07.406Z"},
+    {"id":"user_1779944048451","nombre":"Abdel","email":"","ubicacion":"Perú","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-05-28T09:54:08.455Z"},
+    {"id":"EYUeChcha6dSS1BgGdrvqmbsmof1","nombre":"José Torres Chilcón","email":"josevicentechilcontorres@gmail.com","ubicacion":"Cutervo  Cajamarca","whatsapp":"913607526","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-06-03T06:08:11.618Z","celular":"913607526"},
+    {"id":"Euld2or9G2VEyzVts9SXNoIfvDi2","nombre":"José Edin Llanos Dávila","email":"jose.llanos.d@uni.pe","ubicacion":"cutervo, cajamarca","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-07-28T13:18:32.511Z"},
+    {"id":"GsCQ2RXNkzLOWPxNLQKNxDWBVYy2","nombre":"José Edin llanos Dávila","email":"joseedinllanos@gmail.com","ubicacion":"-8.7106, -76.5332","coords":{"lon":-76.53324688101128,"lat":-8.710560703802383},"rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-07-28T13:21:38.231Z"},
+    {"id":"I0HmZlSafJUmeY6Vi7IN2qVU58y1","nombre":"Mercedes Davila Chuquicahua","email":"davilachmercedes@gmail.com","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-05-28T02:48:51.149Z"},
+    {"id":"ODl6q0HIHzuzBXuN1C9D","nombre":"josé edin llanos","email":"","ubicacion":"cutervo, cutervo","whatsapp":"935211605","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-03-23T00:53:28.695Z"},
+    {"id":"RcxgfSmiDoedcsztncpT80Aka1j1","nombre":"Juan Perez","email":"juan.perez@example.com","ubicacion":"Cutervo, Cajamarca","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-08-08T05:32:38.674Z"},
+    {"id":"RmXq0av83DTh9zwuU6fqnhnC5u02","nombre":"juan perez","email":"jose.llanos.d@uni.pe","ubicacion":"San Martín de Porres, Lima","whatsapp":"51920789045","coords":{"lat":-12.023540698508224,"lon":-77.05144072603467},"rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-08-24T19:05:05.021Z"},
+    {"id":"Rusl0JATlnXNfkXqBQwoJ9QGEB63","nombre":"Diego Rodriguez","email":"nicolasrodriguezponce@gmail.com","ubicacion":"La Molina, Lima","whatsapp":"997328158","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-06-09T15:02:21.317Z","celular":"997328158"},
+    {"id":"S120XmP78XcpaUZzoqlD1i82Ib82","nombre":"jose edin llanos","email":"jose.llanos.d@uni.pe","ubicacion":"cutervo, cajamarca","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-07-27T08:39:58.320Z"},
+    {"id":"U9kCrSbsKxe3wKjt5voj6lA2Ujv1","nombre":"Juan Perez","email":"juan.perez.test12345@example.com","ubicacion":"Cutervo, Cajamarca","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-08-08T05:33:08.263Z"},
+    {"id":"XMLIOCfbImWsvnKUFWk4K8p7Q4h1","nombre":"Edin llanos davila","email":"aynitek.group@gmail.com","ubicacion":"Cutervo, cajamarca, peru","whatsapp":"935211605","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-06-04T08:13:03.208Z","celular":"935211605"},
+    {"id":"YnzXb2apQAfEz7bsD9Ycsi7svxs2","nombre":"francklyn purizaca vasquez","email":"purizacavasquezfrancklyn@gmail.com","ubicacion":"Olmos, Lambayeque","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-07-30T13:01:39.206Z"},
+    {"id":"ZGyK1W4xhITyq4hVsfSnawJG3gb2","nombre":"José Edin llanos Dávila","email":"joseedinllanosdavila73@gmail.com","ubicacion":"San Martín de Porres, Lima","whatsapp":"51920277794","coords":{"lon":-77.0551871,"lat":-12.0266836},"rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-08-20T14:58:50.223Z"},
+    {"id":"a4VWWOQQOdaEriGztVda7i1jcp92","nombre":"francklyn purizaca vasquez","email":"purizacafrancklyn@hotmail.com","ubicacion":"Olmos, Lambayeque","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-07-30T13:02:21.289Z"},
+    {"id":"auHvZTtdtFV44sOqbhep2MNqYfC2","nombre":"José Edin Llanos Dávila","email":"jose.llanos.d@uni.pe","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-07-28T03:28:01.341Z"},
+    {"id":"c7foiY2YUSQQIQDiQ6eSsuJSXgF2","nombre":"José Edin llanos Dávila ","email":"joseedinllanos@gmail.com","ubicacion":"Cutervo, Cutervo","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-05-03T23:47:06.385Z"},
+    {"id":"eCrI6WOBhihNY5VoE1pqaCK99k72","nombre":"Alex llanos Dávila","email":"alexlld0512@gmail.com","ubicacion":"Cutervo, Cutervo","whatsapp":"969384952","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-06-02T19:17:44.770Z","celular":"969384952"},
+    {"id":"ikOdvV0FefVC3O9nGCaAfyuekmK2","nombre":"Ayni tek","email":"aynitek.group@gmail.com","ubicacion":"cutervo, cajamarca","whatsapp":"51920789045","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-08-26T02:25:15.373Z"},
+    {"id":"jM9XWjdjRiYzksSn1LjF8asyudz2","nombre":"lindher","email":"lintrans1111@gmail.com","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-04-28T01:16:06.498Z"},
+    {"id":"oToebrIeItcQhxcLXpoEDFqyYif1","nombre":"Juan Perez","email":"agriluxtest999@gmail.com","ubicacion":"Cutervo, Cajamarca","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-08-08T05:33:52.624Z"},
+    {"id":"qOzoEViRB9VhD1EAkzC8mJ8OHR72","nombre":"Neiser Molocho","email":"wolfpanda2001flow3@gmail.com","ubicacion":"Cutervo","whatsapp":"972278117","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-06-02T19:16:04.554Z","celular":"972278117"},
+    {"id":"r3mnxhvEnPV9GDQbMN8KmAyg34v2","nombre":"jose edin llanos davila","email":"jose.llanos.d@uni.pe","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-07-27T08:38:27.298Z"},
+    {"id":"wzO7nbiJNKVdNUH7kBmRY3UNSE43","nombre":"lind","email":"lindher.cardenas.s@uni.pe","ubicacion":"cajamarca","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-05-18T05:22:48.600Z"},
+    {"id":"yhC9xTlB6yPlERoUgg2dh2WNsxq1","nombre":"Carlos Pérez Dávila","email":"visionario2306@gmail.com","ubicacion":"Chongoyape, Lambayeque","whatsapp":"979350367","coords":{"lon":-79.4801428,"lat":-6.7458324},"rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-06-02T19:19:17.550Z","celular":"979350367"},
+    {"id":"zQP5fxuVMKazVZQZCKVtgoN5qls1","nombre":"Hernán rodriguez","email":"herodriguez83@hotmail.com","whatsapp":"997974660","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-06-02T06:52:44.409Z","celular":"997974660"},
+    {"id":"zskmtmnJj4Mh2cVbDq2QmAuODvv2","nombre":"Serapio Dávila Díaz","email":"davilaserapio@7a.com","rol":"agricultor","status":"aprobado","creado_por":"self","created_at":"2026-05-26T00:17:34.570Z"}
+  ],
+  diagnosticos: [
+    {"id":"0VYv5WqQkkCkhN2LxaH8","user_id":"yhC9xTlB6yPlERoUgg2dh2WNsxq1","user_name":"Carlos Pérez Dávila","user_email":"visionario2306@gmail.com","cultivo":"papa","cultivo_nombre":"Papa","con_foto":true,"clima_contexto":{"temperatura":"28.9°C","lluvia":"0.1mm","ph_suelo":"7.8"},"resultado":{"tiene_problema":false},"fecha":"2026-08-12T21:08:43.834Z","mes":8},
+    {"id":"327eT8b781AeJJArIO4g","cultivo":"papa","cultivo_nombre":"Papa","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Deficiencia de Nitrógeno","gravedad":"moderada"},"fecha":"2026-08-08T03:29:48.587Z","mes":8},
+    {"id":"35tlQjL7zgjz57gnNip6","user_id":"anonimo","user_name":"Agricultor","cultivo":"Cacao","con_foto":false,"resultado":{"tiene_problema":true,"nombre_problema":"Mancha Negra","gravedad":"moderada"},"fecha":"2026-04-16T06:24:36.010Z","mes":8},
+    {"id":"3TvsRAWqKpa2XYrnr94i","user_id":"yhC9xTlB6yPlERoUgg2dh2WNsxq1","user_name":"Carlos Pérez Dávila","user_email":"visionario2306@gmail.com","cultivo":"cana","cultivo_nombre":"Caña de azúcar","con_foto":true,"clima_contexto":{"temperatura":"22.4°C","lluvia":"0mm","ph_suelo":"7.5"},"resultado":{"tiene_problema":true,"nombre_problema":"Roya","nombre_cientifico":"Puccinia melanocephala","gravedad":"moderada"},"fecha":"2026-06-10T13:13:58.227Z","mes":6},
+    {"id":"3sODjfGqPHR5To7k6Lro","user_id":"user_1774866471708","user_name":"Mercedes Dávila","cultivo":"Maíz","con_foto":false,"resultado":{"tiene_problema":true,"nombre_problema":"Crecimiento desigual y posible estrés hídrico","gravedad":"moderada"},"fecha":"2026-04-03T20:47:36.776Z","mes":8},
+    {"id":"4TIPB6UC5iboWNTDhWPa","user_id":"BvMsG5HlkK2cGuqjvlDS","user_name":"jose edin llanos davila","cultivo":"Papa","con_foto":false,"resultado":{"tiene_problema":true,"nombre_problema":"Deficiencia de nutrientes","gravedad":"moderada"},"fecha":"2026-03-22T21:25:05.310Z","mes":8},
+    {"id":"4r0IW2xRQ4KCS2Q79hWC","user_id":"zQP5fxuVMKazVZQZCKVtgoN5qls1","user_name":"Hernán rodriguez","user_email":"herodriguez83@hotmail.com","cultivo":"maiz","cultivo_nombre":"Maíz","con_foto":true,"clima_contexto":{"temperatura":"18°C","lluvia":"0.2mm","ph_suelo":"7.9"},"resultado":{"tiene_problema":true,"nombre_problema":"Gusano cogollero","nombre_cientifico":"Spodoptera frugiperda","gravedad":"moderada"},"fecha":"2026-06-03T21:00:27.807Z","mes":6},
+    {"id":"4voxe2LUB1vD5IHj5W7e","user_id":"BvMsG5HlkK2cGuqjvlDS","user_name":"jose edin llanos davila","cultivo":"Papa","con_foto":false,"resultado":{"tiene_problema":true,"nombre_problema":"deficiencia de nutrientes","gravedad":"moderada"},"fecha":"2026-03-21T06:37:14.995Z","mes":8},
+    {"id":"5JzYi3vV2p56u8kc1g1O","cultivo":"cana","cultivo_nombre":"Caña de azúcar","con_foto":true,"resultado":{"tiene_problema":false},"fecha":"2026-08-28T04:27:36.019Z","mes":8},
+    {"id":"5SA3vX7gMXymY9q8QhMz","user_id":"1JAUNffdIZcpZ1OMBUFVL95zg6j2","user_name":"jose Edin Llanos Dávila","user_email":"jose.llanos.d@uni.pe","cultivo":"papa","cultivo_nombre":"Papa","con_foto":false,"resultado":{"tiene_problema":false},"fecha":"2026-05-23T12:42:27.460Z","mes":5},
+    {"id":"6kYhWhONCg056oNGjood","user_id":"9GdcjYjtvaW2YjiE6bdvwvRxmJV2","user_name":"José Edin Llanos Dávila","user_email":"jose.llanos.d@uni.pe","cultivo":"papaya","cultivo_nombre":"Papaya","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Antracnosis","nombre_cientifico":"Fusarium solani","gravedad":"ninguna"},"fecha":"2026-07-22T08:45:09.587Z","mes":7},
+    {"id":"6qO5FKGVA6p9VoTe61Ox","user_id":"1JAUNffdIZcpZ1OMBUFVL95zg6j2","user_name":"jose Edin Llanos Dávila","user_email":"jose.llanos.d@uni.pe","cultivo":"cana","cultivo_nombre":"Caña de azúcar","con_foto":false,"consulta_texto":"quiero identificar y prevenir enfermedades en mi campo de caña de azúcar, que hago","resultado":{"tiene_problema":true,"nombre_problema":"Consulta directa","gravedad":"leve"},"fecha":"2026-06-02T22:00:48.995Z","mes":6},
+    {"id":"7KWOiFhX3DVdPaBGbXUy","user_id":"XMLIOCfbImWsvnKUFWk4K8p7Q4h1","user_name":"Edin llanos davila","user_email":"aynitek.group@gmail.com","cultivo":"papa","cultivo_nombre":"Papa","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Deficiencia nutricional o estrés ambiental","gravedad":"moderada"},"fecha":"2026-06-11T15:25:07.237Z","mes":6},
+    {"id":"90j3CNaTHUX3HVUPdlF6","user_id":"1JAUNffdIZcpZ1OMBUFVL95zg6j2","user_name":"jose Edin Llanos Dávila","user_email":"jose.llanos.d@uni.pe","cultivo":"papa","cultivo_nombre":"Papa","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Tizón Tardío","nombre_cientifico":"Phytophthora infestans","gravedad":"moderada"},"fecha":"2026-06-02T04:10:19.313Z","mes":6},
+    {"id":"BFHrXXwsTTKr7LbMHONT","user_id":"XMLIOCfbImWsvnKUFWk4K8p7Q4h1","user_name":"Edin llanos davila","user_email":"aynitek.group@gmail.com","cultivo":"papa","cultivo_nombre":"Papa","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Deficiencia nutricional o estrés ambiental","gravedad":"moderada"},"fecha":"2026-06-11T16:09:58.284Z","mes":6},
+    {"id":"BLTVqGzBRJTEWuMENaKX","user_id":"XMLIOCfbImWsvnKUFWk4K8p7Q4h1","user_name":"Edin llanos davila","user_email":"aynitek.group@gmail.com","cultivo":"papa","cultivo_nombre":"Papa","con_foto":false,"consulta_texto":"Mi chacra de papa tiene algunas plantas que se están muriendo, acá en cutervo lo conocemos como bacteria","resultado":{"tiene_problema":true,"nombre_problema":"Marchitez bacteriana","nombre_cientifico":"Ralstonia solanacearum","gravedad":"grave"},"fecha":"2026-06-05T17:40:16.656Z","mes":6},
+    {"id":"BVaxrKOAagh8e68GEoct","user_id":"GsCQ2RXNkzLOWPxNLQKNxDWBVYy2","user_name":"José Edin llanos Dávila","user_email":"joseedinllanos@gmail.com","cultivo":"maiz","cultivo_nombre":"Maíz","con_foto":true,"clima_contexto":{"temperatura":"12.9°C","lluvia":"5.1mm","ph_suelo":"6.0"},"resultado":{"tiene_problema":true,"nombre_problema":"Gusano Cogollero","nombre_cientifico":"Spodoptera frugiperda","gravedad":"moderada"},"fecha":"2026-08-08T15:56:35.054Z","mes":8},
+    {"id":"BWGfcGnKlEhLCQrz2WyC","user_id":"9GdcjYjtvaW2YjiE6bdvwvRxmJV2","user_name":"José Edin Llanos Dávila","user_email":"jose.llanos.d@uni.pe","cultivo":"papa","cultivo_nombre":"Papa","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Tizón tardío","nombre_cientifico":"Phytophthora infestans","gravedad":"moderada"},"fecha":"2026-07-23T07:08:55.831Z","mes":7},
+    {"id":"CKYCoGSxRFmDR5vysIWu","cultivo":"papa","cultivo_nombre":"Papa","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Deficiencia de Nitrógeno","gravedad":"moderada"},"fecha":"2026-08-08T03:30:39.070Z","mes":8},
+    {"id":"Cg8XKvDRp95sjkYbcrzD","user_id":"1JAUNffdIZcpZ1OMBUFVL95zg6j2","user_name":"jose Edin Llanos Dávila","user_email":"jose.llanos.d@uni.pe","cultivo":"papa","cultivo_nombre":"Papa","con_foto":false,"resultado":{"tiene_problema":true,"nombre_problema":"Tizón Temprano","nombre_cientifico":"Alternaria solani","gravedad":"leve"},"fecha":"2026-05-27T17:10:29.648Z","mes":5},
+    {"id":"ESU2qR8Tj7gkQ1vpzkrq","user_id":"user_1774678264273","user_name":"José","cultivo":"Papa","con_foto":false,"resultado":{"tiene_problema":true,"nombre_problema":"Tizón tardío","gravedad":"moderada"},"fecha":"2026-04-03T20:26:10.282Z","mes":8},
+    {"id":"FMvsA43aF6wMYwJbcYtI","user_id":"yhC9xTlB6yPlERoUgg2dh2WNsxq1","user_name":"Carlos Pérez Dávila","user_email":"visionario2306@gmail.com","cultivo":"papa","cultivo_nombre":"Papa","con_foto":false,"consulta_texto":"dame los datos de la temperatura velocidad del viento humedad relativa y pronóstico del tiempo","resultado":{"tiene_problema":false,"nombre_problema":"Consulta directa"},"fecha":"2026-08-08T15:11:58.088Z","mes":8},
+    {"id":"FpkxPGiAUDkNYJOKN8xd","user_id":"BvMsG5HlkK2cGuqjvlDS","user_name":"jose edin llanos davila","cultivo":"Papa","con_foto":false,"resultado":{"tiene_problema":true,"nombre_problema":"Tizón tardío","gravedad":"moderada"},"fecha":"2026-04-03T17:45:04.698Z","mes":8},
+    {"id":"G793P6dX7uYECYZUWDEw","user_id":"9GdcjYjtvaW2YjiE6bdvwvRxmJV2","user_name":"José Edin Llanos Dávila","user_email":"jose.llanos.d@uni.pe","cultivo":"maiz","cultivo_nombre":"Maíz","con_foto":true,"clima_contexto":{"temperatura":"19.5°C","lluvia":"0mm"},"resultado":{"tiene_problema":true,"nombre_problema":"Gusano cogollero","nombre_cientifico":"Spodoptera frugiperda","gravedad":"moderada"},"fecha":"2026-07-05T10:46:20.734Z","mes":7},
+    {"id":"GMH9fdFRqiHnhNXmUvWG","user_id":"XMLIOCfbImWsvnKUFWk4K8p7Q4h1","user_name":"Edin llanos davila","user_email":"aynitek.group@gmail.com","cultivo":"papa","cultivo_nombre":"Papa","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Deficiencia nutricional o estrés ambiental","gravedad":"moderada"},"fecha":"2026-06-07T22:22:30.782Z","mes":6},
+    {"id":"GjJkfctecHL7WaPYKF1b","user_id":"anonimo","user_name":"Agricultor","cultivo":"Papa","con_foto":false,"resultado":{"tiene_problema":true,"nombre_problema":"Tizón tardío","gravedad":"grave"},"fecha":"2026-04-04T16:00:20.486Z","mes":8},
+    {"id":"Gk1ZhrKdwLtWSf1OSy1t","user_id":"1JAUNffdIZcpZ1OMBUFVL95zg6j2","user_name":"jose Edin Llanos Dávila","user_email":"jose.llanos.d@uni.pe","cultivo":"papa","cultivo_nombre":"Papa","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Deficiencia nutricional o estrés ambiental","gravedad":"leve"},"fecha":"2026-06-02T15:27:23.987Z","mes":6},
+    {"id":"GtU4D5hQiFa80n85CKke","user_id":"9GdcjYjtvaW2YjiE6bdvwvRxmJV2","user_name":"José Edin Llanos Dávila","user_email":"jose.llanos.d@uni.pe","cultivo":"papa","cultivo_nombre":"Papa","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Deficiencia nutricional o estrés ambiental","gravedad":"moderada"},"fecha":"2026-06-09T14:38:22.520Z","mes":6},
+    {"id":"HscwM8XZscExlonXFMhA","user_id":"XMLIOCfbImWsvnKUFWk4K8p7Q4h1","user_name":"Edin llanos davila","user_email":"aynitek.group@gmail.com","cultivo":"papa","cultivo_nombre":"Papa","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Deficiencia nutricional o estrés ambiental","gravedad":"leve"},"fecha":"2026-06-11T08:32:35.083Z","mes":6},
+    {"id":"HuGiYeMkTy2kZetbMmbY","user_id":"1JAUNffdIZcpZ1OMBUFVL95zg6j2","user_name":"jose Edin Llanos Dávila","user_email":"jose.llanos.d@uni.pe","cultivo":"papa","cultivo_nombre":"Papa","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Tizón Temprano","nombre_cientifico":"Alternaria solani","gravedad":"leve"},"fecha":"2026-05-30T18:58:28.847Z","mes":5},
+    {"id":"IVrDHDBEeYvCA3DwCkdH","user_id":"yhC9xTlB6yPlERoUgg2dh2WNsxq1","user_name":"Carlos Pérez Dávila","user_email":"visionario2306@gmail.com","cultivo":"cana","cultivo_nombre":"Caña de azúcar","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Malezas de hoja angosta y ancha","gravedad":"moderada"},"fecha":"2026-07-27T21:23:11.351Z","mes":7},
+    {"id":"Iiie6lm91YmCBM6ssJZ3","user_id":"XMLIOCfbImWsvnKUFWk4K8p7Q4h1","user_name":"Edin llanos davila","user_email":"aynitek.group@gmail.com","cultivo":"papa","cultivo_nombre":"Papa","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Deficiencia nutricional o estrés ambiental","gravedad":"moderada"},"fecha":"2026-06-11T16:17:04.441Z","mes":6},
+    {"id":"IsVMnjfxJ9t8uNphc4Pt","user_id":"9GdcjYjtvaW2YjiE6bdvwvRxmJV2","user_name":"José Edin Llanos Dávila","user_email":"jose.llanos.d@uni.pe","cultivo":"maiz","cultivo_nombre":"Maíz","con_foto":true,"clima_contexto":{"temperatura":"22.5°C","lluvia":"0mm"},"resultado":{"tiene_problema":true,"nombre_problema":"Gusano Cogollero","nombre_cientifico":"Spodoptera frugiperda","gravedad":"moderada"},"fecha":"2026-07-25T21:51:46.893Z","mes":7},
+    {"id":"K4juZr8YBd0Hav9KFgj3","user_id":"user_1774678264273","user_name":"José","cultivo":"Papa","con_foto":false,"resultado":{"tiene_problema":true,"nombre_problema":"Tizón tardío","gravedad":"grave"},"fecha":"2026-04-03T20:25:20.107Z","mes":8},
+    {"id":"KgTFkbzJgV0va4Ju9eDi","user_id":"XMLIOCfbImWsvnKUFWk4K8p7Q4h1","user_name":"Edin llanos davila","user_email":"aynitek.group@gmail.com","cultivo":"papa","cultivo_nombre":"Papa","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Deficiencia nutricional o estrés ambiental","gravedad":"moderada"},"fecha":"2026-06-10T15:11:54.277Z","mes":6},
+    {"id":"LkOANkWSwpQkbh2RagYq","user_id":"9GdcjYjtvaW2YjiE6bdvwvRxmJV2","user_name":"José Edin Llanos Dávila","user_email":"jose.llanos.d@uni.pe","cultivo":"maiz","cultivo_nombre":"Maíz","con_foto":true,"clima_contexto":{"temperatura":"21.7°C","lluvia":"0.1mm"},"resultado":{"tiene_problema":true,"nombre_problema":"Gusano cogollero","nombre_cientifico":"Spodoptera frugiperda","gravedad":"moderada"},"fecha":"2026-06-23T20:07:02.881Z","mes":6},
+    {"id":"MRc5kI6xXn0monyZhohE","user_id":"9GdcjYjtvaW2YjiE6bdvwvRxmJV2","user_name":"José Edin Llanos Dávila","user_email":"jose.llanos.d@uni.pe","cultivo":"maiz","cultivo_nombre":"Maíz","con_foto":true,"clima_contexto":{"temperatura":"18.7°C","lluvia":"0.7mm"},"resultado":{"tiene_problema":true,"nombre_problema":"gusano cogollero","nombre_cientifico":"Halticus vastator","gravedad":"moderada"},"fecha":"2026-07-17T02:17:32.458Z","mes":7},
+    {"id":"NH3K9hVVkJiRSH8TsWZm","user_id":"GsCQ2RXNkzLOWPxNLQKNxDWBVYy2","user_name":"José Edin llanos Dávila","user_email":"joseedinllanos@gmail.com","cultivo":"maiz","cultivo_nombre":"Maíz","con_foto":true,"clima_contexto":{"temperatura":"12.1°C","lluvia":"1.5mm"},"resultado":{"tiene_problema":true,"nombre_problema":"Gusano Cogollero","nombre_cientifico":"Spodoptera frugiperda","gravedad":"moderada"},"fecha":"2026-07-29T01:14:38.671Z","mes":7},
+    {"id":"OSiwagFia0bKlzWY2Abe","user_id":"Rusl0JATlnXNfkXqBQwoJ9QGEB63","user_name":"Diego Rodriguez","user_email":"nicolasrodriguezponce@gmail.com","cultivo":"maiz","cultivo_nombre":"Maíz","con_foto":true,"clima_contexto":{"temperatura":"18.1°C","lluvia":"0mm","ph_suelo":"8.0"},"resultado":{"tiene_problema":true,"nombre_problema":"Gusano cogollero","nombre_cientifico":"Spodoptera frugiperda","gravedad":"moderada"},"fecha":"2026-06-09T15:04:52.906Z","mes":6},
+    {"id":"OdEXubnQkudYOzBAT6Hs","user_id":"XMLIOCfbImWsvnKUFWk4K8p7Q4h1","user_name":"Edin llanos davila","user_email":"aynitek.group@gmail.com","cultivo":"papa","cultivo_nombre":"Papa","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Deficiencia nutricional o estrés ambiental","gravedad":"moderada"},"fecha":"2026-06-07T22:12:02.902Z","mes":6},
+    {"id":"OzYKTxaAXCginXGGLmnO","user_id":"yhC9xTlB6yPlERoUgg2dh2WNsxq1","user_name":"Carlos Pérez Dávila","user_email":"visionario2306@gmail.com","cultivo":"cana","cultivo_nombre":"Caña de azúcar","con_foto":true,"consulta_texto":"Cambio de coloracion","clima_contexto":{"temperatura":"21.5°C","lluvia":"0mm","ph_suelo":"7.6"},"resultado":{"tiene_problema":true,"nombre_problema":"Roya","nombre_cientifico":"Puccinia melanocephala","gravedad":"moderada"},"fecha":"2026-06-10T12:43:55.873Z","mes":6},
+    {"id":"PNtvoPN4dbknnHcOecOy","user_id":"1zeKGra1FQdBpQ2oPbGfFwxn2dS2","user_name":"Serapio Dávila Díaz","user_email":"davilaserapio@7a.com","cultivo":"papa","cultivo_nombre":"Papa","con_foto":false,"consulta_texto":"si mi papa tiene rancha que hago","resultado":{"tiene_problema":true,"nombre_problema":"Rancha","nombre_cientifico":"Phytophthora infestans","gravedad":"grave"},"fecha":"2026-06-02T16:53:57.132Z","mes":6},
+    {"id":"Q2r63b5zAMFjgYdHhn2L","user_id":"yhC9xTlB6yPlERoUgg2dh2WNsxq1","user_name":"Carlos Pérez Dávila","user_email":"visionario2306@gmail.com","cultivo":"cana","cultivo_nombre":"Caña de azúcar","con_foto":true,"resultado":{"tiene_problema":true,"nombre_problema":"Maleza","gravedad":"moderada"},"fecha":"2026-07-07T12:30:13.160Z","mes":7}
+  ],
+  parcelas: [
+    {"id":"0MYfsJljNC0kyqhxVxyR","user_id":"yhC9xTlB6yPlERoUgg2dh2WNsxq1","user_name":"Carlos Pérez Dávila","nombre":"SSIC","cultivo":"cana","cultivo_nombre":"Caña de azúcar","cultivo_emoji":"🎋","variedad":"RB72-454","area":"15.63","fecha_siembra":"2025-05-26","gps":"-6.712027381238996, -79.44936752312061"},
+    {"id":"4fTf2bcwPSBDvHUSYago","user_id":"1zeKGra1FQdBpQ2oPbGfFwxn2dS2","user_name":"Serapio Dávila Díaz","nombre":"El recuerdo ","cultivo":"papa","cultivo_nombre":"Papa","cultivo_emoji":"🥔","area":"3.14","fecha_siembra":"2026-07-29","gps":"976969279"},
+    {"id":"CsFjq4LFsLMIuHZgdzMK","user_id":"ZGyK1W4xhITyq4hVsfSnawJG3gb2","user_name":"José Edin llanos Dávila","nombre":"El recuerdo ","cultivo":"papa","cultivo_nombre":"Papa","cultivo_emoji":"🥔","variedad":"Única","area":"0.6","fecha_siembra":"2026-08-06","gps":"-11.4922524, -77.2027558"},
+    {"id":"NbWoTUIgQN5esOguiWM4","user_id":"ODl6q0HIHzuzBXuN1C9D","user_name":"josé edin llanos","nombre":"la loma","cultivo":"papa","cultivo_nombre":"Papa","cultivo_emoji":"🥔","variedad":"Yungay","area":"2","fecha_siembra":"2026-02-03"},
+    {"id":"YZ1aUxaZCdGacPAC6Q4e","user_id":"9tqhoyQnbWbXDb2pBCLGUgLckR52","user_name":"Ayni tek","nombre":"resa","cultivo":"papa","cultivo_nombre":"Papa","cultivo_emoji":"🥔","variedad":"Yungay","area":"2.03","fecha_siembra":"2026-02-08","gps":"cutervo, cajamarca"},
+    {"id":"amhplKldMy7PfN8kXmFZ","user_id":"GsCQ2RXNkzLOWPxNLQKNxDWBVYy2","user_name":"José Edin llanos Dávila","nombre":"El recuerdo ","cultivo":"papa","cultivo_nombre":"Papa","cultivo_emoji":"🥔","variedad":"Única","area":"1.75","fecha_siembra":"2026-08-12","gps":"Cutervo, Cutervo"},
+    {"id":"fjnaeKtRfrGPxHWpEgp4","user_id":"9GdcjYjtvaW2YjiE6bdvwvRxmJV2","user_name":"José Edin Llanos Dávila","nombre":"Lote pomalca ","cultivo":"papa","cultivo_nombre":"Papa","cultivo_emoji":"🥔","variedad":"Yungay","area":"3","fecha_siembra":"2026-04-09"},
+    {"id":"ykUwZdmERg8ZMG5oTF5L","user_id":"yhC9xTlB6yPlERoUgg2dh2WNsxq1","user_name":"Carlos Pérez Dávila","nombre":"SSII16","cultivo":"cana","cultivo_nombre":"Caña de azúcar","cultivo_emoji":"🎋","variedad":"RB72-454","area":"2.4","fecha_siembra":"2026-07-27","gps":"Pomalca, Pomalca"}
+  ],
+  historial_clinico: [
+    {"id":"5Q3y6GtyVyjMR0mshzWZ","user_id":"GsCQ2RXNkzLOWPxNLQKNxDWBVYy2","parcela_nombre":"Cutervo, Cutervo","cultivo":"maiz","tiene_problema":true,"problema":"Gusano Cogollero","gravedad":"moderada","fuente":"diagnostico"},
+    {"id":"9pYHxPgeO7uU1k7PEH0k","user_id":"yhC9xTlB6yPlERoUgg2dh2WNsxq1","parcela_nombre":"Pomalca, Pomalca","cultivo":"cana","tiene_problema":true,"problema":"Malezas","gravedad":"moderada","fuente":"diagnostico"},
+    {"id":"YyV9YEphSHzEWZs4Vanf","user_id":"GsCQ2RXNkzLOWPxNLQKNxDWBVYy2","parcela_nombre":"Cutervo, Cutervo","cultivo":"maiz","tiene_problema":true,"problema":"Gusano Cogollero","gravedad":"moderada","fuente":"diagnostico"},
+    {"id":"d39QRx7faYRjWoqSWWSU","user_id":"wzO7nbiJNKVdNUH7kBmRY3UNSE43","parcela_nombre":"cajamarca","cultivo":"papa","tiene_problema":true,"problema":"Indicios de Tizón Tardío o Alternaria","gravedad":"moderada","fuente":"diagnostico"}
+  ],
+  tiendas_comunidad: [
+    {"id":"G03lmz0e9NwJxDdDz6JI","nombre":"Agroveterinaria Dávila","direccion":"Mercado santa Cecilia","distrito":"Cutervo","departamento":"Cajamarca","whatsapp":"976969279","verificada":false,"activa":true}
+  ],
+  tiendas: [
+    {"id":"1zeKGra1FQdBpQ2oPbGfFwxn2dS2","nombre":"Serapio Dávila Díaz"}
+  ],
+  aliados: [
+    {"id":"2S01ANu1SBwxXkcJGkBf","nombre":"Serapio Dávila","whatsapp":"14696","empresa":"Agrovet Dávila","ubicacion":"Cutervo, cajamarca","tipo":"aliado"},
+    {"id":"AIFGIaIfId4bz5enJwc2","nombre":"Carlos Pérez  Dávila","whatsapp":"979350367","empresa":"Azucarera pomalca","ubicacion":"Chiclayo, Lamabayeque","tipo":"agricultor"},
+    {"id":"Q7qIiJwkqLP5z91qX4Zp","nombre":"Benjamín Rey","whatsapp":"999620943","empresa":"Serfi","ubicacion":"Huaral, Lima","tipo":"agricultor"},
+    {"id":"ZnL75RlN87XcqyvQorRs","nombre":"Darwin D","whatsapp":"925268236","empresa":"kallpa Greenz","tipo":"aliado"},
+    {"id":"c6w95hjlpKDBPywCnRBi","nombre":"Aldo Schenone","empresa":"ST2","ubicacion":"Lima, perú","tipo":"otro"},
+    {"id":"fyPpneXkzyoJKwG0ZP6a","nombre":"Hernán Rodríguez","whatsapp":"997974660","empresa":"Agrotone","ubicacion":"Valle del tambo, Arequipa","tipo":"agricultor"},
+    {"id":"mpcCaNKOPLadrBXVM7lo","nombre":"Carlos Añaños","empresa":"Tiyapuy","ubicacion":"Ayacucho, perú","tipo":"otro"}
+  ],
+  comunidad: [
+    {"id":"lAFFJR9HEId7NwpeJkSL","categoria":"general","titulo":"","contenido":"","fecha":"2026-08-30T03:28:49.757Z","likes":0}
+  ],
+  registros_parcela: [
+    {"id":"q1RFsrDKcMySTN0FbZ0u","parcela_id":"fjnaeKtRfrGPxHWpEgp4","user_id":"9GdcjYjtvaW2YjiE6bdvwvRxmJV2","dias_desde_siembra":107,"fecha":"2026-07-25T06:23:00.779Z","recomendacion":"Análisis foliar y de suelo, riego adecuado, fertilización foliar de rescate"}
+  ],
+  conversaciones_voz: [
+    {"id":"7s5CeZE05R6sqnL2YGV8","user_id":"GsCQ2RXNkzLOWPxNLQKNxDWBVYy2","mensajes":[{"role":"assistant","content":"¡Hola! Soy tu asistente agrícola."},{"role":"user","content":"Quiero saber la temperatura la humedad de mi zona Y si va a llover o no va a llover"},{"role":"assistant","content":"¡Hola, José Edin! La temperatura está en 13.5°C y la humedad en 89%. Hay 71% de probabilidad de lluvia con 7mm esperados."}]},
+    {"id":"QaTwAOP8b0I0mRRjeInz","user_id":"yhC9xTlB6yPlERoUgg2dh2WNsxq1","mensajes":[{"role":"assistant","content":"¡Hola! Soy tu asistente agrícola."},{"role":"user","content":"Dame la temperatura actual"},{"role":"assistant","content":"Temperatura: 20.8°C, viento: 11.9 km/h, humedad: 88%"}]},
+    {"id":"bryR144HfjQGCX4IFcp0","user_id":"yhC9xTlB6yPlERoUgg2dh2WNsxq1","mensajes":[{"role":"assistant","content":"¡Hola! Soy tu asistente agrícola."},{"role":"user","content":"Dame la temperatura actual"},{"role":"assistant","content":"Temperatura: 20.8°C, viento: 11.9 km/h, humedad: 88%"}]},
+    {"id":"hSpfdnCvUqzSDVLX0dqs","user_id":"yhC9xTlB6yPlERoUgg2dh2WNsxq1","mensajes":[{"role":"assistant","content":"¡Hola! Soy tu asistente agrícola."},{"role":"user","content":"Dame la temperatura actual"},{"role":"assistant","content":"Temperatura: 20.8°C, viento: 11.9 km/h, humedad: 88%"}]},
+    {"id":"lUYR9o1RH18rnxj5iAJG","user_id":"yhC9xTlB6yPlERoUgg2dh2WNsxq1","mensajes":[{"role":"assistant","content":"¡Hola! Soy tu asistente agrícola."},{"role":"user","content":"Dame la temperatura actual"},{"role":"assistant","content":"Temperatura: 20.8°C, viento: 11.9 km/h, humedad: 88%"}]},
+    {"id":"vM6UPMofxQ7rq9acpKHL","user_id":"yhC9xTlB6yPlERoUgg2dh2WNsxq1","mensajes":[{"role":"assistant","content":"¡Hola! Soy tu asistente agrícola."},{"role":"user","content":"Dame la temperatura actual"},{"role":"assistant","content":"Temperatura: 20.8°C, viento: 11.9 km/h, humedad: 88%"}]}
+  ]
+};
+
+async function upsertBatch(table, rows) {
+  const url = SUPABASE_URL + '/rest/v1/' + table;
+  let ok = 0, fail = 0;
+  // Insert in batches of 10
+  for (let i = 0; i < rows.length; i += 10) {
+    const batch = rows.slice(i, i + 10);
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'apikey': SERVICE_KEY,
+        'Authorization': 'Bearer ' + SERVICE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify(batch)
+    });
+    if (resp.ok) {
+      ok += batch.length;
+      log('  OK ' + batch.length + '/' + rows.length, 'ok');
+    } else {
+      const txt = await resp.text();
+      fail += batch.length;
+      log('  ERROR: ' + txt, 'err');
+      // Try one by one
+      for (const row of batch) {
+        const r2 = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'apikey': SERVICE_KEY,
+            'Authorization': 'Bearer ' + SERVICE_KEY,
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=merge-duplicates'
+          },
+          body: JSON.stringify(row)
+        });
+        if (r2.ok) { ok++; fail--; }
+        else { log('    FAIL row ' + row.id + ': ' + await r2.text(), 'err'); }
+      }
+    }
+  }
+  return { ok, fail };
+}
+
+async function startImport() {
+  document.getElementById('btnImport').disabled = true;
+  const tables = Object.keys(DATA);
+  let totalOk = 0, totalFail = 0;
+  for (const table of tables) {
+    const rows = DATA[table];
+    log('\n>> Importando ' + table + ' (' + rows.length + ' filas)...', 'info');
+    const { ok, fail } = await upsertBatch(table, rows);
+    totalOk += ok;
+    totalFail += fail;
+    log('   Resultado: ' + ok + ' OK, ' + fail + ' errores', ok === rows.length ? 'ok' : 'err');
+  }
+  log('\n=== COMPLETADO === ' + totalOk + ' inserts OK, ' + totalFail + ' errores', totalOk > totalFail ? 'ok' : 'err');
+  document.getElementById('btnImport').disabled = false;
+}
+</script>
+</body>
+</html>

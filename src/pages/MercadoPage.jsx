@@ -82,16 +82,16 @@ export default function MercadoPage() {
     }
     setCargandoTiendas(true);
     try {
-      const { data: porUidData, error } = await supabase.from('tiendas_comunidad').select('*').eq('propietarioId', uid);
+      const { data: porUidData, error } = await supabase.from('tiendas_comunidad').select('*').eq('propietario_id', uid);
       if (error) throw error;
       let tiendas = (porUidData || []).filter((t) => t.activa !== false);
 
       if (tiendas.length === 0 && user.email) {
-        const { data: porEmailData } = await supabase.from('tiendas_comunidad').select('*').eq('propietarioEmail', user.email);
+        const { data: porEmailData } = await supabase.from('tiendas_comunidad').select('*').eq('propietario_email', user.email);
         tiendas = (porEmailData || []).filter((t) => t.activa !== false);
       }
 
-      tiendas.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      tiendas.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
       setMisTiendas(tiendas);
     } catch (e) {
       console.error(e);
@@ -109,8 +109,8 @@ export default function MercadoPage() {
     try {
       await supabase.from('tiendas_comunidad').update({
         activa: false,
-        eliminadaAt: new Date().toISOString(),
-        eliminadaPor: user?.id || user?.uid,
+        eliminada_at: new Date().toISOString(),
+        eliminada_por: user?.id || user?.uid,
       }).eq('id', tienda.id);
       setMisTiendas((prev) => prev.filter((t) => t.id !== tienda.id));
       setConfirmEliminar(null);
@@ -374,9 +374,9 @@ export default function MercadoPage() {
                       {tienda.horario && (
                         <p className="text-xs text-gray-400 mt-1">🕐 {tienda.horario}</p>
                       )}
-                      {tienda.createdAt && (
+                      {tienda.created_at && (
                         <p className="text-[10px] text-gray-300 mt-1">
-                          Registrada: {new Date(tienda.createdAt).toLocaleDateString('es-PE')}
+                          Registrada: {new Date(tienda.created_at).toLocaleDateString('es-PE')}
                         </p>
                       )}
                     </div>

@@ -29,7 +29,7 @@ const ESPECIALIDADES = [
 ];
 
 function tiendaAFormulario(tienda) {
-  const wa = String(tienda.whatsapp || tienda.whatsappFormateado || '').replace(/\D/g, '');
+  const wa = String(tienda.whatsapp || tienda.whatsapp_formateado || '').replace(/\D/g, '');
   return {
     nombre: tienda.nombre || '',
     direccion: tienda.direccion || '',
@@ -51,8 +51,8 @@ function tiendaAFormulario(tienda) {
 function puedeEditarTienda(tienda, user) {
   const uid = user?.id || user?.uid;
   if (!uid || !tienda) return false;
-  if (tienda.propietarioId === uid) return true;
-  if (user.email && tienda.propietarioEmail === user.email) return true;
+  if (tienda.propietario_id === uid) return true;
+  if (user.email && tienda.propietario_email === user.email) return true;
   return false;
 }
 
@@ -186,7 +186,7 @@ export default function RegistroTienda({ onCerrado, onRegistrada, tienda = null 
         lat: form.lat ? parseFloat(form.lat) : null,
         lon: form.lon ? parseFloat(form.lon) : null,
         whatsapp: whatsappLimpio,
-        whatsappFormateado: `51${whatsappLimpio}`,
+        whatsapp_formateado: `51${whatsappLimpio}`,
         facebook: form.facebook.trim() || null,
         instagram: form.instagram.trim() || null,
         web: form.web.trim() || null,
@@ -194,7 +194,7 @@ export default function RegistroTienda({ onCerrado, onRegistrada, tienda = null 
         horario: form.horario.trim() || null,
         descripcion: form.descripcion.trim() || null,
         fotos: form.fotos,
-        updatedAt: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       if (esEdicion) {
@@ -207,15 +207,15 @@ export default function RegistroTienda({ onCerrado, onRegistrada, tienda = null 
       } else {
         const tiendaData = {
           ...payload,
-          propietarioId: uid,
-          propietarioNombre: user?.nombre || null,
-          propietarioEmail: user?.email || null,
+          propietario_id: uid,
+          propietario_nombre: user?.nombre || null,
+          propietario_email: user?.email || null,
           fuente: 'comunidad',
           verificada: false,
           activa: true,
           ventas: 0,
-          ultimaConsulta: null,
-          createdAt: new Date().toISOString(),
+          ultima_consulta: null,
+          created_at: new Date().toISOString(),
         };
 
         const { data, error } = await supabase.from('tiendas_comunidad').insert(tiendaData).select().single();

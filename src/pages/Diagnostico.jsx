@@ -287,14 +287,14 @@ Responde SOLO con este JSON (sin markdown):
 
       try {
         const diagnosticoData = {
-          userId:        (user?.id || user?.uid) ?? null,
-          userName:      user?.nombre ?? null,
-          userEmail:     user?.email  ?? null,
+          user_id:        (user?.id || user?.uid) ?? null,
+          user_name:      user?.nombre ?? null,
+          user_email:     user?.email  ?? null,
           cultivo:       cultivo.id,
-          cultivoNombre: cultivo.nombre,
-          conFoto:       fotos.length > 0,
-          consultaTexto: textoConsulta || null,
-          climaContexto: buildClimaContext() || null,
+          cultivo_nombre: cultivo.nombre,
+          con_foto:       fotos.length > 0,
+          consulta_texto: textoConsulta || null,
+          clima_contexto: buildClimaContext() || null,
           resultado: {
             tiene_problema:    analisis.tiene_problema    ?? false,
             nombre_problema:   analisis.nombre_problema   ?? null,
@@ -310,7 +310,7 @@ Responde SOLO con este JSON (sin markdown):
 
         if (isOnline()) {
           const uid = user?.id || user?.uid || null;
-          await supabase.from('diagnosticos').insert({ ...diagnosticoData, userId: uid }).select();
+          await supabase.from('diagnosticos').insert({ ...diagnosticoData, user_id: uid }).select();
         } else {
           await guardarDiagnosticoOffline(diagnosticoData);
         }

@@ -26,34 +26,34 @@ export async function guardarHistorialClinico({
 }) {
   try {
     const payload = {
-      userId,
-      parcelaId,
-      parcelaNombre: parcelaNombre || '',
+      user_id: userId,
+      parcela_id: parcelaId,
+      parcela_nombre: parcelaNombre || '',
       cultivo,
       variedad: variedad || '',
-      tieneProblema: diagnostico.tiene_problema,
+      tiene_problema: diagnostico.tiene_problema,
       problema: diagnostico.nombre_problema || '',
-      problemaCientifico: diagnostico.nombre_cientifico || '',
+      problema_cientifico: diagnostico.nombre_cientifico || '',
       gravedad: diagnostico.gravedad || 'desconocida',
       severidad: diagnostico.porcentaje_severidad || 0,
       causa: diagnostico.causa || '',
       recomendacion: diagnostico.que_hacer || '',
-      productoAplicado,
-      fechaAplicacion: null,
+      producto_aplicado: productoAplicado,
+      fecha_aplicacion: null,
       resultado: null,
-      fechaResultado: null,
-      observacionesResultado: null,
+      fecha_resultado: null,
+      observaciones_resultado: null,
       calificacion: null,
       util: null,
-      comentarioFeedback: null,
+      comentario_feedback: null,
       clima: null,
       suelo: null,
       fuente: 'diagnostico',
-      fotoUrl,
+      foto_url: fotoUrl,
       lat,
       lon,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
     const { data, error } = await supabase.from('historial_clinico').insert(payload).select().single();
     if (error) throw error;
@@ -73,8 +73,8 @@ export async function calificarDiagnostico(historialId, calificacion, util, come
     const { error } = await supabase.from('historial_clinico').update({
       calificacion,
       util,
-      comentarioFeedback: comentario,
-      updatedAt: new Date().toISOString()
+      comentario_feedback: comentario,
+      updated_at: new Date().toISOString()
     }).eq('id', historialId);
     if (error) throw error;
     console.log('[Historial] Feedback guardado:', historialId);
@@ -92,9 +92,9 @@ export async function actualizarResultado(historialId, resultado, observaciones 
   try {
     const { error } = await supabase.from('historial_clinico').update({
       resultado,
-      fechaResultado: new Date().toISOString(),
-      observacionesResultado: observaciones,
-      updatedAt: new Date().toISOString()
+      fecha_resultado: new Date().toISOString(),
+      observaciones_resultado: observaciones,
+      updated_at: new Date().toISOString()
     }).eq('id', historialId);
     if (error) throw error;
     console.log('[Historial] Resultado actualizado:', historialId);
@@ -111,9 +111,9 @@ export async function actualizarResultado(historialId, resultado, observaciones 
 export async function registrarProductoAplicado(historialId, producto) {
   try {
     const { error } = await supabase.from('historial_clinico').update({
-      productoAplicado: producto,
-      fechaAplicacion: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      producto_aplicado: producto,
+      fecha_aplicacion: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     }).eq('id', historialId);
     if (error) throw error;
     return true;
@@ -132,14 +132,14 @@ export async function registrarProductoAplicado(historialId, producto) {
  */
 export async function getHistorialParcela(parcelaId, limite = 20) {
   try {
-    const { data, error } = await supabase.from('historial_clinico').select('*').eq('parcelaId', parcelaId).order('createdAt', { ascending: false }).limit(limite);
+    const { data, error } = await supabase.from('historial_clinico').select('*').eq('parcela_id', parcelaId).order('created_at', { ascending: false }).limit(limite);
     if (error) throw error;
     return (data || []).map(d => ({
       id: d.id,
       ...d,
-      createdAt: d.createdAt ? new Date(d.createdAt) : null,
-      fechaAplicacion: d.fechaAplicacion ? new Date(d.fechaAplicacion) : null,
-      fechaResultado: d.fechaResultado ? new Date(d.fechaResultado) : null
+      created_at: d.created_at ? new Date(d.created_at) : null,
+      fecha_aplicacion: d.fecha_aplicacion ? new Date(d.fecha_aplicacion) : null,
+      fecha_resultado: d.fecha_resultado ? new Date(d.fecha_resultado) : null
     }));
   } catch (error) {
     console.error('[Historial] Error al consultar:', error);
@@ -165,7 +165,7 @@ export async function getResumenProblemas(parcelaId) {
   
   const conteoProblemas = {};
   historial.forEach(d => {
-    if (d.tieneProblema && d.problema) {
+    if (d.tiene_problema && d.problema) {
       const key = d.problema.toLowerCase();
       conteoProblemas[key] = (conteoProblemas[key] || 0) + 1;
     }
@@ -178,7 +178,7 @@ export async function getResumenProblemas(parcelaId) {
   
   const ultimoDiagnostico = historial[0];
   
-  const diagnosticosConProblema = historial.filter(d => d.tieneProblema);
+  const diagnosticosConProblema = historial.filter(d => d.tiene_problema);
   const recientes = diagnosticosConProblema.slice(0, 3);
   const anteriores = diagnosticosConProblema.slice(3, 6);
   
@@ -195,7 +195,7 @@ export async function getResumenProblemas(parcelaId) {
   }
   
   const problemasActivos = historial.filter(d => 
-    d.tieneProblema && 
+    d.tiene_problema && 
     d.resultado !== 'resuelto' &&
     d.resultado !== 'mejoro'
   ).slice(0, 5);
@@ -224,11 +224,11 @@ export async function getContextoHistorial(parcelaId, cultivo) {
   
   if (resumen.ultimoDiagnostico) {
     const ultimo = resumen.ultimoDiagnostico;
-    const fecha = ultimo.createdAt ? ultimo.createdAt.toLocaleDateString('es-PE') : 'desconocida';
+    const fecha = ultimo.created_at ? ultimo.created_at.toLocaleDateString('es-PE') : 'desconocida';
     contexto += `\n• Último diagnóstico (${fecha}): ${ultimo.problema || 'sin problema'} - ${ultimo.gravedad}`;
     
-    if (ultimo.productoAplicado) {
-      contexto += `\n  Producto aplicado: ${ultimo.productoAplicado}`;
+    if (ultimo.producto_aplicado) {
+      contexto += `\n  Producto aplicado: ${ultimo.producto_aplicado}`;
     }
     
     if (ultimo.resultado) {
@@ -267,14 +267,14 @@ export async function analizarPatronesZona(region, cultivo = null) {
   try {
     let data = [];
     if (cultivo) {
-      const { data: rows, error } = await supabase.from('historial_clinico').select('*').eq('cultivo', cultivo).order('createdAt', { ascending: false }).limit(200);
+      const { data: rows, error } = await supabase.from('historial_clinico').select('*').eq('cultivo', cultivo).order('created_at', { ascending: false }).limit(200);
       if (error) throw error;
       data = rows || [];
     } else {
-      const { data: rows, error } = await supabase.from('historial_clinico').select('*').order('createdAt', { ascending: false }).limit(100);
+      const { data: rows, error } = await supabase.from('historial_clinico').select('*').order('created_at', { ascending: false }).limit(100);
       if (error) throw error;
       const lower = (region || '').toLowerCase();
-      data = (rows || []).filter(d => (d.parcelaNombre || '').toLowerCase().includes(lower));
+      data = (rows || []).filter(d => (d.parcela_nombre || '').toLowerCase().includes(lower));
     }
     
     if (data.length === 0) return null;
@@ -284,8 +284,8 @@ export async function analizarPatronesZona(region, cultivo = null) {
     const severidadPromedio = {};
     
     data.forEach(d => {
-      if (!d.tieneProblema || !d.problema) return;
-      const mes = d.createdAt ? new Date(d.createdAt).getMonth() : 0;
+      if (!d.tiene_problema || !d.problema) return;
+      const mes = d.created_at ? new Date(d.created_at).getMonth() : 0;
       const problema = d.problema.toLowerCase();
       if (!problemasPorMes[mes]) problemasPorMes[mes] = {};
       problemasPorMes[mes][problema] = (problemasPorMes[mes][problema] || 0) + 1;
@@ -371,9 +371,9 @@ export async function getAlertasTempranas(parcelaId, cultivo, region) {
 export async function guardarConversacion(userId, mensajes) {
   try {
     const { error } = await supabase.from('conversaciones_voz').insert({
-      userId,
+      user_id: userId,
       mensajes: mensajes.slice(-20),
-      createdAt: new Date().toISOString()
+      created_at: new Date().toISOString()
     });
     if (error) throw error;
     return true;
@@ -385,12 +385,12 @@ export async function guardarConversacion(userId, mensajes) {
 
 export async function getHistorialConversaciones(userId, limite = 5) {
   try {
-    const { data, error } = await supabase.from('conversaciones_voz').select('*').eq('userId', userId).order('createdAt', { ascending: false }).limit(limite);
+    const { data, error } = await supabase.from('conversaciones_voz').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(limite);
     if (error) throw error;
     return (data || []).map(d => ({
       id: d.id,
       ...d,
-      createdAt: d.createdAt ? new Date(d.createdAt) : null
+      created_at: d.created_at ? new Date(d.created_at) : null
     }));
   } catch (error) {
     console.error('[Conversación] Error al consultar:', error);
@@ -406,7 +406,7 @@ export async function getContextoConversacional(userId) {
   let contexto = '\n\n💬 CONVERSACIONES RECIENTES DEL USUARIO:\n';
   
   historial.forEach((conv, i) => {
-    contexto += `\nConversación ${i + 1} (${conv.createdAt?.toLocaleDateString('es-PE')}):`;
+    contexto += `\nConversación ${i + 1} (${conv.created_at?.toLocaleDateString('es-PE')}):`;
     (conv.mensajes || []).slice(-6).forEach(m => {
       const rol = m.role === 'user' ? 'Usuario' : 'PlaguIA';
       const contenido = (m.content || '').substring(0, 100);

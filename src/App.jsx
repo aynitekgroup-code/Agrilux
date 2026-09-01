@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { AgentProvider } from './lib/AgentContext';
@@ -134,6 +134,19 @@ function AppRoutes() {
 }
 
 export default function App() {
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && hash.includes('access_token')) {
+      const params = new URLSearchParams(hash.substring(1));
+      const type = params.get('type');
+      if (type === 'recovery') {
+        window.location.replace('/registro?mode=reset');
+      } else {
+        window.location.replace('/');
+      }
+    }
+  }, []);
+
   return (
     <AuthProvider>
       <AgentProvider>

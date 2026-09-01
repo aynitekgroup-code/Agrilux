@@ -136,7 +136,7 @@ export default function MiParcela() {
   const cargarParcelas = async () => {
     try {
       const uid = user?.id || user?.uid;
-      const { data: rows, error } = await supabase.from('parcelas').select('*').eq('userId', uid);
+      const { data: rows, error } = await supabase.from('parcelas').select('*').eq('user_id', uid);
       if (error) throw error;
       const data = (rows || []).map(d => {
         const doc = { ...d };
@@ -157,7 +157,7 @@ export default function MiParcela() {
 
   const cargarRegistros = async (parcelaId) => {
     try {
-      const { data, error } = await supabase.from('registros_parcela').select('*').eq('parcelaId', parcelaId).order('fecha', { ascending: false });
+      const { data, error } = await supabase.from('registros_parcela').select('*').eq('parcela_id', parcelaId).order('fecha', { ascending: false });
       if (error) throw error;
       setRegistros((data || []).map(d => ({ ...d })));
     } catch (e) { setRegistros([]); }
@@ -172,13 +172,13 @@ export default function MiParcela() {
         ? JSON.stringify(poligono.coordenadas)
         : '';
       const { data, error } = await supabase.from('parcelas').insert({
-        userId: user?.id || user?.uid, userName: user?.nombre,
-        nombre: form.nombre, cultivo: form.cultivo, cultivoNombre: cultObj?.nombre,
-        cultivoEmoji: cultObj?.emoji, variedad: form.variedad,
+        user_id: user?.id || user?.uid, user_name: user?.nombre,
+        nombre: form.nombre, cultivo: form.cultivo, cultivo_nombre: cultObj?.nombre,
+        cultivo_emoji: cultObj?.emoji, variedad: form.variedad,
         area: poligono ? String(poligono.area) : form.area,
-        fechaSiembra: form.fechaSiembra, gps: form.gps || user?.ubicacion || '',
+        fecha_siembra: form.fechaSiembra, gps: form.gps || user?.ubicacion || '',
         coordenadas: coordenadasStr,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
       }).select().single();
       if (error) throw error;
       const nueva = {
@@ -202,7 +202,7 @@ export default function MiParcela() {
     if (!parcelaActiva) return;
     if (!confirm(`¿Eliminar la parcela "${parcelaActiva.nombre}"? Se borrarán también sus registros de monitoreo.`)) return;
     try {
-      await supabase.from('registros_parcela').delete().eq('parcelaId', parcelaActiva.id);
+      await supabase.from('registros_parcela').delete().eq('parcela_id', parcelaActiva.id);
       await supabase.from('parcelas').delete().eq('id', parcelaActiva.id);
       const restantes = parcelas.filter(p => p.id !== parcelaActiva.id);
       setParcelas(restantes);
@@ -259,9 +259,9 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
         setRecomendacion(resp);
 
         await supabase.from('registros_parcela').insert({
-          parcelaId: parcelaActiva.id, userId: user?.id || user?.uid,
+          parcela_id: parcelaActiva.id, user_id: user?.id || user?.uid,
           foto: compressed, recomendacion: resp,
-          diasDesdeSiembra,
+          dias_desde_siembra: diasDesdeSiembra,
           fecha: new Date().toISOString(),
         });
 
@@ -569,7 +569,7 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
                         <div key={r.id} className="flex gap-3 border-b border-gray-50 pb-3 last:border-0">
                           {r.foto && <img src={r.foto} alt="" className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />}
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs text-gray-400">{new Date(r.fecha).toLocaleDateString('es-PE')} · Día {r.diasDesdeSiembra}</p>
+                            <p className="text-xs text-gray-400">{new Date(r.fecha).toLocaleDateString('es-PE')} · Día {r.dias_desde_siembra}</p>
                             <p className="text-xs text-gray-600 mt-1 line-clamp-2">{r.recomendacion}</p>
                           </div>
                         </div>

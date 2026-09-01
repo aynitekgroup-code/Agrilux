@@ -41,6 +41,7 @@ export default function Registro() {
   const [email, setEmail]         = useState('');
   const [ubicacion, setUbicacion] = useState('');
   const [password, setPassword]   = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [showPass, setShowPass]   = useState(false);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState('');
@@ -49,14 +50,24 @@ export default function Registro() {
   const [resetSent, setResetSent] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState('');
+  const [resetMode, setResetMode] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
 
   const submittingRef = useRef(false);
 
   useEffect(() => {
+    if (searchParams.get('mode') === 'reset') {
+      setResetMode(true);
+      setModo('login');
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     if (!user?.uid) return;
+    if (resetMode && !resetSuccess) return;
     const destino = redirectTab ? `${redirectTo}?tab=${redirectTab}` : redirectTo;
     navigate(destino, { replace: true });
-  }, [user?.uid, navigate, redirectTo, redirectTab]);
+  }, [user?.uid, navigate, redirectTo, redirectTab, resetMode, resetSuccess]);
 
   const cambiarModo = (m) => {
     setModo(m); setError('');
@@ -72,7 +83,9 @@ export default function Registro() {
     setResetLoading(true);
     setResetError('');
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/`,
+      });
       if (error) throw error;
       setResetSent(true);
     } catch (e) {
@@ -83,6 +96,24 @@ export default function Registro() {
       );
     } finally {
       setResetLoading(false);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    if (newPassword.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setResetSuccess(true);
+    } catch (e) {
+      setError('Error al actualizar la contraseña. Intenta de nuevo.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -170,6 +201,71 @@ export default function Registro() {
           <p className="text-gray-500 mt-2 text-sm">Agricultura Inteligente del Perú</p>
         </div>
 
+        {/* ── RESET PASSWORD FORM ── */}
+        {resetMode && (
+          <div className="bg-white rounded-3xl shadow-xl p-6 space-y-4">
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+                <p className="text-red-600 text-sm">{error}</p>
+              </div>
+            )}
+            {resetSuccess ? (
+              <div className="text-center py-4">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-3xl">✓</span>
+                </div>
+                <p className="text-green-700 font-semibold mb-2">¡Contraseña actualizada!</p>
+                <p className="text-gray-500 text-sm mb-4">Ya puedes iniciar sesión con tu nueva contraseña.</p>
+                <button
+                  onClick={() => { setResetMode(false); setResetSuccess(false); }}
+                  className="w-full bg-primary text-white font-bold py-3 rounded-2xl text-sm"
+                >
+                  Ir a iniciar sesión →
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-gray-600 text-center font-semibold">
+                  Ingresa tu nueva contraseña
+                </p>
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">Nueva contraseña</label>
+                  <div className="relative">
+                    <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
+                    <input
+                      type={showPass ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)}
+                      placeholder="Mínimo 6 caracteres"
+                      className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-12 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPass(!showPass)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  onClick={handleUpdatePassword}
+                  disabled={loading}
+                  className="w-full bg-primary text-white font-bold py-4 rounded-2xl text-base hover:bg-primary-dark transition-colors disabled:opacity-50 shadow-lg"
+                >
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 size={20} className="animate-spin" /> Guardando...
+                    </span>
+                  ) : 'Guardar nueva contraseña →'}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {!resetMode && (<>
         {/* Tabs */}
         <div className="flex bg-gray-100 rounded-2xl p-1 mb-6">
           {[['login', 'Iniciar sesión'], ['registro', 'Crear cuenta']].map(([m, label]) => (
@@ -362,6 +458,7 @@ export default function Registro() {
             · · ·
           </button>
         </div>
+        </>)}
 
       </div>
     </div>

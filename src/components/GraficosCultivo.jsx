@@ -15,7 +15,7 @@ export function GraficoMonitoreo({ registros }) {
 
   const datos = registros.map((r, i) => ({
     name: new Date(r.fecha).toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }),
-    dias: r.diasDesdeSiembra || i * 10,
+    dias: r.dias_desde_siembra || i * 10,
     registros: 1,
   }));
 
