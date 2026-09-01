@@ -711,15 +711,10 @@ function AliadosPanel({ onActualizar }) {
     let mounted = true;
     const cargar = async () => {
       try {
-        const { data, error } = await supabase.from('aliados').select('*').order('created_at', { ascending: false });
+        const { data, error } = await supabase.from('aliados').select('*');
         if (error) throw error;
         if (mounted) {
-          const sorted = (data || []).sort((a, b) => {
-            const fa = a.created_at || '';
-            const fb = b.created_at || '';
-            return fa > fb ? -1 : fa < fb ? 1 : 0;
-          });
-          setAliados(sorted);
+          setAliados(data || []);
         }
       } catch {}
       if (mounted) setLoading(false);
