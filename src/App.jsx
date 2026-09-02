@@ -90,8 +90,9 @@ function AppRoutes() {
     );
   }
 
-  // Logged in, no location → selector
-  if (user && !user.ubicacion) {
+  // Logged in, no location → selector (also checks localStorage as fallback)
+  const ubicacionGuardada = user?.ubicacion || localStorage.getItem('agrilux_ubicacion');
+  if (user && !ubicacionGuardada) {
     return <SelectorUbicacion esPrimeraVez={true} />;
   }
 

@@ -134,11 +134,10 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
     setConfirmando(true);
     setError('');
     try {
+      localStorage.setItem('agrilux_ubicacion', ubicacion.trim());
+      if (coordsSeleccionadas) localStorage.setItem('agrilux_coords', JSON.stringify(coordsSeleccionadas));
       if (user) {
         await updateUbicacion(ubicacion.trim(), coordsSeleccionadas);
-      } else {
-        localStorage.setItem('agrilux_ubicacion', ubicacion.trim());
-        if (coordsSeleccionadas) localStorage.setItem('agrilux_coords', JSON.stringify(coordsSeleccionadas));
       }
       onGuardar?.(ubicacion.trim());
       if (!esPrimeraVez) onClose?.();
