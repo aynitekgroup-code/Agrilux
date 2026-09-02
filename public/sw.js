@@ -47,6 +47,9 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
+  // Ignorar solicitudes no HTTP/HTTPS (por ejemplo, chrome-extension://)
+  if (!['http:', 'https:'].includes(url.protocol)) return;
+
   // No cachear hosts externos que no controlamos
   const skipHosts = [
     'openrouter.ai',

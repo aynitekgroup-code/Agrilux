@@ -80,6 +80,59 @@ const ALERTAS_POR_CULTIVO = {
       { nombre: 'Antracnosis', condicion: (c, d) => (c.humedad > 80 && c.temp >= 22), etapas: ['fructificacion', 'cosecha'], gravedad: 'MEDIA', preventivo: 'Aplicar fungicida preventivo. Cubrir frutos. Manejar con cuidado.' },
     ],
   },
+  tomate: {
+    plagas: [
+      { nombre: 'Tuta absoluta (polilla del tomate)', condicion: (c, d) => (c.temp > 15 && c.temp < 30 && d > 30), etapas: ['crecimiento', 'floracion', 'fructificacion'], gravedad: 'ALTA', preventivo: 'Trampas con feromonas (20-40/ha). Aplicar Bacillus thuringiensis. Eliminar hojas minadas. Rotar con no solanáceas.' },
+      { nombre: 'Mosca blanca', condicion: (c, d) => (c.temp > 22 && c.humedad < 70), etapas: ['crecimiento', 'floracion', 'fructificacion'], gravedad: 'ALTA', preventivo: 'Trampas cromáticas amarillas. Aceites minerales. Control biológico con Encarsia formosa. Eliminar malezas huésped.' },
+      { nombre: 'Trips', condicion: (c, d) => (c.temp > 20 && c.humedad < 65), etapas: ['crecimiento', 'floracion'], gravedad: 'MEDIA', preventivo: 'Trampas azules. Aceite de neem. Mantener humedad. Eliminar flores afectadas.' },
+      { nombre: 'Minador de la hoja', condicion: (c, d) => (c.temp > 18 && d > 25), etapas: ['crecimiento', 'floracion'], gravedad: 'MEDIA', preventivo: 'Eliminar hojas minadas. Trampas amarillas. Aplicar Spinosad si umbral superado.' },
+      { nombre: 'Ácaro rojo/araña roja', condicion: (c, d) => (c.temp > 25 && c.humedad < 50), etapas: ['fructificacion', 'cosecha'], gravedad: 'MEDIA', preventivo: 'Rocío de agua en horas frescas. Acaricidas específicos. Mantener cubierta vegetal.' },
+    ],
+    enfermedades: [
+      { nombre: 'Tizón tardío (Phytophthora)', condicion: (c, d) => (c.humedad > 85 && c.temp >= 12 && c.temp <= 22 && c.lluvia > 5), etapas: ['crecimiento', 'floracion', 'fructificacion'], gravedad: 'ALTA', preventivo: 'Aplicar Mancozeb o Clorotalonil cada 7-10 días. Evitar riego aspersión. Mejorar ventilación.' },
+      { nombre: 'Tizón temprano (Alternaria)', condicion: (c, d) => (c.humedad > 80 && c.temp >= 20 && c.temp <= 28), etapas: ['crecimiento', 'floracion', 'fructificacion'], gravedad: 'MEDIA', preventivo: 'Aplicar fungicida preventivo (Azoxistrobina, Difenoconazol). Rotar cultivos. Eliminar residuos.' },
+      { nombre: 'Pudrición apical (cachaza)', condicion: (c, d) => (c.temp > 28 && c.humedad < 60 && d > 50), etapas: ['fructificacion'], gravedad: 'MEDIA', preventivo: 'Calcio foliar (Cloruro de calcio 0.5-1%). Riego constante. Mulching. Evitar estrés hídrico.' },
+      { nombre: 'Fusarium oxysporum', condicion: (c, d) => (c.temp >= 24 && c.temp <= 30 && d > 40), etapas: ['crecimiento', 'floracion'], gravedad: 'ALTA', preventivo: 'Solarización de suelo. Variedades resistentes (VF). Rotación 3-4 años. Trichoderma en suelo.' },
+      { nombre: 'Nematodos (Meloidogyne)', condicion: (c, d) => (c.temp > 20 && d > 30), etapas: ['crecimiento', 'fructificacion'], gravedad: 'ALTA', preventivo: 'Rotación con maíz/cereales. Solarización. Nematicidas. Portainjertos resistentes.' },
+      { nombre: 'Virus TYLCV/ToCV (mosca blanca)', condicion: (c, d) => (c.temp > 22 && d > 20), etapas: ['crecimiento', 'floracion', 'fructificacion'], gravedad: 'ALTA', preventivo: 'Control estricto mosca blanca. Barreras físicas (malla anti-áfidos). Variedades resistentes. Eliminar plantas enfermas.' },
+    ],
+  },
+
+   aji_amarillo: {
+    plagas: [
+      { nombre: 'Mosca blanca', condicion: (c, d) => (c.temp > 22 && c.humedad < 70), etapas: ['crecimiento', 'floracion', 'fructificacion'], gravedad: 'ALTA', preventivo: 'Trampas cromáticas amarillas. Aceites minerales. Control biológico con Encarsia. Eliminar malezas huésped.' },
+      { nombre: 'Trips', condicion: (c, d) => (c.temp > 20 && c.humedad < 65), etapas: ['crecimiento', 'floracion'], gravedad: 'MEDIA', preventivo: 'Trampas azules. Aceite de neem. Spinosad si umbral superado. Mantener humedad.' },
+      { nombre: 'Ácaro rojo/araña roja', condicion: (c, d) => (c.temp > 25 && c.humedad < 50), etapas: ['fructificacion', 'cosecha'], gravedad: 'MEDIA', preventivo: 'Rocío de agua en horas frescas. Acaricidas específicos (abamectina). Fitoseidos.' },
+      { nombre: 'Pulgón', condicion: (c, d) => (c.temp > 18 && c.humedad > 60), etapas: ['crecimiento', 'floracion'], gravedad: 'MEDIA', preventivo: 'Jabón potásico. Aceite de neem. Conservar mariquitas. Eliminar malezas.' },
+    ],
+    enfermedades: [
+      { nombre: 'Antracnosis', condicion: (c, d) => (c.humedad > 85 && c.temp >= 20 && c.temp <= 30 && c.lluvia > 3), etapas: ['floracion', 'fructificacion'], gravedad: 'ALTA', preventivo: 'Aplicar cobre o mancozeb preventivo. Evitar riego aspersión. Eliminar frutos enfermos. Mejorar ventilación.' },
+      { nombre: 'Oídio', condicion: (c, d) => (c.humedad > 70 && c.humedad < 90 && c.temp >= 20 && c.temp <= 30), etapas: ['crecimiento', 'floracion', 'fructificacion'], gravedad: 'MEDIA', preventivo: 'Azufre micronizado. Triazoles rotando. Mejorar ventilación. No regar de noche.' },
+      { nombre: 'Pudrición de fruto (Phytophthora)', condicion: (c, d) => (c.humedad > 90 && c.lluvia > 10), etapas: ['fructificacion'], gravedad: 'ALTA', preventivo: 'Mejorar drenaje. Fosfito de potasio. Mulching. Cosechar antes de lluvias fuertes.' },
+      { nombre: 'Virus (TYLCV, CMV)', condicion: (c, d) => (c.temp > 22 && d > 20), etapas: ['crecimiento', 'floracion', 'fructificacion'], gravedad: 'ALTA', preventivo: 'Control estricto mosca blanca/ pulgón (vectores). Malla anti-insectos. Variedades resistentes. Eliminar plantas enfermas.' },
+      { nombre: 'Mancha bacteriana', condicion: (c, d) => (c.humedad > 85 && c.lluvia > 5 && c.temp >= 20), etapas: ['crecimiento', 'floracion', 'fructificacion'], gravedad: 'MEDIA', preventivo: 'Cobre preventivo. Semilla certificada. No trabajar con plantas mojadas. Rotar cultivos.' },
+    ],
+  },
+  pimiento: {
+    plagas: [
+      { nombre: 'Mosca blanca', condicion: (c, d) => (c.temp > 22 && c.humedad < 70), etapas: ['crecimiento', 'floracion', 'fructificacion'], gravedad: 'ALTA', preventivo: 'Trampas cromáticas amarillas. Aceites minerales. Encarsia formosa. Malla anti-áfidos (50 malla). Controlar vector TYLCV.' },
+      { nombre: 'Trips', condicion: (c, d) => (c.temp > 20 && c.humedad < 65), etapas: ['crecimiento', 'floracion', 'fructificacion'], gravedad: 'ALTA', preventivo: 'Trampas azules (más efectivas). Spinosad, Beauveria bassiana. Orius (depredador). Malla anti-trips (20 malla). Riego goteo.' },
+      { nombre: 'Ácaro rojo/araña roja', condicion: (c, d) => (c.temp > 25 && c.humedad < 50), etapas: ['crecimiento', 'floracion', 'fructificacion'], gravedad: 'MEDIA', preventivo: 'Rocío agua envés hojas. Abamectina, etoxazol. Fitoseidos (Phytoseiulus). Eliminar malezas. No piretroides.' },
+      { nombre: 'Minador de la hoja', condicion: (c, d) => (c.temp > 18 && d > 25), etapas: ['crecimiento', 'floracion'], gravedad: 'MEDIA', preventivo: 'Trampas amarillas. Ciromazina, spinosad. Diglyphus isaea (parasitoide). Eliminar hojas minadas.' },
+      { nombre: 'Gusano cogollero', condicion: (c, d) => (c.temp > 20 && d < 40), etapas: ['crecimiento', 'floracion'], gravedad: 'ALTA', preventivo: 'Bt (Bacillus thuringiensis). Trampas feromonas. Monitoreo temprano. Insecticida si supera umbral.' },
+    ],
+    enfermedades: [
+      { nombre: 'Antracnosis', condicion: (c, d) => (c.humedad > 85 && c.temp >= 20 && c.temp <= 30 && c.lluvia > 3), etapas: ['floracion', 'fructificacion'], gravedad: 'ALTA', preventivo: 'Cobre, mancozeb, azoxystrobin preventivo. Evitar aspersión. Eliminar frutos manchados. Ventilación. Rotación no solanáceas.' },
+      { nombre: 'Oídio', condicion: (c, d) => (c.humedad > 50 && c.humedad < 80 && c.temp >= 20 && c.temp <= 30), etapas: ['crecimiento', 'floracion', 'fructificacion'], gravedad: 'MEDIA', preventivo: 'Azufre micronizado. Triazoles (difenoconazol, miclobutanil) rotando. Ventilación. Riego goteo. Eliminar hojas basales.' },
+      { nombre: 'Pudrición apical', condicion: (c, d) => (c.temp > 28 && c.humedad < 60 && d > 50), etapas: ['fructificacion'], gravedad: 'ALTA', preventivo: 'Calcio foliar semanal (nitrato/cloruro Ca 0.5-1%). Riego constante. Mulching. pH 6.0-6.8. Evitar exceso N amoniacal/K.' },
+      { nombre: 'TYLCV (Virus rizado amarillo)', condicion: (c, d) => (c.temp > 22 && d > 15), etapas: ['crecimiento', 'floracion'], gravedad: 'CRITICA', preventivo: 'Variedades resistentes (Ty-1, Ty-3). Control estricto mosca blanca. Malla 50 malla. Eliminar plantas infectadas. Barbecho. Tratamiento semilla con imidacloprid.' },
+      { nombre: 'Mildiu', condicion: (c, d) => (c.humedad > 85 && c.temp >= 12 && c.temp <= 22 && c.lluvia > 3), etapas: ['crecimiento', 'floracion', 'fructificacion'], gravedad: 'ALTA', preventivo: 'Mancozeb, metalaxyl preventivo. Riego goteo. Espaciar plantas. Eliminar residuos.' },
+      { nombre: 'Bacteriosis', condicion: (c, d) => (c.humedad > 85 && c.lluvia > 5 && c.temp >= 20), etapas: ['crecimiento', 'floracion', 'fructificacion'], gravedad: 'MEDIA', preventivo: 'Cobre preventivo. Semilla/trasplante certificada. No trabajar mojado. Desinfectar herramientas. Rotación.' },
+    ],
+  },
+
+
+
 };
 
 function getEtapaActual(diasDesdeSiembra) {

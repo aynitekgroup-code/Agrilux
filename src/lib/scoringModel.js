@@ -460,8 +460,436 @@ export const REGLAS_PLAGAS = {
         'Eliminar frutos caídos del suelo'
       ]
     }
+  },
+
+
+aji_amarillo: {
+  mosca_blanca: {
+    nombre: 'Mosca Blanca',
+    nombreCientifico: 'Bemisia tabaci',
+    cultivos: ['aji_amarillo'],
+    icono: '🌶️',
+    condiciones: {
+      temp: { min: 20, max: 35, peso: 0.3 },
+      humedad: { min: 40, max: 80, peso: 0.2 },
+      lluvia: { peso: 0.1 },
+      viento: { max: 15, peso: 0.1 },
+      diasDesdeSiembra: { min: 30, max: 180, peso: 0.3 }
+    },
+    etapasRiesgo: ['crecimiento', 'floracion', 'fructificacion'],
+    diasAnticipacion: 5,
+    gravedadDefault: 'alta',
+    recomendaciones: [
+      'Colocar trampas amarillas pegajosas',
+      'Aplicar jabón potásico o aceite de neem',
+      'Conservar enemigos naturales (Encarsia)',
+      'Eliminar malezas hospederas',
+      'Usar malla anti-áfidos en invernadero'
+    ]
+  },
+  trips: {
+    nombre: 'Trips',
+    nombreCientifico: 'Frankliniella occidentalis',
+    cultivos: ['aji_amarillo'],
+    icono: '🌶️',
+    condiciones: {
+      temp: { min: 22, max: 32, peso: 0.25 },
+      humedad: { min: 40, max: 70, peso: 0.2 },
+      lluvia: { peso: 0.1 },
+      viento: { max: 10, peso: 0.1 },
+      diasDesdeSiembra: { min: 20, max: 150, peso: 0.35 }
+    },
+    etapasRiesgo: ['crecimiento', 'floracion'],
+    diasAnticipacion: 3,
+    gravedadDefault: 'moderada',
+    recomendaciones: [
+      'Trampas azules pegajosas',
+      'Aplicar spinosad o Beauveria bassiana',
+      'Eliminar flores y frutos infestados',
+      'Mantener riego por goteo (evita aspersión)'
+    ]
+  },
+  antracnosis: {
+    nombre: 'Antracnosis',
+    nombreCientifico: 'Colletotrichum capsici',
+    cultivos: ['aji_amarillo'],
+    icono: '🌶️',
+    condiciones: {
+      temp: { min: 20, max: 30, peso: 0.2 },
+      humedad: { min: 85, max: 100, peso: 0.4 },
+      lluvia: { min: 3, peso: 0.25 },
+      viento: { peso: 0.05 },
+      diasDesdeSiembra: { min: 60, max: 200, peso: 0.1 }
+    },
+    etapasRiesgo: ['floracion', 'fructificacion'],
+    diasAnticipacion: 7,
+    gravedadDefault: 'alta',
+    recomendaciones: [
+      'Aplicar fungicida preventivo (cobre, mancozeb)',
+      'Evitar riego por aspersión',
+      'Eliminar frutos con manchas',
+      'Mejorar ventilación con poda',
+      'Rotar con cultivos no hospederos'
+    ]
+  },
+  pudricion_fruto: {
+    nombre: 'Pudrición de Fruto',
+    nombreCientifico: 'Phytophthora capsici',
+    cultivos: ['aji_amarillo'],
+    icono: '🌶️',
+    condiciones: {
+      temp: { min: 18, max: 30, peso: 0.2 },
+      humedad: { min: 80, max: 100, peso: 0.35 },
+      lluvia: { min: 5, peso: 0.3 },
+      viento: { peso: 0.05 },
+      diasDesdeSiembra: { min: 50, max: 180, peso: 0.1 }
+    },
+    etapasRiesgo: ['fructificacion'],
+    diasAnticipacion: 5,
+    gravedadDefault: 'critica',
+    recomendaciones: [
+      'Mejorar drenaje del terreno',
+      'Aplicar fosfitos de potasio preventivo',
+      'No regar en exceso',
+      'Cosechar frutos antes de lluvias fuertes',
+      'Solarización de suelo en siguiente campaña'
+    ]
   }
-};
+},
+
+ pimiento: {
+    mosca_blanca: {
+      nombre: 'Mosca Blanca',
+      nombreCientifico: 'Bemisia tabaci',
+      cultivos: ['pimiento'],
+      icono: '🫑',
+      condiciones: {
+        temp: { min: 20, max: 35, peso: 0.3 },
+        humedad: { min: 40, max: 80, peso: 0.2 },
+        lluvia: { peso: 0.1 },
+        viento: { max: 15, peso: 0.1 },
+        diasDesdeSiembra: { min: 25, max: 170, peso: 0.3 }
+      },
+      etapasRiesgo: ['crecimiento', 'floracion', 'fructificacion'],
+      diasAnticipacion: 5,
+      gravedadDefault: 'alta',
+      recomendaciones: [
+        'Colocar trampas amarillas pegajosas',
+        'Aplicar jabón potásico o aceite de neem',
+        'Conservar enemigos naturales (Encarsia formosa, Eretmocerus)',
+        'Eliminar malezas hospederas',
+        'Usar malla anti-áfidos en invernadero (malla 50)',
+        'Controlar vector de virus TYLCV'
+      ]
+    },
+    trips: {
+      nombre: 'Trips',
+      nombreCientifico: 'Frankliniella occidentalis',
+      cultivos: ['pimiento'],
+      icono: '🫑',
+      condiciones: {
+        temp: { min: 22, max: 32, peso: 0.25 },
+        humedad: { min: 40, max: 70, peso: 0.2 },
+        lluvia: { peso: 0.1 },
+        viento: { max: 10, peso: 0.1 },
+        diasDesdeSiembra: { min: 20, max: 150, peso: 0.35 }
+      },
+      etapasRiesgo: ['crecimiento', 'floracion', 'fructificacion'],
+      diasAnticipacion: 3,
+      gravedadDefault: 'alta',
+      recomendaciones: [
+        'Trampas azules pegajosas (más efectivas que amarillas)',
+        'Aplicar spinosad o Beauveria bassiana',
+        'Eliminar flores y frutos infestados',
+        'Mantener riego por goteo (evita aspersión)',
+        'Usar malla anti-trips (malla 20) en invernadero',
+        'Conservar Orius (depredador natural)'
+      ]
+    },
+    antracnosis: {
+      nombre: 'Antracnosis',
+      nombreCientifico: 'Colletotrichum acutatum / C. capsici',
+      cultivos: ['pimiento'],
+      icono: '🫑',
+      condiciones: {
+        temp: { min: 20, max: 30, peso: 0.2 },
+        humedad: { min: 85, max: 100, peso: 0.4 },
+        lluvia: { min: 3, peso: 0.25 },
+        viento: { peso: 0.05 },
+        diasDesdeSiembra: { min: 60, max: 180, peso: 0.1 }
+      },
+      etapasRiesgo: ['floracion', 'fructificacion'],
+      diasAnticipacion: 7,
+      gravedadDefault: 'alta',
+      recomendaciones: [
+        'Aplicar fungicida preventivo (cobre, mancozeb, azoxystrobin)',
+        'Evitar riego por aspersión',
+        'Eliminar frutos con manchas hundidas y concéntricas',
+        'Mejorar ventilación con poda y densidad adecuada',
+        'Rotar con cultivos no hospederos (no solanáceas)',
+        'Usar semilla/trasplante certificada libre de patógeno'
+      ]
+    },
+    pudricion_apical: {
+      nombre: 'Pudrición Apical (Blossom End Rot)',
+      nombreCientifico: 'Fisiopatía por déficit de Ca',
+      cultivos: ['pimiento'],
+      icono: '🫑',
+      condiciones: {
+        temp: { min: 25, max: 35, peso: 0.25 },
+        humedad: { min: 40, max: 70, peso: 0.25 },
+        lluvia: { min: 0, peso: 0.1 },
+        viento: { max: 20, peso: 0.15 },
+        diasDesdeSiembra: { min: 50, max: 150, peso: 0.25 }
+      },
+      etapasRiesgo: ['fructificacion'],
+      diasAnticipacion: 7,
+      gravedadDefault: 'alta',
+      recomendaciones: [
+        'Mantener riego constante (evita fluctuaciones hídricas)',
+        'Aplicar calcio foliar (cloruro o nitrato de calcio) semanal',
+        'Evitar exceso de nitrógeno amoniacal y potasio',
+        'Mulching para estabilizar humedad del suelo',
+        'Verificar pH suelo (6.0-6.8 para absorción Ca)',
+        'No podar agresivamente durante fructificación'
+      ]
+    },
+    oidio: {
+      nombre: 'Oídio',
+      nombreCientifico: 'Leveillula taurica',
+      cultivos: ['pimiento'],
+      icono: '🫑',
+      condiciones: {
+        temp: { min: 20, max: 30, peso: 0.25 },
+        humedad: { min: 50, max: 80, peso: 0.3 },
+        lluvia: { peso: 0.05 },
+        viento: { min: 5, peso: 0.15 },
+        diasDesdeSiembra: { min: 40, max: 160, peso: 0.25 }
+      },
+      etapasRiesgo: ['crecimiento', 'floracion', 'fructificacion'],
+      diasAnticipacion: 5,
+      gravedadDefault: 'moderada',
+      recomendaciones: [
+        'Aplicar azufre micronizado o triazoles preventivos',
+        'Mejorar ventilación (poda, separación plantas)',
+        'Evitar humedad en hojas (riego por goteo)',
+        'Eliminar hojas basales infectadas',
+        'Usar variedades tolerantes si disponible',
+        'Rotar principios activos para evitar resistencia'
+      ]
+    },
+    virus_tylcv: {
+      nombre: 'Virus del Rizado Amarillo del Tomate (TYLCV)',
+      nombreCientifico: 'Tomato yellow leaf curl virus',
+      cultivos: ['pimiento'],
+      icono: '🫑',
+      condiciones: {
+        temp: { min: 22, max: 35, peso: 0.3 },
+        humedad: { min: 40, max: 70, peso: 0.15 },
+        lluvia: { peso: 0.05 },
+        viento: { max: 15, peso: 0.1 },
+        diasDesdeSiembra: { min: 15, max: 120, peso: 0.4 }
+      },
+      etapasRiesgo: ['crecimiento', 'floracion'],
+      diasAnticipacion: 10,
+      gravedadDefault: 'critica',
+      recomendaciones: [
+        'Usar variedades resistentes (gen Ty-1, Ty-3)',
+        'Control estricto de mosca blanca (vector)',
+        'Malla anti-insectos en invernadero (malla 50)',
+        'Eliminar plantas infectadas inmediatamente',
+        'Barbecho y rotación con no hospederas',
+        'Tratamiento semilla/trasplante con imidacloprid'
+      ]
+    },
+acaros: {
+      nombre: 'Ácaro Rojo / Araña Roja',
+      nombreCientifico: 'Tetranychus urticae',
+      cultivos: ['pimiento'],
+      icono: '🫑',
+      condiciones: {
+        temp: { min: 25, max: 35, peso: 0.3 },
+        humedad: { min: 30, max: 60, peso: 0.3 },
+        lluvia: { peso: 0.05 },
+        viento: { max: 10, peso: 0.1 },
+        diasDesdeSiembra: { min: 30, max: 180, peso: 0.25 }
+      },
+      etapasRiesgo: ['crecimiento', 'floracion', 'fructificacion'],
+      diasAnticipacion: 5,
+      gravedadDefault: 'moderada',
+      recomendaciones: [
+        'Rocío de agua en envés de hojas (aumenta humedad)',
+        'Aplicar acaricidas específicos (abamectina, etoxazol)',
+        'Soltar fitoseidos (Phytoseiulus persimilis, Neoseiulus californicus)',
+        'Eliminar malezas y restos de cultivo',
+        'Evitar polvo en hojas (caminos, viento)',
+        'No usar piretroides (inducen brotes de ácaros)'
+      ]
+    }
+  },
+
+  tomate: {
+    tizon_tardio: {
+      nombre: 'Tizón Tardío',
+      nombreCientifico: 'Phytophthora infestans',
+      cultivos: ['tomate'],
+      icono: '🍅',
+      condiciones: {
+        temp: { min: 10, max: 25, peso: 0.3 },
+        humedad: { min: 90, max: 100, peso: 0.3 },
+        lluvia: { min: 2, peso: 0.2 },
+        viento: { max: 20, peso: 0.1 },
+        diasDesdeSiembra: { min: 45, max: 120, peso: 0.1 }
+      },
+      etapasRiesgo: ['floracion', 'fructificacion'],
+      diasAnticipacion: 3,
+      gravedadDefault: 'alta',
+      recomendaciones: [
+        'Aplicar fungicida preventivo (mancozeb, clorotalonil)',
+        'Mejorar ventilación y drenaje',
+        'Eliminar hojas infectadas',
+        'Evitar riego por aspersión'
+      ]
+    },
+    tuta_absoluta: {
+      nombre: 'Tuta Absoluta (Polilla del Tomate)',
+      nombreCientifico: 'Phthorimaea absoluta',
+      cultivos: ['tomate'],
+      icono: '🍅',
+      condiciones: {
+        temp: { min: 20, max: 30, peso: 0.3 },
+        humedad: { min: 50, max: 80, peso: 0.2 },
+        lluvia: { peso: 0.1 },
+        viento: { max: 15, peso: 0.1 },
+        diasDesdeSiembra: { min: 20, max: 150, peso: 0.3 }
+      },
+      etapasRiesgo: ['crecimiento', 'floracion', 'fructificacion'],
+      diasAnticipacion: 7,
+      gravedadDefault: 'critica',
+      recomendaciones: [
+        'Trampas con feromonas (delta traps)',
+        'Control biológico (Bacillus thuringiensis, Trichogramma)',
+        'Eliminar hojas minadas y frutos afectados',
+        'Rotar principios activos (spinosad, clorantraniliprol)',
+        'Malla anti-insectos en invernadero'
+      ]
+    },
+    mildiu: {
+      nombre: 'Mildiu',
+      nombreCientifico: 'Phytophthora infestans',
+      cultivos: ['tomate'],
+      icono: '🍅',
+      condiciones: {
+        temp: { min: 12, max: 22, peso: 0.25 },
+        humedad: { min: 85, max: 100, peso: 0.35 },
+        lluvia: { min: 3, peso: 0.2 },
+        viento: { max: 15, peso: 0.1 },
+        diasDesdeSiembra: { min: 30, max: 120, peso: 0.1 }
+      },
+      etapasRiesgo: ['crecimiento', 'floracion', 'fructificacion'],
+      diasAnticipacion: 3,
+      gravedadDefault: 'alta',
+      recomendaciones: [
+        'Fungicidas preventivos (mancozeb, metalaxyl)',
+        'Riego por goteo (no aspersión)',
+        'Espaciar plantas para ventilación',
+        'Eliminar residuos de cosecha anterior'
+      ]
+    },
+    oidio: {
+      nombre: 'Oídio',
+      nombreCientifico: 'Leveillula taurica / Oidium neolycopersici',
+      cultivos: ['tomate'],
+      icono: '🍅',
+      condiciones: {
+        temp: { min: 20, max: 30, peso: 0.25 },
+        humedad: { min: 50, max: 80, peso: 0.3 },
+        lluvia: { peso: 0.05 },
+        viento: { min: 5, peso: 0.15 },
+        diasDesdeSiembra: { min: 40, max: 160, peso: 0.25 }
+      },
+      etapasRiesgo: ['crecimiento', 'floracion', 'fructificacion'],
+      diasAnticipacion: 5,
+      gravedadDefault: 'moderada',
+      recomendaciones: [
+        'Azufre micronizado preventivo',
+        'Triazoles (difenoconazol, miclobutanil) rotando',
+        'Mejorar ventilación',
+        'Eliminar hojas basales infectadas'
+      ]
+    },
+    virus_tylcv: {
+      nombre: 'TYLCV (Virus Rizado Amarillo)',
+      nombreCientifico: 'Tomato yellow leaf curl virus',
+      cultivos: ['tomate'],
+      icono: '🍅',
+      condiciones: {
+        temp: { min: 22, max: 35, peso: 0.3 },
+        humedad: { min: 40, max: 70, peso: 0.15 },
+        lluvia: { peso: 0.05 },
+        viento: { max: 15, peso: 0.1 },
+        diasDesdeSiembra: { min: 15, max: 120, peso: 0.4 }
+      },
+      etapasRiesgo: ['crecimiento', 'floracion'],
+      diasAnticipacion: 10,
+      gravedadDefault: 'critica',
+      recomendaciones: [
+        'Variedades resistentes (Ty-1, Ty-3)',
+        'Control estricto mosca blanca (vector)',
+        'Malla anti-insectos (50 malla)',
+        'Eliminar plantas infectadas',
+        'Barbecho y rotación no hospederas'
+      ]
+    },
+    pudricion_apical: {
+      nombre: 'Pudrición Apical (Cachaza)',
+      nombreCientifico: 'Fisiopatía por déficit de Ca',
+      cultivos: ['tomate'],
+      icono: '🍅',
+      condiciones: {
+        temp: { min: 25, max: 35, peso: 0.25 },
+        humedad: { min: 40, max: 70, peso: 0.25 },
+        lluvia: { min: 0, peso: 0.1 },
+        viento: { max: 20, peso: 0.15 },
+        diasDesdeSiembra: { min: 50, max: 150, peso: 0.25 }
+      },
+      etapasRiesgo: ['fructificacion'],
+      diasAnticipacion: 7,
+      gravedadDefault: 'alta',
+      recomendaciones: [
+        'Riego constante (evita fluctuaciones)',
+        'Calcio foliar semanal (nitrato/cloruro Ca)',
+        'Evitar exceso N amoniacal y K',
+        'Mulching para estabilizar humedad',
+        'pH suelo 6.0-6.8'
+      ]
+    },
+    minador: {
+      nombre: 'Minador de la Hoja',
+      nombreCientifico: 'Liriomyza spp.',
+      cultivos: ['tomate'],
+      icono: '🍅',
+      condiciones: {
+        temp: { min: 20, max: 30, peso: 0.25 },
+        humedad: { min: 50, max: 80, peso: 0.2 },
+        lluvia: { peso: 0.1 },
+        viento: { max: 10, peso: 0.1 },
+        diasDesdeSiembra: { min: 20, max: 140, peso: 0.35 }
+      },
+      etapasRiesgo: ['crecimiento', 'floracion'],
+      diasAnticipacion: 5,
+      gravedadDefault: 'moderada',
+      recomendaciones: [
+        'Trampas amarillas pegajosas',
+        'Spinosad o ciromazina',
+        'Conservar parasitoides (Diglyphus)',
+        'Eliminar hojas minadas'
+      ]
+    }
+    },
+  }
+
+
 
 function evaluarFactorTemperatura(temp, condTemp) {
   if (!condTemp) return { puntos: 0, texto: '' };
