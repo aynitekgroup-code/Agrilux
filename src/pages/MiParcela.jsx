@@ -178,7 +178,6 @@ export default function MiParcela() {
         area: poligono ? String(poligono.area) : form.area,
         fecha_siembra: form.fechaSiembra, gps: form.gps || user?.ubicacion || '',
         coordenadas: coordenadasStr,
-        created_at: new Date().toISOString(),
       }).select().single();
       if (error) throw error;
       const nueva = {
