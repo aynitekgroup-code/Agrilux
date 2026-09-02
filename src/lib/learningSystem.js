@@ -52,7 +52,6 @@ export async function guardarHistorialClinico({
       foto_url: fotoUrl,
       lat,
       lon,
-      created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
     const { data, error } = await supabase.from('historial_clinico').insert(payload).select().single();
@@ -372,8 +371,7 @@ export async function guardarConversacion(userId, mensajes) {
   try {
     const { error } = await supabase.from('conversaciones_voz').insert({
       user_id: userId,
-      mensajes: mensajes.slice(-20),
-      created_at: new Date().toISOString()
+      mensajes: mensajes.slice(-20)
     });
     if (error) throw error;
     return true;

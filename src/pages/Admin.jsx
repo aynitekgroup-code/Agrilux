@@ -253,7 +253,6 @@ function ModalAgregarUsuario({ onCerrar, onAgregado }) {
         ubicacion:      form.ubicacion || null,
         password_default: pass,
         creado_por:      'admin',
-        created_at:      new Date().toISOString(),
       });
       if (error) throw error;
       onAgregado({ id: uid, ...form, emailSintetico, creadoPor: 'admin' });
@@ -521,8 +520,7 @@ function ModalAliado({ aliado, onCerrar, onGuardado }) {
         if (error) throw error;
         onGuardado({ id: aliado.id, ...aliado, ...datos });
       } else {
-        const payload = { ...datos, created_at: new Date().toISOString() };
-        const { data, error } = await supabase.from('aliados').insert(payload).select().single();
+        const { data, error } = await supabase.from('aliados').insert(datos).select().single();
         if (error) throw error;
         onGuardado({ id: data.id, ...datos, createdAt: new Date().toISOString() });
       }
@@ -969,7 +967,6 @@ function ModalTienda({ tienda, onCerrar, onGuardado }) {
         if (error) throw error;
         onGuardado({ id: tienda.id, ...datos, created_at: tienda.created_at });
       } else {
-        datos.created_at = new Date().toISOString();
         datos.creado_por = 'admin';
         const { data, error } = await supabase.from('tiendas').insert(datos).select().single();
         if (error) throw error;

@@ -215,7 +215,6 @@ export default function RegistroTienda({ onCerrado, onRegistrada, tienda = null 
           activa: true,
           ventas: 0,
           ultima_consulta: null,
-          created_at: new Date().toISOString(),
         };
 
         const { data, error } = await supabase.from('tiendas_comunidad').insert(tiendaData).select().single();
