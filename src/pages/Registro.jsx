@@ -194,9 +194,7 @@ export default function Registro() {
 
         {/* Logo */}
         <div className="text-center mb-10">
-          <div className="w-24 h-24 bg-primary rounded-3xl flex items-center justify-center mx-auto mb-5 shadow-xl">
-            <span className="text-5xl">🌾</span>
-          </div>
+            <img    src="/icons/icon-192x192.png" alt="Agrilux" className="w-24 h-24 mx-auto mb-5 shadow-xl rounded-3xl object-cover"/>
           <h1 className="text-4xl font-display font-bold text-primary">AGRILUX</h1>
           <p className="text-gray-500 mt-2 text-sm">Agricultura Inteligente del Perú</p>
         </div>
@@ -442,6 +440,21 @@ export default function Registro() {
         <div className="mt-6 flex items-center justify-between">
           <p className="text-xs text-gray-400">
             ¿Ayuda?{' '}
+            <a
+              href="https://wa.me/51920277794"
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary font-semibold"
+            >
+              920 277 794
+            </a>
+            <a
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary font-semibold"
+            >
+              -
+            </a>
             <a
               href="https://wa.me/51935211605"
               target="_blank"
