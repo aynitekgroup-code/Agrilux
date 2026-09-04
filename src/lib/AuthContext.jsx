@@ -119,7 +119,10 @@ export const AuthProvider = ({ children }) => {
     const uid = user?.id || user?.uid;
     if (!uid) throw new Error('No hay sesión');
     const data = { ubicacion, ...(coords ? { coords } : {}) };
-    await supabase.from('usuarios').update(data).eq('id', uid);
+    const { error } = await supabase.from('usuarios').update(data).eq('id', uid);
+    if (error) console.error('Error guardando ubicación:', error);
+    localStorage.setItem('agrilux_ubicacion', ubicacion);
+    if (coords) localStorage.setItem('agrilux_coords', JSON.stringify(coords));
     setUser(prev => ({ ...prev, ubicacion, coords: coords || prev.coords }));
   };
 
