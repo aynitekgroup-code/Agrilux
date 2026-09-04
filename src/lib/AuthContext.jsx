@@ -119,8 +119,16 @@ export const AuthProvider = ({ children }) => {
     const uid = user?.id || user?.uid;
     if (!uid) throw new Error('No hay sesión');
     const data = { ubicacion, ...(coords ? { coords } : {}) };
-    const { error } = await supabase.from('usuarios').update(data).eq('id', uid);
-    if (error) console.error('Error guardando ubicación:', error);
+    const { data: resultado, error } = await supabase.from('usuarios').update(data).eq('id', uid).select();
+    if (error) {
+      console.error('Error guardando ubicación:', error);
+      throw error;
+    }
+    if (!resultado || resultado.length === 0) {
+      console.warn('Update ubicación: 0 filas afectadas. uid=', uid);
+      const { data: existe } = await supabase.from('usuarios').select('id, ubicacion').eq('id', uid);
+      console.warn('Existe fila?:', existe);
+    }
     localStorage.setItem('agrilux_ubicacion', ubicacion);
     if (coords) localStorage.setItem('agrilux_coords', JSON.stringify(coords));
     setUser(prev => ({ ...prev, ubicacion, coords: coords || prev.coords }));
