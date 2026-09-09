@@ -1437,12 +1437,29 @@ export default function Admin() {
                         )}
                       </div>
 
-                      <button
-                        onClick={() => setModalEditarUsuario(u)}
-                        className="flex items-center justify-center gap-2 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold"
-                      >
-                        <Pencil size={14} /> Editar usuario
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setModalEditarUsuario(u)}
+                          className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold"
+                        >
+                          <Pencil size={14} /> Editar
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`¿Eliminar al usuario "${u.nombre}"?\n\nSe eliminará su registro. Esta acción no se puede deshacer.`)) return;
+                            try {
+                              const { error: dbError } = await supabase.from('usuarios').delete().eq('id', u.id);
+                              if (dbError) throw dbError;
+                              setUsuarios(prev => prev.filter(x => x.id !== u.id));
+                            } catch (e) {
+                              alert('Error al eliminar: ' + e.message);
+                            }
+                          }}
+                          className="flex items-center justify-center gap-2 bg-red-500 text-white rounded-xl py-2.5 px-4 text-sm font-semibold"
+                        >
+                          <Trash2 size={14} /> Eliminar
+                        </button>
+                      </div>
 
                       {u.celular && (
                         <a href={`https://wa.me/51${u.celular.replace(/\D/g, '')}`} target="_blank" rel="noreferrer"
