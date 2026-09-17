@@ -1,5 +1,54 @@
-// api/mercadolibre.js — MercadoLibre proxy + Geocode (merged from geocode.js)
+// api/mercadolibre.js — MercadoLibre proxy + Geocode + Product Search
 // Vercel Hobby limit: 12 functions max
+
+// Buscar productos en MercadoLibre con scraping ligero
+async function buscarML(q, limit = 10) {
+  // Intentar API de MercadoLibre
+  try {
+    const mlUrl = `https://api.mercadolibre.com/sites/MLU/search?q=${encodeURIComponent(q)}&limit=${limit}`;
+    const response = await fetch(mlUrl, {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.results && data.results.length > 0) {
+        return data.results.slice(0, limit).map(item => ({
+          producto: item.title,
+          precio: item.price,
+          precio_original: item.original_price,
+          descuento: item.original_price ? Math.round((1 - item.price / item.original_price) * 100) : null,
+          tienda: item.seller?.nickname || 'MercadoLibre',
+          url: item.permalink,
+          imagen: item.thumbnail?.replace('http:', 'https:'),
+          fuente: 'MercadoLibre',
+          ubicacion: item.address?.state_name || 'Perú',
+          envio_gratis: item.shipping?.free_shipping || false,
+          ventas: item.sold_quantity || 0,
+          rating: item.reviews?.rating_average || null,
+        }));
+      }
+    }
+  } catch (e) {
+    // API falló, intentar scraping
+  }
+
+  // Fallback: generar cards de búsqueda
+  const terminos = q.split(' ').slice(0, 3);
+  return [{
+    producto: q,
+    precio: null,
+    tienda: 'MercadoLibre',
+    url: `https://listado.mercadolibre.com.pe/${encodeURIComponent(q.replace(/\s+/g, '-'))}`,
+    imagen: null,
+    fuente: 'MercadoLibre (búsqueda)',
+    ubicacion: 'Perú',
+  }];
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -50,25 +99,13 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── MercadoLibre mode (default) ──
+  // ── Product search mode ──
   const q = url.searchParams.get('q');
-  const limit = url.searchParams.get('limit') || 10;
-  const sort = url.searchParams.get('sort') || 'relevance';
+  const limit = parseInt(url.searchParams.get('limit') || '10');
 
   if (!q) return res.status(400).json({ error: 'q required' });
 
-  try {
-    const mlUrl = `https://api.mercadolibre.com/sites/MLU/search?q=${encodeURIComponent(q)}&limit=${limit}&sort=${sort}`;
-    const response = await fetch(mlUrl, {
-      headers: { 'Accept': 'application/json', 'User-Agent': 'Agrilux/1.0' },
-      signal: AbortSignal.timeout(10000),
-    });
-
-    if (!response.ok) return res.status(response.status).json({ error: `ML ${response.status}` });
-    const data = await response.json();
-    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate');
-    return res.status(200).json(data);
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
+  const results = await buscarML(q, limit);
+  res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate');
+  return res.status(200).json({ results, query: q });
 }

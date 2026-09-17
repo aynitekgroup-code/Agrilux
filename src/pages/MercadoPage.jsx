@@ -85,16 +85,30 @@ export default function MercadoPage() {
 
   useEffect(() => { recargarOfertas(); }, [recargarOfertas]);
 
-  // Cargar ofertas de agentes guardadas
+  // Cargar ofertas de agentes guardadas + auto-ejecutar
   useEffect(() => {
-    const cargarOfertasAgentes = async () => {
+    const cargarYAutoEjecutar = async () => {
+      // Cargar guardadas primero
       const guardadas = await cargarOfertasGuardadas();
       if (guardadas.length > 0) {
         setOfertasAgentes(guardadas);
       }
+      // Auto-ejecutar agentes al entrar a la pestaña
+      if (tab === 'agentes') {
+        ejecutarBusquedaAgentes();
+      }
     };
-    cargarOfertasAgentes();
+    cargarYAutoEjecutar();
   }, []);
+
+  // Auto-ejecutar cada 30 minutos cuando está en pestaña agentes
+  useEffect(() => {
+    if (tab !== 'agentes') return;
+    const interval = setInterval(() => {
+      ejecutarBusquedaAgentes();
+    }, 30 * 60 * 1000); // 30 minutos
+    return () => clearInterval(interval);
+  }, [tab]);
 
   // Escuchar actualizaciones de agentes
   useEffect(() => {
@@ -465,54 +479,61 @@ export default function MercadoPage() {
           ) : (
             <div className="space-y-3">
               {ofertasAgentesFiltradas.slice(0, 20).map((o, i) => (
-                <div key={i} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+                <a key={i} href={o.url || '#'} target="_blank" rel="noreferrer"
+                  className="block bg-white rounded-2xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                      <Bot size={18} className="text-blue-600" />
-                    </div>
+                    {o.imagen ? (
+                      <img src={o.imagen} alt={o.producto}
+                        className="w-16 h-16 object-cover rounded-xl border border-gray-100 flex-shrink-0" />
+                    ) : (
+                      <div className="w-16 h-16 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <Bot size={24} className="text-blue-600" />
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-bold text-gray-800">{o.producto}</p>
+                      <p className="text-sm font-bold text-gray-800 line-clamp-2">{o.producto}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
                         {o.precio != null && (
-                          <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                          <span className="text-base font-extrabold text-green-600">
                             S/ {o.precio}
                           </span>
                         )}
+                        {o.precio_original && o.precio_original > o.precio && (
+                          <span className="text-xs text-gray-400 line-through">
+                            S/ {o.precio_original}
+                          </span>
+                        )}
                         {o.descuento && (
-                          <span className="text-[10px] font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded-full">
+                          <span className="text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded-full">
                             -{o.descuento}%
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-[10px] text-gray-500 mt-1">
                         🏪 {o.tienda} · 📍 {o.ubicacion || 'Perú'}
+                        {o.ventas > 0 && ` · ${o.ventas} vendidos`}
                       </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                          🤖 Agente: {o.fuente}
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                          o.fuente === 'MIDAGRI' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {o.fuente === 'MIDAGRI' ? '📊 MIDAGRI' : '🤖 ML'}
                         </span>
                         {o.envio_gratis && (
-                          <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                          <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
                             🚚 Envío gratis
+                          </span>
+                        )}
+                        {o.rating && (
+                          <span className="text-[10px] text-amber-600">
+                            ⭐ {o.rating}
                           </span>
                         )}
                       </div>
                     </div>
+                    <ExternalLink size={14} className="text-gray-300 flex-shrink-0 mt-1" />
                   </div>
-                  <div className="flex gap-2 mt-3 flex-wrap">
-                    {o.url && (
-                      <a href={o.url} target="_blank" rel="noreferrer"
-                        className="flex items-center gap-1 text-[10px] font-bold bg-blue-500 text-white px-2.5 py-1.5 rounded-full">
-                        <ExternalLink size={10} /> {o.fuente === 'MIDAGRI' ? 'Ver precios en ML' : `Ver en ${o.fuente}`}
-                      </a>
-                    )}
-                    <a href={`https://wa.me/51923456789?text=${encodeURIComponent(`Hola, busco ${o.producto}. ¿Tienen disponible?`)}`}
-                      target="_blank" rel="noreferrer"
-                      className="flex items-center gap-1 text-[10px] font-bold bg-green-500 text-white px-2.5 py-1.5 rounded-full">
-                      <MessageCircle size={10} /> WhatsApp
-                    </a>
-                  </div>
-                </div>
+                </a>
               ))}
             </div>
           )}
