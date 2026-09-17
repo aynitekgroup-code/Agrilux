@@ -130,7 +130,7 @@ export default function Registro() {
         const lon = pos.coords.longitude;
         setCoords({ lat, lon });
         try {
-          const res = await fetch(`/api/geocode?lat=${lat}&lon=${lon}`);
+          const res = await fetch(`/api/mercadolibre?type=geocode&lat=${lat}&lon=${lon}`);
           if (!res.ok) throw new Error();
           const data = await res.json();
           const nombreCorto = [data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]

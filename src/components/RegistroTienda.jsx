@@ -110,7 +110,7 @@ export default function RegistroTienda({ onCerrado, onRegistrada, tienda = null 
       const query = [form.direccion, form.distrito, form.departamento, 'Perú']
         .filter(Boolean)
         .join(', ');
-      const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/mercadolibre?type=geocode&q=${encodeURIComponent(query)}`);
       const data = await res.json();
       if (data.lat && data.lon) {
         setForm(f => ({ ...f, lat: data.lat, lon: data.lon }));

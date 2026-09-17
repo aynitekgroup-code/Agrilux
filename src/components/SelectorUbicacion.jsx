@@ -53,7 +53,7 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
         if (marker) marker.remove();
         marker = L.marker([lat, lng]).addTo(map);
         try {
-          const res = await fetch(`/api/geocode?lat=${lat}&lon=${lng}`);
+          const res = await fetch(`/api/mercadolibre?type=geocode&lat=${lat}&lon=${lng}`);
           if (res.ok) {
             const data = await res.json();
             const nombre = [data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
@@ -86,7 +86,7 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
         const lon = pos.coords.longitude;
         setCoordsSeleccionadas({ lat, lon });
         try {
-          const res = await fetch(`/api/geocode?lat=${lat}&lon=${lon}`);
+          const res = await fetch(`/api/mercadolibre?type=geocode&lat=${lat}&lon=${lon}`);
           if (!res.ok) throw new Error();
           const data = await res.json();
           const nombreCorto = [data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]

@@ -928,7 +928,7 @@ function ModalTienda({ tienda, onCerrar, onGuardado }) {
     setError('');
     try {
       const query = [form.direccion, form.region, 'Perú'].filter(Boolean).join(', ');
-      const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/mercadolibre?type=geocode&q=${encodeURIComponent(query)}`);
       const data = await res.json();
       if (data.lat && data.lon) {
         setForm(f => ({ ...f, lat: data.lat, lon: data.lon }));

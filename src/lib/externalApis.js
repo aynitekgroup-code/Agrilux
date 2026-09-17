@@ -15,7 +15,7 @@
 
 // ─── Geocodificación ──────────────────────────────────────────────────────────
 export async function geocodePlace(query) {
-  const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+  const res = await fetch(`/api/mercadolibre?type=geocode&q=${encodeURIComponent(query)}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'No se pudo geocodificar la ubicación');

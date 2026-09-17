@@ -6,6 +6,7 @@
     { "source": "/api/plant-disease", "destination": "/api/analizar-imagen" },
     { "source": "/api/recomendaciones-cana", "destination": "/api/ciclo-recomendaciones" },
     { "source": "/api/ml-proxy", "destination": "/api/mercadolibre" },
+    { "source": "/api/geocode", "destination": "/api/mercadolibre" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
