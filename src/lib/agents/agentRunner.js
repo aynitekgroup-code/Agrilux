@@ -4,6 +4,7 @@ import { buscarTiendasCercanas } from './tiendasCercanasAgent';
 import { supabase } from '../supabase';
 
 const ESTADO_KEY = 'agrilux_agentes_estado';
+const OFERTAS_KEY = 'agrilux_ofertas_agentes';
 
 let running = false;
 let listeners = [];
@@ -26,6 +27,17 @@ export function getEstadoAgentes() {
 function guardarEstado(estado) {
   localStorage.setItem(ESTADO_KEY, JSON.stringify(estado));
   notify(estado);
+}
+
+function guardarOfertasLocal(ofertas) {
+  try {
+    localStorage.setItem(OFERTAS_KEY, JSON.stringify({
+      ofertas,
+      timestamp: Date.now()
+    }));
+  } catch (e) {
+    console.warn('[AgentRunner] Error guardando local:', e.message);
+  }
 }
 
 export async function ejecutarAgentes(busqueda = null) {
@@ -70,30 +82,37 @@ export async function ejecutarAgentes(busqueda = null) {
       ...mejoresOfertas.slice(0, 20).map(o => ({ ...o, tipo: 'oferta_publica' }))
     ];
 
-    // Guardar en Supabase
-    if (todasLasOfertas.length > 0) {
-      const registros = todasLasOfertas.map(o => ({
-        producto: o.producto,
-        precio: o.precio,
-        tienda: o.tienda,
-        fuente: o.fuente,
-        url: o.url,
-        ubicacion: o.ubicacion,
-        tipo: o.tipo,
-        metadata: JSON.stringify({
-          descuento: o.descuento,
-          envio_gratis: o.envio_gratis,
-          imagen: o.imagen
-        })
-      }));
+    // Guardar en localStorage (siempre funciona)
+    guardarOfertasLocal(todasLasOfertas);
 
-      const { error } = await supabase
-        .from('ofertas_agentes')
-        .insert(registros);
+    // Intentar guardar en Supabase (puede fallar si la tabla no existe)
+    try {
+      if (todasLasOfertas.length > 0) {
+        const registros = todasLasOfertas.slice(0, 20).map(o => ({
+          producto: o.producto,
+          precio: o.precio,
+          tienda: o.tienda,
+          fuente: o.fuente,
+          url: o.url,
+          ubicacion: o.ubicacion,
+          tipo: o.tipo,
+          metadata: JSON.stringify({
+            descuento: o.descuento,
+            envio_gratis: o.envio_gratis,
+            imagen: o.imagen
+          })
+        }));
 
-      if (error) {
-        console.warn('[AgentRunner] Error guardando en Supabase:', error.message);
+        const { error } = await supabase
+          .from('ofertas_agentes')
+          .insert(registros);
+
+        if (error) {
+          console.warn('[AgentRunner] Supabase no disponible, usando localStorage:', error.message);
+        }
       }
+    } catch (e) {
+      console.warn('[AgentRunner] Error guardando en Supabase:', e.message);
     }
 
     estado.ejecutando = false;
@@ -126,6 +145,18 @@ export async function ejecutarAgentes(busqueda = null) {
 }
 
 export async function cargarOfertasGuardadas() {
+  // Primero intentar de localStorage (más rápido)
+  try {
+    const local = JSON.parse(localStorage.getItem(OFERTAS_KEY));
+    if (local?.ofertas && local.ofertas.length > 0) {
+      // Si tiene menos de 1 hora, usar local
+      if (Date.now() - local.timestamp < 3600000) {
+        return local.ofertas;
+      }
+    }
+  } catch (e) {}
+
+  // Intentar de Supabase
   try {
     const { data, error } = await supabase
       .from('ofertas_agentes')
@@ -136,7 +167,9 @@ export async function cargarOfertasGuardadas() {
     if (error) throw error;
     return data || [];
   } catch (e) {
-    console.warn('[AgentRunner] Error cargando ofertas guardadas:', e.message);
-    return [];
+    console.warn('[AgentRunner] Usando cache local:', e.message);
+    try {
+      return JSON.parse(localStorage.getItem(OFERTAS_KEY))?.ofertas || [];
+    } catch { return []; }
   }
 }

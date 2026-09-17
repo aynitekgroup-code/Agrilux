@@ -1,69 +1,98 @@
 const PRODUCTOS_BUSCAR = [
   'fertilizante', 'urea', 'superfosfato', 'cloruro potasio',
   'mancozeb', 'cipermetrina', 'glifosato', 'abono organico',
-  'semilla papa', 'semilla maiz', 'huarochi', 'fungicida',
-  'insecticida', 'herbicida', 'caldo bordelés', 'sulfato cobre',
-  'peatrosol', 'trichoderma', 'beauveria', 'biodefensas'
+  'semilla papa', 'semilla maiz', 'fungicida',
+  'insecticida', 'herbicida', 'caldo bordeles', 'sulfato cobre',
+  'trichoderma', 'beauveria'
 ];
 
-const FUENTES = [
-  {
-    nombre: 'MercadoLibre',
-    baseUrl: 'https://api.mercadolibre.com/sites/MLU/search?q=',
-    parseResultado: (data) => {
-      if (!data.results) return [];
-      return data.results.slice(0, 5).map(item => ({
-        producto: item.title,
-        precio: item.price,
-        tienda: item.seller?.nickname || 'MercadoLibre',
-        url: item.permalink,
-        fuente: 'MercadoLibre',
-        ubicacion: item.address?.state_name || 'Perú'
-      }));
-    }
-  },
-  {
-    nombre: 'SISAP',
-    baseUrl: 'https://apps.fao.org/sisamc/api/v1/prices?commodity=',
-    parseResultado: (data) => {
-      if (!data?.data) return [];
-      return data.data.slice(0, 3).map(item => ({
-        producto: item.commodity_name,
-        precio: item.value,
-        tienda: 'SISAP (Oficial)',
-        url: null,
-        fuente: 'SISAP',
-        ubicacion: item.department || 'Nacional'
-      }));
-    }
+const PRECIOS_MIDAGRI = {
+  urea: { precio: 175, fuente: 'MIDAGRI' },
+  fosfato: { precio: 185, fuente: 'MIDAGRI' },
+  mancozeb: { precio: 87, fuente: 'MIDAGRI' },
+  clorotalonil: { precio: 95, fuente: 'MIDAGRI' },
+  glifosato: { precio: 47, fuente: 'MIDAGRI' },
+  abono_organico: { precio: 125, fuente: 'MIDAGRI' },
+  semilla_papa: { precio: 290, fuente: 'MIDAGRI' },
+  semilla_maiz: { precio: 188, fuente: 'MIDAGRI' },
+  cipermetrina: { precio: 78, fuente: 'MIDAGRI' },
+};
+
+const MAPA_PRODUCTOS = {
+  'urea': 'urea', 'nitrógeno': 'urea', 'nitrogeno': 'urea',
+  'fosfato': 'fosfato', 'fósforo': 'fosfato', 'fosforo': 'fosfato',
+  'mancozeb': 'mancozeb',
+  'clorotalonil': 'clorotalonil', 'clorotalonilo': 'clorotalonil',
+  'glifosato': 'glifosato', 'roundup': 'glifosato',
+  'abono': 'abono_organico', 'abono organico': 'abono_organico', 'compost': 'abono_organico',
+  'semilla papa': 'semilla_papa', 'papa': 'semilla_papa',
+  'semilla maiz': 'semilla_maiz', 'maíz': 'semilla_maiz', 'maiz': 'semilla_maiz',
+  'cipermetrina': 'cipermetrina',
+};
+
+function normalizarProducto(busqueda) {
+  const lower = busqueda.toLowerCase().trim();
+  for (const [key, val] of Object.entries(MAPA_PRODUCTOS)) {
+    if (lower.includes(key)) return val;
   }
-];
+  return null;
+}
 
 export async function buscarOfertasAgricolas(producto = null) {
   const productosBusqueda = producto ? [producto] : PRODUCTOS_BUSCAR.slice(0, 5);
   const todasLasOfertas = [];
 
+  // 1. Agregar precios de referencia MIDAGRI
   for (const prod of productosBusqueda) {
-    for (const fuente of FUENTES) {
-      try {
-        const url = `${fuente.baseUrl}${encodeURIComponent(prod)}`;
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
+    const clave = normalizarProducto(prod);
+    if (clave && PRECIOS_MIDAGRI[clave]) {
+      todasLasOfertas.push({
+        producto: prod,
+        precio: PRECIOS_MIDAGRI[clave].precio,
+        tienda: 'Precio de referencia MIDAGRI',
+        url: null,
+        fuente: 'MIDAGRI',
+        ubicacion: 'Nacional'
+      });
+    }
+  }
 
-        const res = await fetch(url, {
-          signal: controller.signal,
-          headers: { 'Accept': 'application/json' }
-        });
-        clearTimeout(timeout);
+  // 2. Buscar en MercadoLibre vía proxy de Vercel
+  for (const prod of productosBusqueda.slice(0, 3)) {
+    try {
+      const url = `/api/ml-proxy?q=${encodeURIComponent(prod)}&limit=5`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
 
-        if (!res.ok) continue;
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' }
+      });
+      clearTimeout(timeout);
 
-        const data = await res.json();
-        const ofertas = fuente.parseResultado(data);
-        todasLasOfertas.push(...ofertas);
-      } catch (e) {
-        console.warn(`[AgentePrecios] Error en ${fuente.nombre} para "${prod}":`, e.message);
-      }
+      if (!res.ok) continue;
+
+      const data = await res.json();
+      if (!data.results) continue;
+
+      const ofertas = data.results.slice(0, 5).map(item => ({
+        producto: item.title,
+        precio: item.price,
+        precio_original: item.original_price,
+        descuento: item.original_price
+          ? Math.round((1 - item.price / item.original_price) * 100)
+          : null,
+        tienda: item.seller?.nickname || 'MercadoLibre',
+        url: item.permalink,
+        imagen: item.thumbnail?.replace('http:', 'https:'),
+        fuente: 'MercadoLibre',
+        ubicacion: item.address?.state_name || 'Perú',
+        envio_gratis: item.shipping?.free_shipping || false,
+        ventas: item.sold_quantity || 0
+      }));
+      todasLasOfertas.push(...ofertas);
+    } catch (e) {
+      console.warn(`[AgentePrecios] Error ML para "${prod}":`, e.message);
     }
   }
 

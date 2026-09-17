@@ -1,11 +1,3 @@
-const CATEGORIAS_AGRICOLAS = [
-  'insumos-agricolas',
-  'fertilizantes',
-  'herramientas-agricolas',
-  'semillas',
-  'maquinaria-agricola'
-];
-
 const BUSQUEDAS_POPULARES = [
   'bomba de riego', 'manguera goteo', 'fertilizante urea',
   'semilla papa', 'cosechadora', 'pala agricola',
@@ -19,7 +11,7 @@ export async function buscarOfertasPublicas(busqueda = null) {
 
   for (const termino of terminos) {
     try {
-      const url = `https://api.mercadolibre.com/sites/MLU/search?q=${encodeURIComponent(termino)}&limit=5&sort=relevance`;
+      const url = `/api/ml-proxy?q=${encodeURIComponent(termino)}&limit=5&sort=relevance`;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
 
