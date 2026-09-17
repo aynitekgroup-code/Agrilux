@@ -14,7 +14,7 @@ import RegistroTienda from '../components/RegistroTienda';
 import { supabase } from '../lib/supabase';
 
 const FILTROS_REGION = ['todas', 'cajamarca', 'lambayeque', 'piura', 'ica', 'junín'];
-const FUENTES_AGENTE = ['todas', 'MercadoLibre', 'SISAP', 'OpenStreetMap'];
+const FUENTES_AGENTE = ['todas', 'MIDAGRI', 'MercadoLibre'];
 
 export default function MercadoPage() {
   const [searchParams] = useSearchParams();
@@ -353,7 +353,7 @@ export default function MercadoPage() {
               </div>
             </div>
             <p className="text-xs text-blue-100 mb-3">
-              Nuestros agentes buscan precios en MercadoLibre, SISAP y tiendas locales para encontrar las mejores ofertas.
+              Nuestros agentes buscan precios de referencia MIDAGRI y ofertas en MercadoLibre para encontrar las mejores opciones.
             </p>
             <button
               onClick={ejecutarBusquedaAgentes}
@@ -503,7 +503,7 @@ export default function MercadoPage() {
                     {o.url && (
                       <a href={o.url} target="_blank" rel="noreferrer"
                         className="flex items-center gap-1 text-[10px] font-bold bg-blue-500 text-white px-2.5 py-1.5 rounded-full">
-                        <ExternalLink size={10} /> Ver en {o.fuente}
+                        <ExternalLink size={10} /> {o.fuente === 'MIDAGRI' ? 'Ver precios en ML' : `Ver en ${o.fuente}`}
                       </a>
                     )}
                     <a href={`https://wa.me/51923456789?text=${encodeURIComponent(`Hola, busco ${o.producto}. ¿Tienen disponible?`)}`}

@@ -7,15 +7,15 @@ const PRODUCTOS_BUSCAR = [
 ];
 
 const PRECIOS_MIDAGRI = {
-  urea: { precio: 175, fuente: 'MIDAGRI' },
-  fosfato: { precio: 185, fuente: 'MIDAGRI' },
-  mancozeb: { precio: 87, fuente: 'MIDAGRI' },
-  clorotalonil: { precio: 95, fuente: 'MIDAGRI' },
-  glifosato: { precio: 47, fuente: 'MIDAGRI' },
-  abono_organico: { precio: 125, fuente: 'MIDAGRI' },
-  semilla_papa: { precio: 290, fuente: 'MIDAGRI' },
-  semilla_maiz: { precio: 188, fuente: 'MIDAGRI' },
-  cipermetrina: { precio: 78, fuente: 'MIDAGRI' },
+  urea: { precio: 175, unidad: 'S/ por kg' },
+  fosfato: { precio: 185, unidad: 'S/ por kg' },
+  mancozeb: { precio: 87, unidad: 'S/ por kg' },
+  clorotalonil: { precio: 95, unidad: 'S/ por kg' },
+  glifosato: { precio: 47, unidad: 'S/ por litro' },
+  abono_organico: { precio: 125, unidad: 'S/ por kg' },
+  semilla_papa: { precio: 290, unidad: 'S/ por kg' },
+  semilla_maiz: { precio: 188, unidad: 'S/ por kg' },
+  cipermetrina: { precio: 78, unidad: 'S/ por litro' },
 };
 
 const MAPA_PRODUCTOS = {
@@ -38,31 +38,36 @@ function normalizarProducto(busqueda) {
   return null;
 }
 
+function buscarMLLink(producto) {
+  return `https://listado.mercadolibre.com.pe/${encodeURIComponent(producto.replace(/\s+/g, '-'))}`;
+}
+
 export async function buscarOfertasAgricolas(producto = null) {
   const productosBusqueda = producto ? [producto] : PRODUCTOS_BUSCAR.slice(0, 5);
   const todasLasOfertas = [];
 
-  // 1. Agregar precios de referencia MIDAGRI
+  // 1. Precios de referencia MIDAGRI con link a MercadoLibre
   for (const prod of productosBusqueda) {
     const clave = normalizarProducto(prod);
     if (clave && PRECIOS_MIDAGRI[clave]) {
       todasLasOfertas.push({
         producto: prod,
         precio: PRECIOS_MIDAGRI[clave].precio,
+        unidad: PRECIOS_MIDAGRI[clave].unidad,
         tienda: 'Precio de referencia MIDAGRI',
-        url: null,
+        url: buscarMLLink(prod),
         fuente: 'MIDAGRI',
         ubicacion: 'Nacional'
       });
     }
   }
 
-  // 2. Buscar en MercadoLibre vía proxy de Vercel
+  // 2. Buscar en MercadoLibre vía proxy
   for (const prod of productosBusqueda.slice(0, 3)) {
     try {
       const url = `/api/ml-proxy?q=${encodeURIComponent(prod)}&limit=5`;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
+      const timeout = setTimeout(() => controller.abort(), 8000);
 
       const res = await fetch(url, {
         signal: controller.signal,
@@ -70,7 +75,18 @@ export async function buscarOfertasAgricolas(producto = null) {
       });
       clearTimeout(timeout);
 
-      if (!res.ok) continue;
+      if (!res.ok) {
+        // Si ML falla, agregar link de búsqueda
+        todasLasOfertas.push({
+          producto: `Buscar "${prod}" en MercadoLibre`,
+          precio: null,
+          tienda: 'MercadoLibre',
+          url: buscarMLLink(prod),
+          fuente: 'MercadoLibre',
+          ubicacion: 'Perú'
+        });
+        continue;
+      }
 
       const data = await res.json();
       if (!data.results) continue;
@@ -92,7 +108,15 @@ export async function buscarOfertasAgricolas(producto = null) {
       }));
       todasLasOfertas.push(...ofertas);
     } catch (e) {
-      console.warn(`[AgentePrecios] Error ML para "${prod}":`, e.message);
+      // Si falla, agregar link de búsqueda
+      todasLasOfertas.push({
+        producto: `Buscar "${prod}" en MercadoLibre`,
+        precio: null,
+        tienda: 'MercadoLibre',
+        url: buscarMLLink(prod),
+        fuente: 'MercadoLibre',
+        ubicacion: 'Perú'
+      });
     }
   }
 

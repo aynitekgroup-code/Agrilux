@@ -15,29 +15,32 @@ CREATE TABLE IF NOT EXISTS ofertas_agentes (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Índices para búsquedas rápidas
 CREATE INDEX IF NOT EXISTS idx_ofertas_agentes_producto ON ofertas_agentes(producto);
 CREATE INDEX IF NOT EXISTS idx_ofertas_agentes_fuente ON ofertas_agentes(fuente);
 CREATE INDEX IF NOT EXISTS idx_ofertas_agentes_created ON ofertas_agentes(created_at DESC);
 
--- Limpiar ofertas antiguas (más de 7 días)
+ALTER TABLE ofertas_agentes ENABLE ROW LEVEL SECURITY;
+
+-- Lectura pública
+CREATE POLICY "Ofertas agentes son publicas"
+  ON ofertas_agentes FOR SELECT USING (true);
+
+-- Insertar desde el cliente (anon)
+CREATE POLICY "Anyone can insert ofertas"
+  ON ofertas_agentes FOR INSERT
+  WITH CHECK (true);
+
+-- Limpiar automáticamente cada 7 días
 CREATE OR REPLACE FUNCTION limpiar_ofertas_antiguas()
-RETURNS void AS $$
+RETURNS trigger AS $$
 BEGIN
-  DELETE FROM ofertas_agentes
-  WHERE created_at < NOW() - INTERVAL '7 days';
+  DELETE FROM ofertas_agentes WHERE created_at < NOW() - INTERVAL '7 days';
+  RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
--- Habilitar RLS
-ALTER TABLE ofertas_agentes ENABLE ROW LEVEL SECURITY;
-
--- Política para lectura pública
-CREATE POLICY "Ofertas agentes son públicas"
-  ON ofertas_agentes FOR SELECT
-  USING (true);
-
--- Política para inserts (solo service role)
-CREATE POLICY "Solo service role puede insertar ofertas"
-  ON ofertas_agentes FOR INSERT
-  WITH CHECK (auth.role() = 'service_role');
+-- Ejecutar limpieza al insertar (trigger cada 100 inserts)
+CREATE OR REPLACE TRIGGER trigger_limpiar_ofertas
+  AFTER INSERT ON ofertas_agentes
+  FOR EACH STATEMENT
+  EXECUTE FUNCTION limpiar_ofertas_antiguas();

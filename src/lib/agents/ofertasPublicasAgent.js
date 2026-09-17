@@ -5,6 +5,10 @@ const BUSQUEDAS_POPULARES = [
   'rastrillo', 'azada', 'pico', 'carretilla'
 ];
 
+function buscarMLLink(producto) {
+  return `https://listado.mercadolibre.com.pe/${encodeURIComponent(producto.replace(/\s+/g, '-'))}`;
+}
+
 export async function buscarOfertasPublicas(busqueda = null) {
   const terminos = busqueda ? [busqueda] : BUSQUEDAS_POPULARES.slice(0, 5);
   const ofertas = [];
@@ -13,7 +17,7 @@ export async function buscarOfertasPublicas(busqueda = null) {
     try {
       const url = `/api/ml-proxy?q=${encodeURIComponent(termino)}&limit=5&sort=relevance`;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
+      const timeout = setTimeout(() => controller.abort(), 8000);
 
       const res = await fetch(url, {
         signal: controller.signal,
@@ -21,7 +25,18 @@ export async function buscarOfertasPublicas(busqueda = null) {
       });
       clearTimeout(timeout);
 
-      if (!res.ok) continue;
+      if (!res.ok) {
+        // Si falla, agregar link de búsqueda
+        ofertas.push({
+          producto: `Buscar "${termino}" en MercadoLibre`,
+          precio: null,
+          tienda: 'MercadoLibre',
+          url: buscarMLLink(termino),
+          fuente: 'MercadoLibre',
+          ubicacion: 'Perú'
+        });
+        continue;
+      }
 
       const data = await res.json();
       if (!data.results) continue;
@@ -45,7 +60,14 @@ export async function buscarOfertasPublicas(busqueda = null) {
         });
       }
     } catch (e) {
-      console.warn(`[AgenteOfertas] Error buscando "${termino}":`, e.message);
+      ofertas.push({
+        producto: `Buscar "${termino}" en MercadoLibre`,
+        precio: null,
+        tienda: 'MercadoLibre',
+        url: buscarMLLink(termino),
+        fuente: 'MercadoLibre',
+        ubicacion: 'Perú'
+      });
     }
   }
 
