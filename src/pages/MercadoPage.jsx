@@ -3,15 +3,18 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Store, Tag, Mic, Loader2, RefreshCw, MapPin, Plus,
   MessageCircle, ExternalLink, ShoppingBag, Trash2, AlertTriangle, Pencil,
+  Bot, Search, Zap, Globe, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { useAgentes } from '../lib/AgentContext';
 import { useAuth } from '../lib/AuthContext';
 import { cargarOfertasRegistradas } from '../lib/ofertasRegistradas';
+import { ejecutarAgentes, cargarOfertasGuardadas, onAgentUpdate } from '../lib/agents/agentRunner';
 import VoiceAssistant from '../components/VoiceAssistant';
 import RegistroTienda from '../components/RegistroTienda';
 import { supabase } from '../lib/supabase';
 
 const FILTROS_REGION = ['todas', 'cajamarca', 'lambayeque', 'piura', 'ica', 'junín'];
+const FUENTES_AGENTE = ['todas', 'MercadoLibre', 'SISAP', 'OpenStreetMap'];
 
 export default function MercadoPage() {
   const [searchParams] = useSearchParams();
@@ -31,6 +34,14 @@ export default function MercadoPage() {
   const [cargandoTiendas, setCargandoTiendas] = useState(false);
   const [eliminandoId, setEliminandoId] = useState(null);
   const [confirmEliminar, setConfirmEliminar] = useState(null);
+
+  // Estado para agentes
+  const [ofertasAgentes, setOfertasAgentes] = useState([]);
+  const [cargandoAgentes, setCargandoAgentes] = useState(false);
+  const [estadoAgentes, setEstadoAgentes] = useState(null);
+  const [filtroFuente, setFiltroFuente] = useState('todas');
+  const [busquedaAgente, setBusquedaAgente] = useState('');
+  const [mostrarDetalleAgente, setMostrarDetalleAgente] = useState(false);
 
   const abrirRegistro = useCallback(() => {
     if (!(user?.id || user?.uid)) {
@@ -73,6 +84,28 @@ export default function MercadoPage() {
   }, [coords?.lat, coords?.lon, productoRecomendado?.cultivo]);
 
   useEffect(() => { recargarOfertas(); }, [recargarOfertas]);
+
+  // Cargar ofertas de agentes guardadas
+  useEffect(() => {
+    const cargarOfertasAgentes = async () => {
+      const guardadas = await cargarOfertasGuardadas();
+      if (guardadas.length > 0) {
+        setOfertasAgentes(guardadas);
+      }
+    };
+    cargarOfertasAgentes();
+  }, []);
+
+  // Escuchar actualizaciones de agentes
+  useEffect(() => {
+    const unsubscribe = onAgentUpdate((estado) => {
+      setEstadoAgentes(estado);
+      if (estado.todasLasOfertas) {
+        setOfertasAgentes(estado.todasLasOfertas);
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   const cargarMisTiendas = useCallback(async () => {
     const uid = user?.id || user?.uid;
@@ -128,9 +161,27 @@ export default function MercadoPage() {
 
   const tabs = [
     { id: 'ofertas', icon: Tag, label: 'Ofertas' },
+    { id: 'agentes', icon: Bot, label: 'Agentes' },
     { id: 'agente', icon: Mic, label: 'Agente' },
     { id: 'mitienda', icon: Store, label: 'Mi tienda' },
   ];
+
+  const ejecutarBusquedaAgentes = async () => {
+    setCargandoAgentes(true);
+    try {
+      const resultado = await ejecutarAgentes(busquedaAgente || null);
+      if (resultado.ok) {
+        setOfertasAgentes(resultado.ofertas);
+      }
+    } catch (e) {
+      console.error('Error ejecutando agentes:', e);
+    }
+    setCargandoAgentes(false);
+  };
+
+  const ofertasAgentesFiltradas = filtroFuente === 'todas'
+    ? ofertasAgentes
+    : ofertasAgentes.filter(o => o.fuente === filtroFuente);
 
   return (
     <div className="min-h-[calc(100vh-120px)]">
@@ -283,6 +334,206 @@ export default function MercadoPage() {
             <div className="bg-gray-50 rounded-xl p-3 text-center">
               <p className="text-lg font-bold text-green-600">{tiendasEncontradas?.length || '—'}</p>
               <p className="text-[10px] text-gray-400">Tiendas cercanas</p>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── TAB AGENTES ── */}
+      {tab === 'agentes' && (
+        <>
+          <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-4 rounded-2xl mb-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                <Bot size={20} />
+              </div>
+              <div>
+                <h2 className="font-bold">Swarm de Agentes</h2>
+                <p className="text-blue-100 text-xs">Búsqueda en tiempo real de ofertas agrícolas</p>
+              </div>
+            </div>
+            <p className="text-xs text-blue-100 mb-3">
+              Nuestros agentes buscan precios en MercadoLibre, SISAP y tiendas locales para encontrar las mejores ofertas.
+            </p>
+            <button
+              onClick={ejecutarBusquedaAgentes}
+              disabled={cargandoAgentes}
+              className="w-full bg-white text-blue-600 font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {cargandoAgentes ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Buscando ofertas...
+                </>
+              ) : (
+                <>
+                  <Zap size={16} />
+                  Ejecutar agentes
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Estado de los agentes */}
+          {estadoAgentes && (
+            <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-gray-700 text-sm">Estado de los agentes</h3>
+                <button
+                  onClick={() => setMostrarDetalleAgente(!mostrarDetalleAgente)}
+                  className="text-gray-400"
+                >
+                  {mostrarDetalleAgente ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {Object.entries(estadoAgentes.agentes || {}).map(([nombre, estado]) => (
+                  <div key={nombre} className="text-center">
+                    <div className={`w-8 h-8 rounded-full mx-auto mb-1 flex items-center justify-center ${
+                      estado.estado === 'completado' ? 'bg-green-100' :
+                      estado.estado === 'ejecutando' ? 'bg-blue-100' : 'bg-gray-100'
+                    }`}>
+                      {estado.estado === 'completado' ? (
+                        <span className="text-green-600 text-xs">✓</span>
+                      ) : estado.estado === 'ejecutando' ? (
+                        <Loader2 size={14} className="animate-spin text-blue-600" />
+                      ) : (
+                        <span className="text-gray-400 text-xs">⏳</span>
+                      )}
+                    </div>
+                    <p className="text-[10px] font-medium text-gray-600 capitalize">{nombre}</p>
+                    <p className="text-[9px] text-gray-400">
+                      {estado.estado === 'completado' ? `${estado.ofertas || estado.tiendas || 0} resultados` : estado.estado}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {mostrarDetalleAgente && (
+                <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
+                  <p>Inicio: {new Date(estadoAgentes.inicio).toLocaleTimeString('es-PE')}</p>
+                  {estadoAgentes.fin && <p>Fin: {new Date(estadoAgentes.fin).toLocaleTimeString('es-PE')}</p>}
+                  <p>Total ofertas: {estadoAgentes.ofertasEncontradas}</p>
+                  <p>Total tiendas: {estadoAgentes.tiendasEncontradas}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Búsqueda personalizada */}
+          <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm mb-4">
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={busquedaAgente}
+                  onChange={(e) => setBusquedaAgente(e.target.value)}
+                  placeholder="Buscar producto específico..."
+                  className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onKeyDown={(e) => e.key === 'Enter' && ejecutarBusquedaAgentes()}
+                />
+              </div>
+              <button
+                onClick={ejecutarBusquedaAgentes}
+                disabled={cargandoAgentes}
+                className="bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
+              >
+                <Search size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Filtros por fuente */}
+          <div className="flex gap-2 overflow-x-auto pb-3 mb-4">
+            {FUENTES_AGENTE.map(f => (
+              <button key={f} onClick={() => setFiltroFuente(f)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold ${
+                  filtroFuente === f ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600'
+                }`}>
+                {f === 'todas' ? 'Todas' : f}
+              </button>
+            ))}
+          </div>
+
+          {/* Lista de ofertas de agentes */}
+          {ofertasAgentesFiltradas.length === 0 ? (
+            <div className="text-center py-12">
+              <Bot size={40} className="text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-600 font-medium">Aún no hay ofertas de agentes</p>
+              <p className="text-gray-400 text-xs mt-1 mb-4">Ejecuta los agentes para buscar ofertas en tiempo real</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {ofertasAgentesFiltradas.slice(0, 20).map((o, i) => (
+                <div key={i} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <Bot size={18} className="text-blue-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-bold text-gray-800">{o.producto}</p>
+                        {o.precio != null && (
+                          <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                            S/ {o.precio}
+                          </span>
+                        )}
+                        {o.descuento && (
+                          <span className="text-[10px] font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded-full">
+                            -{o.descuento}%
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        🏪 {o.tienda} · 📍 {o.ubicacion || 'Perú'}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                          🤖 Agente: {o.fuente}
+                        </span>
+                        {o.envio_gratis && (
+                          <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                            🚚 Envío gratis
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3 flex-wrap">
+                    {o.url && (
+                      <a href={o.url} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-1 text-[10px] font-bold bg-blue-500 text-white px-2.5 py-1.5 rounded-full">
+                        <ExternalLink size={10} /> Ver en {o.fuente}
+                      </a>
+                    )}
+                    <a href={`https://wa.me/51923456789?text=${encodeURIComponent(`Hola, busco ${o.producto}. ¿Tienen disponible?`)}`}
+                      target="_blank" rel="noreferrer"
+                      className="flex items-center gap-1 text-[10px] font-bold bg-green-500 text-white px-2.5 py-1.5 rounded-full">
+                      <MessageCircle size={10} /> WhatsApp
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Estadísticas */}
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <div className="bg-gray-50 rounded-xl p-3 text-center">
+              <p className="text-lg font-bold text-blue-600">{ofertasAgentes.length}</p>
+              <p className="text-[10px] text-gray-400">Ofertas encontradas</p>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-3 text-center">
+              <p className="text-lg font-bold text-green-600">
+                {ofertasAgentes.filter(o => o.descuento).length}
+              </p>
+              <p className="text-[10px] text-gray-400">Con descuento</p>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-3 text-center">
+              <p className="text-lg font-bold text-purple-600">
+                {new Set(ofertasAgentes.map(o => o.fuente)).size}
+              </p>
+              <p className="text-[10px] text-gray-400">Fuentes activas</p>
             </div>
           </div>
         </>
