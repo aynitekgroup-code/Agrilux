@@ -14,7 +14,7 @@ import RegistroTienda from '../components/RegistroTienda';
 import { supabase } from '../lib/supabase';
 
 const FILTROS_REGION = ['todas', 'cajamarca', 'lambayeque', 'piura', 'ica', 'junín'];
-const FUENTES_AGENTE = ['todas', 'MIDAGRI', 'MercadoLibre'];
+const FUENTES_AGENTE = ['todas', 'MIDAGRI', 'MercadoLibre', 'Fertilizantes', 'Herramientas', 'Maquinaria', 'Tecnología'];
 
 export default function MercadoPage() {
   const [searchParams] = useSearchParams();
@@ -101,12 +101,12 @@ export default function MercadoPage() {
     cargarYAutoEjecutar();
   }, []);
 
-  // Auto-ejecutar cada 30 minutos cuando está en pestaña agentes
+  // Auto-ejecutar cada 1 hora cuando está en pestaña agentes
   useEffect(() => {
     if (tab !== 'agentes') return;
     const interval = setInterval(() => {
       ejecutarBusquedaAgentes();
-    }, 30 * 60 * 1000); // 30 minutos
+    }, 60 * 60 * 1000); // 1 hora
     return () => clearInterval(interval);
   }, [tab]);
 
@@ -361,13 +361,18 @@ export default function MercadoPage() {
               <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
                 <Bot size={20} />
               </div>
-              <div>
+              <div className="flex-1">
                 <h2 className="font-bold">Swarm de Agentes</h2>
-                <p className="text-blue-100 text-xs">Búsqueda en tiempo real de ofertas agrícolas</p>
+                <p className="text-blue-100 text-xs">Búsqueda automática cada hora</p>
               </div>
+              {estadoAgentes?.fin && (
+                <span className="text-[10px] text-blue-200">
+                  Última: {new Date(estadoAgentes.fin).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
             </div>
             <p className="text-xs text-blue-100 mb-3">
-              Nuestros agentes buscan precios de referencia MIDAGRI y ofertas en MercadoLibre para encontrar las mejores opciones.
+              Buscamos en MercadoLibre: fertilizantes, bombas, tractores, herramientas, drones, semillas y más.
             </p>
             <button
               onClick={ejecutarBusquedaAgentes}
@@ -382,7 +387,7 @@ export default function MercadoPage() {
               ) : (
                 <>
                   <Zap size={16} />
-                  Ejecutar agentes
+                  Buscar ahora
                 </>
               )}
             </button>
