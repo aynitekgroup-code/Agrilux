@@ -1,6 +1,4 @@
 import { buscarOfertasAgricolas } from './precioAgricolaAgent';
-import { buscarOfertasPublicas, calcularMejoresOfertas } from './ofertasPublicasAgent';
-import { buscarTiendasCercanas } from './tiendasCercanasAgent';
 import { supabase } from '../supabase';
 
 const ESTADO_KEY = 'agrilux_agentes_estado';
@@ -18,12 +16,6 @@ function notify(status) {
   listeners.forEach(l => l(status));
 }
 
-export function getEstadoAgentes() {
-  try {
-    return JSON.parse(localStorage.getItem(ESTADO_KEY)) || {};
-  } catch { return {}; }
-}
-
 function guardarEstado(estado) {
   localStorage.setItem(ESTADO_KEY, JSON.stringify(estado));
   notify(estado);
@@ -35,9 +27,7 @@ function guardarOfertasLocal(ofertas) {
       ofertas,
       timestamp: Date.now()
     }));
-  } catch (e) {
-    console.warn('[AgentRunner] Error guardando local:', e.message);
-  }
+  } catch (e) {}
 }
 
 export async function ejecutarAgentes(busqueda = null) {
@@ -49,91 +39,59 @@ export async function ejecutarAgentes(busqueda = null) {
     inicio: new Date().toISOString(),
     agentes: {},
     ofertasEncontradas: 0,
-    tiendasEncontradas: 0
   };
   guardarEstado(estado);
 
   try {
-    // 1. Agente de precios agrícolas
-    estado.agentes.precios = { estado: 'ejecutando', inicio: Date.now() };
-    guardarEstado(estado);
-    const ofertasPrecios = await buscarOfertasAgricolas(busqueda);
-    estado.agentes.precios = { estado: 'completado', ofertas: ofertasPrecios.length, duracion: Date.now() - estado.agentes.precios.inicio };
+    // Buscar productos reales de MercadoLibre
+    estado.agentes.productos = { estado: 'ejecutando', inicio: Date.now() };
     guardarEstado(estado);
 
-    // 2. Agente de ofertas públicas
-    estado.agentes.ofertas = { estado: 'ejecutando', inicio: Date.now() };
-    guardarEstado(estado);
-    const ofertasPublicas = await buscarOfertasPublicas(busqueda);
-    const mejoresOfertas = calcularMejoresOfertas(ofertasPublicas);
-    estado.agentes.ofertas = { estado: 'completado', ofertas: ofertasPublicas.length, duracion: Date.now() - estado.agentes.ofertas.inicio };
-    guardarEstado(estado);
+    const ofertas = await buscarOfertasAgricolas(busqueda);
 
-    // 3. Agente de tiendas cercanas
-    estado.agentes.tiendas = { estado: 'ejecutando', inicio: Date.now() };
-    guardarEstado(estado);
-    const tiendas = await buscarTiendasCercanas();
-    estado.agentes.tiendas = { estado: 'completado', tiendas: tiendas.length, duracion: Date.now() - estado.agentes.tiendas.inicio };
+    estado.agentes.productos = {
+      estado: 'completado',
+      ofertas: ofertas.length,
+      duracion: Date.now() - estado.agentes.productos.inicio
+    };
     guardarEstado(estado);
 
-    // Combinar todas las ofertas
-    const todasLasOfertas = [
-      ...ofertasPrecios.map(o => ({ ...o, tipo: 'precio_agricola' })),
-      ...mejoresOfertas.slice(0, 20).map(o => ({ ...o, tipo: 'oferta_publica' }))
-    ];
+    // Guardar en localStorage
+    guardarOfertasLocal(ofertas);
 
-    // Guardar en localStorage (siempre funciona)
-    guardarOfertasLocal(todasLasOfertas);
-
-    // Intentar guardar en Supabase (puede fallar si la tabla no existe)
+    // Intentar guardar en Supabase (opcional)
     try {
-      if (todasLasOfertas.length > 0) {
-        const registros = todasLasOfertas.slice(0, 20).map(o => ({
+      if (ofertas.length > 0) {
+        const registros = ofertas.slice(0, 20).map(o => ({
           producto: o.producto,
           precio: o.precio,
           tienda: o.tienda,
-          fuente: o.fuente,
+          fuente: o.fuente || 'MercadoLibre',
           url: o.url,
-          ubicacion: o.ubicacion,
-          tipo: o.tipo,
+          ubicacion: o.ubicacion || 'Perú',
+          tipo: 'oferta_ml',
           metadata: JSON.stringify({
             descuento: o.descuento,
             envio_gratis: o.envio_gratis,
-            imagen: o.imagen
+            imagen: o.imagen,
+            categoria: o.categoria,
           })
         }));
 
-        const { error } = await supabase
-          .from('ofertas_agentes')
-          .insert(registros);
-
-        if (error) {
-          console.warn('[AgentRunner] Supabase no disponible, usando localStorage:', error.message);
-        }
+        await supabase.from('ofertas_agentes').insert(registros);
       }
     } catch (e) {
-      console.warn('[AgentRunner] Error guardando en Supabase:', e.message);
+      // Supabase opcional
     }
 
     estado.ejecutando = false;
     estado.fin = new Date().toISOString();
-    estado.ofertasEncontradas = todasLasOfertas.length;
-    estado.tiendasEncontradas = tiendas.length;
-    estado.todasLasOfertas = todasLasOfertas;
-    estado.tiendas = tiendas;
+    estado.ofertasEncontradas = ofertas.length;
+    estado.todasLasOfertas = ofertas;
     guardarEstado(estado);
 
     running = false;
-    return {
-      ok: true,
-      ofertas: todasLasOfertas,
-      tiendas,
-      estadisticas: {
-        precios: ofertasPrecios.length,
-        ofertasPublicas: ofertasPublicas.length,
-        tiendasEncontradas: tiendas.length
-      }
-    };
+    return { ok: true, ofertas, estadisticas: { productos: ofertas.length } };
 
   } catch (e) {
     estado.ejecutando = false;
@@ -144,32 +102,14 @@ export async function ejecutarAgentes(busqueda = null) {
   }
 }
 
-export async function cargarOfertasGuardadas() {
-  // Primero intentar de localStorage (más rápido)
+export async function cargarOfertasAgentesLocal() {
   try {
     const local = JSON.parse(localStorage.getItem(OFERTAS_KEY));
     if (local?.ofertas && local.ofertas.length > 0) {
-      // Si tiene menos de 1 hora, usar local
       if (Date.now() - local.timestamp < 3600000) {
         return local.ofertas;
       }
     }
   } catch (e) {}
-
-  // Intentar de Supabase
-  try {
-    const { data, error } = await supabase
-      .from('ofertas_agentes')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    if (error) throw error;
-    return data || [];
-  } catch (e) {
-    console.warn('[AgentRunner] Usando cache local:', e.message);
-    try {
-      return JSON.parse(localStorage.getItem(OFERTAS_KEY))?.ofertas || [];
-    } catch { return []; }
-  }
+  return [];
 }

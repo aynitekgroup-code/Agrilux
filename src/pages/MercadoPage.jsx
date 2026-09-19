@@ -8,13 +8,13 @@ import {
 import { useAgentes } from '../lib/AgentContext';
 import { useAuth } from '../lib/AuthContext';
 import { cargarOfertasRegistradas } from '../lib/ofertasRegistradas';
-import { ejecutarAgentes, cargarOfertasGuardadas, onAgentUpdate } from '../lib/agents/agentRunner';
+import { ejecutarAgentes, cargarOfertasAgentesLocal, onAgentUpdate } from '../lib/agents/agentRunner';
 import VoiceAssistant from '../components/VoiceAssistant';
 import RegistroTienda from '../components/RegistroTienda';
 import { supabase } from '../lib/supabase';
 
 const FILTROS_REGION = ['todas', 'cajamarca', 'lambayeque', 'piura', 'ica', 'junín'];
-const FUENTES_AGENTE = ['todas', 'MIDAGRI', 'MercadoLibre', 'Fertilizantes', 'Herramientas', 'Maquinaria', 'Tecnología'];
+const FUENTES_AGENTE = ['todas', 'Fertilizantes', 'Fumigadoras', 'Herramientas', 'Maquinaria', 'Riego', 'Tecnología', 'Semillas', 'Protección'];
 
 export default function MercadoPage() {
   const [searchParams] = useSearchParams();
@@ -89,7 +89,7 @@ export default function MercadoPage() {
   useEffect(() => {
     const cargarYAutoEjecutar = async () => {
       // Cargar guardadas primero
-      const guardadas = await cargarOfertasGuardadas();
+      const guardadas = await cargarOfertasAgentesLocal();
       if (guardadas.length > 0) {
         setOfertasAgentes(guardadas);
       }
@@ -195,7 +195,7 @@ export default function MercadoPage() {
 
   const ofertasAgentesFiltradas = filtroFuente === 'todas'
     ? ofertasAgentes
-    : ofertasAgentes.filter(o => o.fuente === filtroFuente);
+    : ofertasAgentes.filter(o => o.categoria === filtroFuente || o.fuente === filtroFuente);
 
   return (
     <div className="min-h-[calc(100vh-120px)]">
