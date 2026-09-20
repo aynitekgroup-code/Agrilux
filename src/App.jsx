@@ -11,6 +11,7 @@ import CicloCultivo from './pages/CicloCultivo';
 import MercadoPage from './pages/MercadoPage';
 import Admin from './pages/Admin';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import Descargar from './pages/Descargar';
 import { Clock, Mail, LogOut } from 'lucide-react';
 
 function PantallaPendiente() {
@@ -80,12 +81,13 @@ function AppRoutes() {
     </div>
   );
 
-  // Public routes — always accessible
-  if (window.location.pathname === '/admin' || window.location.pathname === '/privacy') {
+  // Public routes — always accessible (sin layout)
+  if (['/admin', '/privacy', '/descargar'].includes(window.location.pathname)) {
     return (
       <Routes>
         <Route path="/admin" element={<Admin />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/descargar" element={<Descargar />} />
       </Routes>
     );
   }
@@ -103,6 +105,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/admin" element={<Admin />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/descargar" element={<Descargar />} />
       <Route path="/registro" element={<Registro />} />
 
       <Route path="*" element={

@@ -8,6 +8,12 @@
     { "source": "/api/ml-proxy", "destination": "/api/mercadolibre" },
     { "source": "/api/geocode", "destination": "/api/mercadolibre" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|.*\\.(apk|png|jpg|jpeg|svg|ico|js|css|woff2|woff|ttf|webmanifest|json)).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/agrilux.apk",
+      "headers": [{ "key": "Content-Type", "value": "application/vnd.android.package-archive" }, { "key": "Content-Disposition", "value": "attachment; filename=\"agrilux.apk\"" }]
+    }
   ]
 }
