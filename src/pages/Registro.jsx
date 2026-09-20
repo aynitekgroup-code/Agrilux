@@ -191,12 +191,13 @@ export default function Registro() {
       style={{ background: 'linear-gradient(160deg, #f0faf4 0%, #e8f5ee 100%)' }}
     >
       <div className="w-full max-w-sm">
-
         {/* Logo */}
         <div className="text-center mb-10">
-            <img    src="/icons/icon-192x192.png" alt="Agrilux" className="w-24 h-24 mx-auto mb-5 shadow-xl rounded-3xl object-cover"/>
-          <h1 className="text-4xl font-display font-bold text-primary">AGRILUX</h1>
-          <p className="text-gray-500 mt-2 text-sm">Agricultura Inteligente del Perú</p>
+          <div className="flex justify-center mb-4">
+            <img src="/icons/icon-192x192.png" alt="Agrilux" className="w-20 h-20 shadow-xl rounded-3xl object-cover" />
+          </div>
+          <h1 className="text-[2.2rem] font-black tracking-[0.14em] text-primary leading-none">AGRILUX</h1>
+          <p className="text-base mt-2 text-[#3f5d52] font-normal">Agricultura Inteligente del Perú</p>
         </div>
 
         {/* ── RESET PASSWORD FORM ── */}
@@ -207,6 +208,7 @@ export default function Registro() {
                 <p className="text-red-600 text-sm">{error}</p>
               </div>
             )}
+
             {resetSuccess ? (
               <div className="text-center py-4">
                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -223,9 +225,7 @@ export default function Registro() {
               </div>
             ) : (
               <>
-                <p className="text-sm text-gray-600 text-center font-semibold">
-                  Ingresa tu nueva contraseña
-                </p>
+                <p className="text-sm text-gray-600 text-center font-semibold">Ingresa tu nueva contraseña</p>
                 <div>
                   <label className="text-xs font-semibold text-gray-600 block mb-1.5">Nueva contraseña</label>
                   <div className="relative">
@@ -263,216 +263,195 @@ export default function Registro() {
           </div>
         )}
 
-        {!resetMode && (<>
-        {/* Tabs */}
-        <div className="flex bg-gray-100 rounded-2xl p-1 mb-6">
-          {[['login', 'Iniciar sesión'], ['registro', 'Crear cuenta']].map(([m, label]) => (
-            <button
-              key={m}
-              onClick={() => cambiarModo(m)}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                modo === m ? 'bg-white text-primary shadow-sm' : 'text-gray-500'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="bg-white rounded-3xl shadow-xl p-6 space-y-4">
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3">
-              <p className="text-red-600 text-sm">{error}</p>
-            </div>
-          )}
-
-          {/* ── REGISTRO ── */}
-          {modo === 'registro' && (
-            <>
-              {/* Nombre */}
-              <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1.5">Nombre completo</label>
-                <div className="relative">
-                  <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
-                  <input
-                    value={nombre}
-                    onChange={e => setNombre(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                    placeholder="Ej: Juan Pérez García"
-                    className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
-                    autoComplete="name"
-                  />
-                </div>
-              </div>
-
-              {/* WhatsApp */}
-              <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1.5">WhatsApp *</label>
-                <div className="relative">
-                  <input
-                    value={whatsapp}
-                    onChange={e => setWhatsapp(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                    placeholder="Ej: 987654321"
-                    className="w-full border-2 border-gray-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
-                    autoComplete="tel"
-                    inputMode="tel"
-                  />
-                </div>
-              </div>
-
-              {/* Ubicación */}
-              <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1.5">Ubicación *</label>
-                <div className="relative">
-                  <MapPin size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
-                  <input
-                    value={ubicacion}
-                    onChange={e => setUbicacion(e.target.value)}
-                    placeholder="Ej: Cutervo, Cajamarca"
-                    className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
-                  />
-                </div>
+        {!resetMode && (
+          <>
+            {/* Tabs */}
+            <div className="flex bg-gray-100 rounded-2xl p-1 mb-6">
+              {[['login', 'Iniciar sesión'], ['registro', 'Crear cuenta']].map(([m, label]) => (
                 <button
-                  type="button"
-                  onClick={detectarGPS}
-                  disabled={detectandoGPS}
-                  className="mt-2 w-full flex items-center justify-center gap-2 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 py-2.5 rounded-xl transition-colors"
+                  key={m}
+                  onClick={() => cambiarModo(m)}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                    modo === m ? 'bg-white text-primary shadow-sm' : 'text-gray-500'
+                  }`}
                 >
-                  {detectandoGPS ? (
-                    <><Loader2 size={14} className="animate-spin" /> Detectando ubicación...</>
-                  ) : (
-                    <><Navigation size={14} /> Usar GPS de mi teléfono</>
-                  )}
+                  {label}
                 </button>
-                <p className="text-[10px] text-gray-400 mt-1 text-center">Tu ubicación se usa para recomendaciones climáticas precisas</p>
-              </div>
-            </>
-          )}
-
-          {/* ── CORREO (siempre visible) ── */}
-          <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-1.5">Correo electrónico</label>
-            <div className="relative">
-              <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                placeholder="tucorreo@gmail.com"
-                className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
-                autoComplete="email"
-                inputMode="email"
-              />
+              ))}
             </div>
-          </div>
 
-          {/* ── CONTRASEÑA (siempre visible) ── */}
-          <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-1.5">
-              {modo === 'login' ? 'Contraseña' : 'Crear contraseña'}
-            </label>
-            <div className="relative">
-              <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
-              <input
-                type={showPass ? 'text' : 'password'}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                placeholder={modo === 'login' ? 'Tu contraseña' : 'Mínimo 6 caracteres'}
-                className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-12 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
-                autoComplete={modo === 'login' ? 'current-password' : 'new-password'}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPass(!showPass)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
+            <div className="bg-white rounded-3xl shadow-xl p-6 space-y-4">
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+                  <p className="text-red-600 text-sm">{error}</p>
+                </div>
+              )}
 
-          {/* ── OLVIDÉ MI CONTRASEÑA ── */}
-          {modo === 'login' && (
-            <div className="text-right -mt-1">
-              {resetSent ? (
-                <p className="text-xs text-green-600 font-semibold">
-                  ✓ Correo enviado. Revisa tu bandeja de entrada.
-                </p>
-              ) : (
+              {/* ── REGISTRO ── */}
+              {modo === 'registro' && (
                 <>
-                  <button
-                    type="button"
-                    onClick={handleResetPassword}
-                    disabled={resetLoading}
-                    className="text-xs text-primary font-semibold hover:underline disabled:opacity-50"
-                  >
-                    {resetLoading ? 'Enviando...' : '¿Olvidaste tu contraseña?'}
-                  </button>
-                  {resetError && (
-                    <p className="text-xs text-red-500 mt-1">{resetError}</p>
-                  )}
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1.5">Nombre completo</label>
+                    <div className="relative">
+                      <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
+                      <input
+                        value={nombre}
+                        onChange={e => setNombre(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                        placeholder="Ej: Juan Pérez García"
+                        className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                        autoComplete="name"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1.5">WhatsApp *</label>
+                    <div className="relative">
+                      <input
+                        value={whatsapp}
+                        onChange={e => setWhatsapp(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                        placeholder="Ej: 987654321"
+                        className="w-full border-2 border-gray-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                        autoComplete="tel"
+                        inputMode="tel"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1.5">Ubicación *</label>
+                    <div className="relative">
+                      <MapPin size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
+                      <input
+                        value={ubicacion}
+                        onChange={e => setUbicacion(e.target.value)}
+                        placeholder="Ej: Cutervo, Cajamarca"
+                        className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={detectarGPS}
+                      disabled={detectandoGPS}
+                      className="mt-2 w-full flex items-center justify-center gap-2 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 py-2.5 rounded-xl transition-colors"
+                    >
+                      {detectandoGPS ? (
+                        <><Loader2 size={14} className="animate-spin" /> Detectando ubicación...</>
+                      ) : (
+                        <><Navigation size={14} /> Usar GPS de mi teléfono</>
+                      )}
+                    </button>
+                    <p className="text-[10px] text-gray-400 mt-1 text-center">Tu ubicación se usa para recomendaciones climáticas precisas</p>
+                  </div>
                 </>
               )}
+
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1.5">Correo electrónico</label>
+                <div className="relative">
+                  <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                    placeholder="tucorreo@gmail.com"
+                    className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                    autoComplete="email"
+                    inputMode="email"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1.5">
+                  {modo === 'login' ? 'Contraseña' : 'Crear contraseña'}
+                </label>
+                <div className="relative">
+                  <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
+                  <input
+                    type={showPass ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                    placeholder={modo === 'login' ? 'Tu contraseña' : 'Mínimo 6 caracteres'}
+                    className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-12 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                    autoComplete={modo === 'login' ? 'current-password' : 'new-password'}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPass(!showPass)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              {modo === 'login' && (
+                <div className="text-right -mt-1">
+                  {resetSent ? (
+                    <p className="text-xs text-green-600 font-semibold">✓ Correo enviado. Revisa tu bandeja de entrada.</p>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleResetPassword}
+                        disabled={resetLoading}
+                        className="text-xs text-primary font-semibold hover:underline disabled:opacity-50"
+                      >
+                        {resetLoading ? 'Enviando...' : '¿Olvidaste tu contraseña?'}
+                      </button>
+                      {resetError && (
+                        <p className="text-xs text-red-500 mt-1">{resetError}</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={handleSubmit}
+                disabled={loading}
+                className="w-full bg-primary text-white font-bold py-4 rounded-2xl text-base hover:bg-primary-dark transition-colors disabled:opacity-50 shadow-lg mt-2"
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 size={20} className="animate-spin" /> Procesando...
+                  </span>
+                ) : modo === 'login' ? 'Iniciar sesión →' : 'Crear cuenta →'}
+              </button>
             </div>
-          )}
 
-          {/* Botón */}
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="w-full bg-primary text-white font-bold py-4 rounded-2xl text-base hover:bg-primary-dark transition-colors disabled:opacity-50 shadow-lg mt-2"
-          >
-            {loading
-              ? <span className="flex items-center justify-center gap-2">
-                  <Loader2 size={20} className="animate-spin" /> Procesando...
-                </span>
-              : modo === 'login' ? 'Iniciar sesión →' : 'Crear cuenta →'
-            }
-          </button>
-
-        </div>
-
-        {/* Pie */}
-        <div className="mt-6 flex items-center justify-between">
-          <p className="text-xs text-gray-400">
-            ¿Ayuda?{' '}
-            <a
-              href="https://wa.me/51920277794"
-              target="_blank"
-              rel="noreferrer"
-              className="text-primary font-semibold"
-            >
-              920 277 794
-            </a>
-            <a
-              target="_blank"
-              rel="noreferrer"
-              className="text-primary font-semibold"
-            >
-              -
-            </a>
-            <a
-              href="https://wa.me/51935211605"
-              target="_blank"
-              rel="noreferrer"
-              className="text-primary font-semibold"
-            >
-              935 211 605
-            </a>
-          </p>
-          <button
-            onClick={() => navigate('/admin')}
-            className="text-xs text-gray-300 hover:text-gray-500 transition-colors"
-          >
-            · · ·
-          </button>
-        </div>
-        </>)}
-
+            <div className="mt-6 flex flex-col items-center justify-center text-center space-y-3">
+              <p className="text-sm text-gray-400 font-normal">
+                ¿Dificultad o dudas para ingresar? Contacta con soporte:
+              </p>
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                <a
+                  href="https://wa.me/51920789045"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 bg-white border border-[#b2d8d0] text-[#0C5435] font-bold text-sm px-3.5 py-1.5 rounded-full shadow-sm hover:bg-gray-50 transition-all"
+                >
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#6ed4b8]"></span>
+                  <span>Contactanos</span>
+                </a>
+              </div >
+                <div className="flex items-center space-x-1.5 text-xs text-slate-400">
+                  <span>Plataforma Agrícola Oficial</span>    
+                <button
+                onClick={() => navigate('/admin')}
+                className="text-xs text-gray-300 hover:text-gray-500 transition-colors"
+                >
+                · · ·
+                </button>
+                </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

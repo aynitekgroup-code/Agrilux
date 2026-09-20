@@ -1,7 +1,7 @@
 /**
  * src/lib/AuthContext.jsx
  *
- * Registro: nombre completo + correo + celular + contraseña → status: 'pendiente'
+ * Registro: nombre completo + correo + celular + contraseña → status: 'aprobado'
  * Login:    correo + contraseña → si status !== 'aprobado', bloqueado
  */
 
