@@ -8,7 +8,7 @@
     { "source": "/api/ml-proxy", "destination": "/api/mercadolibre" },
     { "source": "/api/geocode", "destination": "/api/mercadolibre" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/((?!api/|.*\\.(apk|png|jpg|jpeg|svg|ico|js|css|woff2|woff|ttf|webmanifest|json)).*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
