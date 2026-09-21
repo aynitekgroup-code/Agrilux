@@ -55,10 +55,12 @@ export const AuthProvider = ({ children }) => {
           email: session.user.email,
           nombre: perfil?.nombre || session.user.user_metadata?.nombre || '',
           whatsapp: perfil?.whatsapp || '',
-          status: perfil?.status || 'pendiente',
+          status: perfil?.status || 'aprobado',
           ubicacion: perfil?.ubicacion || ubicacionLS || '',
           coords: perfil?.coords || coordsLS || null,
         });
+      } else {
+        setUser(null);
       }
       setLoading(false);
     });
@@ -75,7 +77,7 @@ export const AuthProvider = ({ children }) => {
           email: session.user.email,
           nombre: perfil?.nombre || session.user.user_metadata?.nombre || '',
           whatsapp: perfil?.whatsapp || '',
-          status: perfil?.status || 'pendiente',
+          status: perfil?.status || 'aprobado',
           ubicacion: perfil?.ubicacion || ubicacionLS || '',
           coords: perfil?.coords || coordsLS || null,
         });
