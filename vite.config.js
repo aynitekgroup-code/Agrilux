@@ -53,7 +53,7 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,woff,png}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,woff,json}'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -89,7 +89,7 @@ export default defineConfig({
             }
           },
           {
-            urlPattern: /^https:\/\/{s}\.tile\.openstreetmap\.org\/.*/i,
+            urlPattern: /^https:\/\/[abc]\.tile\.openstreetmap\.org\/.*/i,
             handler: 'CacheFirst',
             options: {
               cacheName: 'osm-tiles-cache',
@@ -114,10 +114,10 @@ export default defineConfig({
     },
     proxy: {
       '/api/supabase-proxy': {
-        target: 'https://rtznwwggggjcjfjzqsax.supabase.co',
+        target: process.env.VITE_SUPABASE_URL || 'https://rtznwwggggjcjfjzqsax.supabase.co',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/supabase-proxy/, ''),
-        secure: false,
+        secure: true,
         ws: true,
       },
     },

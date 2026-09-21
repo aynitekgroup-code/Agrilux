@@ -22,11 +22,12 @@ android {
             if (keystorePropertiesFile.exists()) {
                 def keystoreProperties = new Properties()
                 keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-                storeFile file(keystoreProperties['KEYSTORE_FILE'] ?: 'debug.keystore')
-                storePassword keystoreProperties['KEYSTORE_PASSWORD'] ?: 'android'
-                keyAlias keystoreProperties['KEY_ALIAS'] ?: 'androiddebugkey'
-                keyPassword keystoreProperties['KEY_PASSWORD'] ?: 'android'
+                storeFile file(keystoreProperties['KEYSTORE_FILE'])
+                storePassword keystoreProperties['KEYSTORE_PASSWORD']
+                keyAlias keystoreProperties['KEY_ALIAS']
+                keyPassword keystoreProperties['KEY_PASSWORD']
             } else {
+                logger.error("ERROR: keystore.properties not found. Release builds require a signing config.")
                 storeFile file('debug.keystore')
                 storePassword 'android'
                 keyAlias 'androiddebugkey'

@@ -28,6 +28,8 @@ export default function Layout({ children }) {
   const [claveLoading, setClaveLoading] = useState(false);
   const [claveExito, setClaveExito] = useState(false);
   const [claveError, setClaveError] = useState('');
+  const [adminIntentos, setAdminIntentos] = useState(0);
+  const adminBloqueado = adminIntentos >= 5;
 
   const ADMIN_EMAIL = 'aynitek.group@gmail.com';
   const esAdmin = user?.email === ADMIN_EMAIL;
@@ -46,6 +48,7 @@ export default function Layout({ children }) {
   };
 
   const handleAdminLogin = async () => {
+    if (adminBloqueado) { setAdminError('Demasiados intentos. Espera unos minutos.'); return; }
     try {
       const res = await fetch('/api/alertas-preventivas?type=auth', {
         method: 'POST',
@@ -54,10 +57,11 @@ export default function Layout({ children }) {
       });
       const data = await res.json();
       if (data.ok) {
-        sessionStorage.setItem('agrilux_admin', 'ok');
+        sessionStorage.setItem('agrilux_admin_token', data.token || Date.now().toString());
         setAdminModal(false);
         navigate('/admin');
       } else {
+        setAdminIntentos(prev => prev + 1);
         setAdminError('Clave incorrecta');
       }
     } catch {

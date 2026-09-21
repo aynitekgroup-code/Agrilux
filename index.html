@@ -2,7 +2,7 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#1a6b3c" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -20,17 +20,6 @@
   </head>
   <body>
     <div id="root"></div>
-    <script src="https://accounts.google.com/gsi/client"></script>
     <script type="module" src="/src/main.jsx"></script>
-    <script>
-      const isLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-      if ('serviceWorker' in navigator && !isLocalhost) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('SW registrado:', reg.scope))
-            .catch(err => console.log('SW error:', err));
-        });
-      }
-    </script>
   </body>
 </html>

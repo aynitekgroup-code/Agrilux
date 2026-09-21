@@ -19,6 +19,7 @@ import {
 import { CULTIVOS }      from '../lib/constants';
 import { supabase }      from '../lib/supabase';
 
+import DOMPurify from 'dompurify';
 import { SISTEMA_PROMPT, CHAT_SYSTEM, ANALISIS_SCHEMA } from './diagnostico/diagnosticoPrompts';
 import SelectorUbicacion  from '../components/SelectorUbicacion';
 import VoiceAssistant     from '../components/VoiceAssistant';
@@ -50,6 +51,13 @@ export default function Diagnostico({ onPlagaDetectada }) {
   useEffect(() => {
     seleccionarCultivo(cultivo);
   }, [cultivo]);
+
+  // Cleanup speechSynthesis on unmount
+  useEffect(() => {
+    return () => {
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    };
+  }, []);
   const [fotos, setFotos]               = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [analizando, setAnalizando]     = useState(false);
@@ -198,15 +206,16 @@ export default function Diagnostico({ onPlagaDetectada }) {
     const esConsultaTexto = !compressedUrls.length && consultaTexto;
     const lugar = ubicacionEfectiva;
     const lugarCtx = lugar ? `Ubicación declarada por el agricultor: ${lugar}.` : '';
+    const consultaLimpia = DOMPurify.sanitize(consultaTexto, { ALLOWED_TAGS: [] }).slice(0, 2000);
 
     const promptBase = esConsultaTexto
-      ? `El agricultor consulta sin foto sobre su ${cultivo.nombre}: "${consultaTexto}"
+      ? `El agricultor consulta sin foto sobre su ${cultivo.nombre}: "${consultaLimpia}"
 ${lugarCtx}
 ${climaCtx ? `Contexto ambiental: ${climaCtx}` : ''}
 Usa el contexto climático y de suelo para dar una recomendación precisa.
 Incluye siempre el grado_afectacion (texto: ej "Afecta hojas bajas y tallos") y porcentaje_severidad (0-100, ej 35).
 Responde SOLO con este JSON (sin markdown):
-{"tiene_problema":true,"nombre_problema":"Consulta directa","nombre_cientifico":"","gravedad":"leve","grado_afectacion":"","porcentaje_severidad":0,"que_tiene":"${consultaTexto}","causa":"","aplicacion_inmediata":"","que_hacer":"","productos":[],"cuando_aplicar":"","prevencion":"","alerta_clima":""}`
+{"tiene_problema":true,"nombre_problema":"Consulta directa","nombre_cientifico":"","gravedad":"leve","grado_afectacion":"","porcentaje_severidad":0,"que_tiene":"${consultaLimpia}","causa":"","aplicacion_inmediata":"","que_hacer":"","productos":[],"cuando_aplicar":"","prevencion":"","alerta_clima":""}`
       : `Analiza la foto de ${cultivo.nombre} y evalúa su estado fitosanitario.
 ${lugarCtx}
 ${climaCtx ? `Contexto ambiental actual de la parcela: ${climaCtx}. Usa estos datos para ajustar tus recomendaciones (ej: si hay lluvia, prioriza fungicidas sistémicos; si el pH es ácido, ajusta dosis).` : ''}
@@ -269,10 +278,11 @@ Responde SOLO con este JSON (sin markdown):
         }
       }
 
-      const intentos = [];
-      for (let i = 0; i < 3; i++) {
-        intentos.push(await analizarUnaVez(compressedUrls, textoConsulta));
-      }
+      const intentos = await Promise.all([
+        analizarUnaVez(compressedUrls, textoConsulta),
+        analizarUnaVez(compressedUrls, textoConsulta),
+        analizarUnaVez(compressedUrls, textoConsulta),
+      ]);
 
       const todosFallaron = intentos.every(r =>
         !r.nombre_problema && !r.tiene_problema &&

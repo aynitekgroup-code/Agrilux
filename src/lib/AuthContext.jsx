@@ -28,13 +28,17 @@ export const AuthProvider = ({ children }) => {
       const { data, error } = await supabase.from('usuarios').select('*').eq('id', sessionUser.id).single();
       if (error) {
         console.warn('fetchPerfil error:', error.message);
-        return {};
+        return null;
       }
-      return data || {};
+      return data;
     } catch (e) {
       console.warn('fetchPerfil catch:', e.message);
-      return {};
+      return null;
     }
+  };
+
+  const parseCoords = (raw) => {
+    try { return JSON.parse(raw); } catch { return null; }
   };
 
   useEffect(() => {
@@ -43,17 +47,17 @@ export const AuthProvider = ({ children }) => {
       if (session?.user) {
         const perfil = await fetchPerfil(session.user);
         const ubicacionLS = localStorage.getItem('agrilux_ubicacion') || '';
-        const coordsLS = localStorage.getItem('agrilux_coords');
+        const coordsLS = parseCoords(localStorage.getItem('agrilux_coords'));
         setUser({
           ...perfil,
           id: session.user.id,
           uid: session.user.id,
           email: session.user.email,
-          nombre: perfil.nombre || session.user.user_metadata?.nombre || '',
-          whatsapp: perfil.whatsapp || '',
-          status: perfil.status || 'aprobado',
-          ubicacion: perfil.ubicacion || ubicacionLS || '',
-          coords: perfil.coords || (coordsLS ? JSON.parse(coordsLS) : null),
+          nombre: perfil?.nombre || session.user.user_metadata?.nombre || '',
+          whatsapp: perfil?.whatsapp || '',
+          status: perfil?.status || 'pendiente',
+          ubicacion: perfil?.ubicacion || ubicacionLS || '',
+          coords: perfil?.coords || coordsLS || null,
         });
       }
       setLoading(false);
@@ -63,17 +67,17 @@ export const AuthProvider = ({ children }) => {
       if (session?.user) {
         const perfil = await fetchPerfil(session.user);
         const ubicacionLS = localStorage.getItem('agrilux_ubicacion') || '';
-        const coordsLS = localStorage.getItem('agrilux_coords');
+        const coordsLS = parseCoords(localStorage.getItem('agrilux_coords'));
         setUser({
           ...perfil,
           id: session.user.id,
           uid: session.user.id,
           email: session.user.email,
-          nombre: perfil.nombre || session.user.user_metadata?.nombre || '',
-          whatsapp: perfil.whatsapp || '',
-          status: perfil.status || 'aprobado',
-          ubicacion: perfil.ubicacion || ubicacionLS || '',
-          coords: perfil.coords || (coordsLS ? JSON.parse(coordsLS) : null),
+          nombre: perfil?.nombre || session.user.user_metadata?.nombre || '',
+          whatsapp: perfil?.whatsapp || '',
+          status: perfil?.status || 'pendiente',
+          ubicacion: perfil?.ubicacion || ubicacionLS || '',
+          coords: perfil?.coords || coordsLS || null,
         });
       } else {
         setUser(null);
@@ -135,18 +139,25 @@ export const AuthProvider = ({ children }) => {
   const updateUbicacion = async (ubicacion, coords = null) => {
     const uid = user?.id || user?.uid;
     if (!uid) throw new Error('No hay sesión');
+    const prevUbicacion = user.ubicacion;
+    const prevCoords = user.coords;
     localStorage.setItem('agrilux_ubicacion', ubicacion);
     if (coords) localStorage.setItem('agrilux_coords', JSON.stringify(coords));
     setUser(prev => ({ ...prev, ubicacion, coords: coords || prev.coords }));
-    if (uid) {
-      try {
-        const data = { ubicacion, ...(coords ? { coords } : {}) };
-        const { data: resultado, error } = await supabase.from('usuarios').update(data).eq('id', uid).select();
-        if (error) console.warn('Supabase update ubicación:', error.message);
-        else if (!resultado || resultado.length === 0) console.warn('Update ubicación: 0 filas. uid=', uid);
-      } catch (e) {
-        console.warn('update ubicación offline:', e.message);
+    try {
+      const data = { ubicacion, ...(coords ? { coords } : {}) };
+      const { data: resultado, error } = await supabase.from('usuarios').update(data).eq('id', uid).select();
+      if (error) {
+        console.warn('Supabase update ubicación:', error.message);
+        setUser(prev => ({ ...prev, ubicacion: prevUbicacion, coords: prevCoords }));
+        localStorage.setItem('agrilux_ubicacion', prevUbicacion);
+      } else if (!resultado || resultado.length === 0) {
+        console.warn('Update ubicación: 0 filas. uid=', uid);
       }
+    } catch (e) {
+      console.warn('update ubicación offline:', e.message);
+      setUser(prev => ({ ...prev, ubicacion: prevUbicacion, coords: prevCoords }));
+      localStorage.setItem('agrilux_ubicacion', prevUbicacion);
     }
   };
 

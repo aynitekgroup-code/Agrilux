@@ -208,8 +208,20 @@ function evaluarRiesgo(clima, cultivo, etapa, historial) {
   return { nivel: 'minimo', color: 'green', puntos, factores };
 }
 
+import { timingSafeEqual } from 'crypto';
+
+const rateLimitMap = new Map();
+function checkRateLimit(key, maxAttempts = 5, windowMs = 900000) {
+  const now = Date.now();
+  const record = rateLimitMap.get(key) || { count: 0, reset: now + windowMs };
+  if (now > record.reset) { record.count = 0; record.reset = now + windowMs; }
+  record.count++;
+  rateLimitMap.set(key, record);
+  return record.count <= maxAttempts;
+}
+
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -220,12 +232,20 @@ export default async function handler(req, res) {
   // ── Admin Auth (fusionado de admin-auth.js) ──
   if (type === 'auth') {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+    const ip = req.headers['x-forwarded-for'] || 'unknown';
+    if (!checkRateLimit(`auth:${ip}`, 5, 900000)) {
+      return res.status(429).json({ ok: false, error: 'Demasiados intentos. Intenta en 15 minutos.' });
+    }
     const { clave } = req.body || {};
     if (!clave) return res.status(400).json({ error: 'Falta la clave' });
-    const ADMIN_KEY = process.env.ADMIN_KEY || process.env.VITE_ADMIN_KEY;
+    const ADMIN_KEY = process.env.ADMIN_KEY;
     if (!ADMIN_KEY) return res.status(500).json({ error: 'ADMIN_KEY no configurada en el servidor' });
-    if (clave === ADMIN_KEY) return res.status(200).json({ ok: true });
-    return res.status(401).json({ ok: false, error: 'Clave incorrecta' });
+    const inputBuf = Buffer.from(clave);
+    const keyBuf = Buffer.from(ADMIN_KEY);
+    if (inputBuf.length !== keyBuf.length || !timingSafeEqual(inputBuf, keyBuf)) {
+      return res.status(401).json({ ok: false, error: 'Clave incorrecta' });
+    }
+    return res.status(200).json({ ok: true });
   }
 
   if (req.method !== 'GET') return res.status(405).end();

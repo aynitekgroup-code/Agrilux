@@ -1,18 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { AgentProvider } from './lib/AgentContext';
 import Layout from './components/Layout';
 import SelectorUbicacion from './components/SelectorUbicacion';
 import Registro from './pages/Registro';
-import Diagnostico from './pages/Diagnostico';
-import MiParcela from './pages/MiParcela';
-import CicloCultivo from './pages/CicloCultivo';
-import MercadoPage from './pages/MercadoPage';
-import Admin from './pages/Admin';
-import PrivacyPolicy from './pages/PrivacyPolicy';
-import Descargar from './pages/Descargar';
 import { Clock, Mail, LogOut } from 'lucide-react';
+
+const Diagnostico = lazy(() => import('./pages/Diagnostico'));
+const MiParcela = lazy(() => import('./pages/MiParcela'));
+const CicloCultivo = lazy(() => import('./pages/CicloCultivo'));
+const MercadoPage = lazy(() => import('./pages/MercadoPage'));
+const Admin = lazy(() => import('./pages/Admin'));
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
+const Descargar = lazy(() => import('./pages/Descargar'));
 
 function PantallaPendiente() {
   const { user, logout } = useAuth();
@@ -59,6 +60,12 @@ function PantallaPendiente() {
 function AppRoutes() {
   const { user, loading, isAprobado } = useAuth();
   const [plagaDetectada, setPlagaDetectada] = useState('');
+  const location = useLocation();
+
+  let ubicacionGuardada = null;
+  try {
+    ubicacionGuardada = user?.ubicacion || localStorage.getItem('agrilux_ubicacion');
+  } catch { /* ignore */ }
 
   if (loading) return (
     <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-green-50 to-green-200">
@@ -82,18 +89,20 @@ function AppRoutes() {
   );
 
   // Public routes — always accessible (sin layout)
-  if (['/admin', '/privacy', '/descargar'].includes(window.location.pathname)) {
+  const publicPaths = ['/admin', '/privacy', '/descargar'];
+  if (publicPaths.includes(location.pathname)) {
     return (
-      <Routes>
-        <Route path="/admin" element={<Admin />} />
-        <Route path="/privacy" element={<PrivacyPolicy />} />
-        <Route path="/descargar" element={<Descargar />} />
-      </Routes>
+      <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="w-8 h-8 border-4 border-green-400 border-t-transparent rounded-full animate-spin" /></div>}>
+        <Routes>
+          <Route path="/admin" element={<Admin />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/descargar" element={<Descargar />} />
+        </Routes>
+      </Suspense>
     );
   }
 
   // Logged in, no location → selector (also checks localStorage as fallback)
-  const ubicacionGuardada = user?.ubicacion || localStorage.getItem('agrilux_ubicacion');
   if (user && !ubicacionGuardada) {
     return <SelectorUbicacion esPrimeraVez={true} />;
   }
@@ -102,11 +111,9 @@ function AppRoutes() {
   // Diagnóstico: SIEMPRE accesible (con o sin login)
   // Parcela y Ciclo: requieren login + aprobación
   return (
-    <Routes>
-      <Route path="/admin" element={<Admin />} />
-      <Route path="/privacy" element={<PrivacyPolicy />} />
-      <Route path="/descargar" element={<Descargar />} />
-      <Route path="/registro" element={<Registro />} />
+    <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="w-8 h-8 border-4 border-green-400 border-t-transparent rounded-full animate-spin" /></div>}>
+      <Routes>
+        <Route path="/registro" element={<Registro />} />
 
       <Route path="*" element={
         <Layout>
@@ -114,14 +121,14 @@ function AppRoutes() {
             {/* Diagnóstico — siempre accesible */}
             <Route path="/" element={<Diagnostico onPlagaDetectada={setPlagaDetectada} />} />
 
-            {/* Parcela — requiere login */}
+            {/* Parcela — requiere login + aprobación */}
             <Route path="/parcela" element={
-              user ? <MiParcela /> : <Navigate to="/registro" />
+              user && isAprobado ? <MiParcela /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />
 
-            {/* Ciclo — requiere login */}
+            {/* Ciclo — requiere login + aprobación */}
             <Route path="/ciclo" element={
-              user ? <CicloCultivo /> : <Navigate to="/registro" />
+              user && isAprobado ? <CicloCultivo /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />
 
             {/* Mercado — ofertas + agente + mi tienda */}
@@ -133,7 +140,8 @@ function AppRoutes() {
           </Routes>
         </Layout>
       } />
-    </Routes>
+      </Routes>
+    </Suspense>
   );
 }
 
@@ -143,6 +151,7 @@ export default function App() {
     if (hash && hash.includes('access_token')) {
       const params = new URLSearchParams(hash.substring(1));
       const type = params.get('type');
+      window.history.replaceState(null, '', window.location.pathname);
       if (type === 'recovery') {
         window.location.replace('/registro?mode=reset');
       } else {
