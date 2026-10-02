@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { AgentProvider } from './lib/AgentContext';
@@ -58,6 +58,13 @@ function PantallaPendiente() {
 function AppRoutes() {
   const { user, loading, isAprobado } = useAuth();
   const [plagaDetectada, setPlagaDetectada] = useState('');
+  const [selectorMostrado, setSelectorMostrado] = useState(() => {
+    try {
+      return localStorage.getItem('agrilux_selector_mostrado') === '1';
+    } catch {
+      return false;
+    }
+  });
 
   let ubicacionGuardada = false;
   try {
@@ -66,6 +73,24 @@ function AppRoutes() {
   } catch {
     ubicacionGuardada = Boolean(String(user?.ubicacion || '').trim());
   }
+
+  useEffect(() => {
+    if (ubicacionGuardada) {
+      try {
+        localStorage.setItem('agrilux_selector_mostrado', '1');
+      } catch {}
+      setSelectorMostrado(true);
+    }
+  }, [ubicacionGuardada]);
+
+  useEffect(() => {
+    if (user && !ubicacionGuardada && !selectorMostrado) {
+      try {
+        localStorage.setItem('agrilux_selector_mostrado', '1');
+      } catch {}
+      setSelectorMostrado(true);
+    }
+  }, [user, ubicacionGuardada, selectorMostrado]);
 
   if (loading) return (
     <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-green-50 to-green-200">
@@ -98,8 +123,8 @@ function AppRoutes() {
     );
   }
 
-  // Logged in, no location → selector
-  if (user && !ubicacionGuardada) {
+  // Logged in, no location → selector (solo una vez por sesión/usuario hasta guardar ubicación)
+  if (user && !ubicacionGuardada && !selectorMostrado) {
     return <SelectorUbicacion esPrimeraVez={true} />;
   }
 
