@@ -59,6 +59,14 @@ function AppRoutes() {
   const { user, loading, isAprobado } = useAuth();
   const [plagaDetectada, setPlagaDetectada] = useState('');
 
+  let ubicacionGuardada = false;
+  try {
+    const ubicacionLocal = user?.ubicacion || localStorage.getItem('agrilux_ubicacion') || '';
+    ubicacionGuardada = Boolean(String(ubicacionLocal).trim());
+  } catch {
+    ubicacionGuardada = Boolean(String(user?.ubicacion || '').trim());
+  }
+
   if (loading) return (
     <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-green-50 to-green-200">
       <div className="text-center">
@@ -91,7 +99,7 @@ function AppRoutes() {
   }
 
   // Logged in, no location → selector
-  if (user && !user.ubicacion) {
+  if (user && !ubicacionGuardada) {
     return <SelectorUbicacion esPrimeraVez={true} />;
   }
 
