@@ -1,6 +1,32 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader2, MapPin, Mic, Navigation, Check, X, Map } from 'lucide-react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { useAuth } from '../lib/AuthContext';
+
+function nombreAproximado(data) {
+  const address = data.address || {};
+  const nombres = [
+    address.city_district,
+    address.municipality,
+    address.city,
+    address.town,
+    address.village,
+    address.district,
+    address.province,
+    address.state_district,
+    address.county,
+    address.region,
+    address.state,
+  ].filter(Boolean);
+
+  if (nombres.length) return [...new Set(nombres)].slice(0, 2).join(', ');
+
+  const detalle = (data.name || data.display_name || '').split(',')
+    .map(parte => parte.trim())
+    .filter(parte => parte && !/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(parte));
+  return detalle.slice(1, 3).join(', ') || detalle[0] || 'Lugar aproximado no identificado';
+}
 
 export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) {
   const { user, updateUbicacion } = useAuth();
@@ -38,8 +64,6 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
 
   useEffect(() => {
     if (modo === 'mapa' && mapRef.current && !mapInstanceRef.current) {
-      const L = window.L;
-      if (!L) return;
       const lat = -10.0;
       const lon = -76.5;
       const map = L.map(mapRef.current, { zoomControl: false }).setView([lat, lon], 6);
@@ -56,14 +80,12 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
           const res = await fetch(`/api/geocode?lat=${lat}&lon=${lng}`);
           if (res.ok) {
             const data = await res.json();
-            const nombre = [data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
-              .filter(Boolean).slice(0, 2).join(', ') || data.name?.split(',')[0] || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-            setUbicacion(nombre);
+            setUbicacion(nombreAproximado(data));
           } else {
-            setUbicacion(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+            setUbicacion('Lugar aproximado no identificado');
           }
         } catch {
-          setUbicacion(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+          setUbicacion('Lugar aproximado no identificado');
         }
         setModo('confirmar');
       });
@@ -89,11 +111,9 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
           const res = await fetch(`/api/geocode?lat=${lat}&lon=${lon}`);
           if (!res.ok) throw new Error();
           const data = await res.json();
-          const nombreCorto = [data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
-            .filter(Boolean).slice(0, 2).join(', ') || data.name.split(',')[0];
-          setUbicacion(nombreCorto);
+          setUbicacion(nombreAproximado(data));
         } catch {
-          setUbicacion(`${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+          setUbicacion('Lugar aproximado no identificado');
         }
         setDetectando(false);
         setModo('confirmar');
@@ -140,7 +160,7 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
         localStorage.setItem('agrilux_ubicacion', ubicacion.trim());
         if (coordsSeleccionadas) localStorage.setItem('agrilux_coords', JSON.stringify(coordsSeleccionadas));
       }
-      onGuardar?.(ubicacion.trim());
+      onGuardar?.(ubicacion.trim(), coordsSeleccionadas);
       if (!esPrimeraVez) onClose?.();
     } catch {
       setError('Error al guardar. Intenta de nuevo.');

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Camera, Loader2, AlertTriangle, CheckCircle, Send,
   Mic, MicOff, Volume2, VolumeX,
-  Sparkles, ImagePlus, X, MapPin, Upload,
+  Sparkles, X, MapPin, Upload, MapPinOff, ChevronDown, Navigation, Plus, ArrowRight
 } from 'lucide-react';
 import { useAuth }       from '../lib/AuthContext';
 import { useAgentes }    from '../lib/AgentContext';
@@ -1221,27 +1221,93 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
         </div>
       </div>
 
-      <div className="px-4 py-4 space-y-4">
+    <div className="px-4 py-4 space-y-4">
+      
 
-        {/* Ubicación — botón para cambiar */}
+      {/* Ubicación — con dos estados: Con ubicación / Sin ubicación */}
+      {ubicacionEfectiva ? (
+        // ESTADO 1: CON UBICACIÓN (ZONA ACTIVA)
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">📍 Ubicación</p>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-sm text-gray-700 font-medium truncate">
-                {user?.ubicacion || 'Sin ubicación'}
-              </span>
+          <div className="flex items-start justify-between">
+            {/* Izquierda: Icono + Contenido */}
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              {/* Icono de ubicación activa */}
+              <div className="flex-shrink-0 pt-1">
+                <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center">
+                  <MapPin size={18} className="text-orange-600" />
+                </div>
+              </div>
+
+              {/* Contenido */}
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
+                  📍 Coordenadas
+                </p>
+                <p className="text-base font-semibold text-gray-900">
+                  {coords?.lat != null && coords?.lon != null
+                    ? `${Number(coords.lat).toFixed(4)}, ${Number(coords.lon).toFixed(4)}`
+                    : ubicacionEfectiva}
+                </p>
+              </div>
             </div>
-            <button onClick={() => setMostrarSelectorUbicacion(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary-dark transition-all shadow-md active:scale-95">
-              <MapPin size={16} />
-              Cambiar ubicación
+
+            {/* Derecha: Botón Cambiar */}
+            <button
+              onClick={() => setMostrarSelectorUbicacion(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-all flex-shrink-0 ml-3"
+            >
+              Cambiar ubicacion
+              <ChevronDown size={14} />
             </button>
           </div>
-          <p className="text-xs text-gray-400 mt-2">
-            GPS · Voz · Texto — para recomendaciones más precisas
-          </p>
         </div>
+        ) : (
+        // ESTADO 2: SIN UBICACIÓN (ZONA NO DEFINIDA)
+        <div className="bg-orange-50 rounded-2xl p-4 border border-orange-200">
+          <div className="flex items-start gap-3 mb-3">
+            {/* Icono de ubicación desactivada */}
+            <div className="flex-shrink-0 pt-0.5">
+              <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center">
+                <MapPinOff size={18} className="text-orange-600" />
+              </div>
+            </div>
+
+            {/* Contenido */}
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
+                Zona no definida
+              </p>
+              <p className="text-base font-semibold text-gray-900 mb-2">
+                Ubicación desactivada
+              </p>
+              <p className="text-sm text-gray-600 mb-3">
+                Activa el GPS o elige tu zona para calibrar plagas y clima local con precisión.
+              </p>
+
+              {/* Métodos disponibles */}
+              <p className="text-xs text-gray-500 mb-4 flex items-center gap-1">
+                <Navigation size={14} className="text-orange-600" />
+                GPS · Voz · Búsqueda
+              </p>
+
+              {/* Botón Definir zona */}
+              <button
+                onClick={() => setMostrarSelectorUbicacion(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-teal-900 text-white text-sm font-semibold hover:bg-teal-950 transition-all"
+              >
+                <Plus size={16} />
+                Definir zona
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+
+
+
 
         {/* 🔮 Alerta Preventiva — se muestra antes de diagnosticar */}
         {alertasPreventivas && (alertasPreventivas.alertas?.length > 0 || alertasPreventivas.riesgo?.nivel === 'critico' || alertasPreventivas.riesgo?.nivel === 'alto') && (
@@ -1322,27 +1388,82 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
         )}
 
         {/* PlaguIA detecta */}
-        <div className="bg-gray-50 rounded-2xl p-4">
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">🤖 PlaguIA detecta</p>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { e: '🦠', t: 'Enfermedades fúngicas y bacterianas' },
-              { e: '🐛', t: 'Plagas e insectos dañinos' },
-              { e: '🌿', t: 'Malezas y plantas invasoras' },
-            ].map(({ e, t }) => (
-              <div key={t} className="bg-white rounded-xl p-2.5 flex items-center gap-2">
-                <span className="text-lg">{e}</span>
-                <p className="text-xs text-gray-600">{t}</p>
+        
+        
+
+
+      </div>
+
+      <div className="bg-gray-50 rounded-2xl p-4">
+
+                {/* PlaguIA detecta */}
+
+        <p className="text-xs font-bold text-teal-600 uppercase tracking-wide mb-4">
+          Capacidad del analizador 
+        </p>
+
+        {/* Contenedor de tarjetas */}
+        <div className="space-y-3">
+          {[
+            {
+              icon: '🦠',
+              title: 'Hongos y Bacterias',
+              description: 'Rancha (Tizón tardío), Roya, Botrytis, Oidio',
+              bgColor: 'bg-red-50',
+              iconBg: 'bg-red-100'
+            },
+            {
+              icon: '🐛',
+              title: 'Plagas e Insectos dañinos',
+              description: 'Polilla de la papa, Gusano cogollero, Pulgón',
+              bgColor: 'bg-amber-50',
+              iconBg: 'bg-amber-100'
+            },
+            {
+              icon: '🌿',
+              title: 'Deficiencia de Nutrientes',
+              description: 'Falta de Nitrógeno, Fósforo, Clorosis férrica',
+              bgColor: 'bg-green-50',
+              iconBg: 'bg-green-100'
+            }
+          ].map(({ icon, title, description, bgColor, iconBg }) => (
+            <div
+              key={title}
+              className={`${bgColor} rounded-xl p-4 flex items-center justify-between cursor-pointer hover:shadow-md transition-shadow`}
+            >
+              <div className="flex items-center gap-4 flex-1">
+                {/* Icono */}
+                <div className={`${iconBg} rounded-lg p-3 flex-shrink-0`}>
+                  <span className="text-xl">{icon}</span>
+                </div>
+
+                {/* Contenido */}
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900">{title}</p>
+                  <p className="text-xs text-gray-600 mt-1">{description}</p>
+                </div>
               </div>
-            ))}
-          </div>
+
+              {/* Flecha */}
+              <span className="text-gray-400 ml-3 flex-shrink-0">&gt;</span>
+            </div>
+          ))}
         </div>
       </div>
+
+
 
       {mostrarSelectorUbicacion && (
         <div className="fixed inset-0 z-50 bg-white/95 flex items-center justify-center" style={{ backdropFilter: 'blur(4px)' }}>
           <div className="w-full max-w-[430px] mx-auto relative">
-            <SelectorUbicacion esPrimeraVez={false} onClose={() => setMostrarSelectorUbicacion(false)} onGuardar={(ubi) => setUbicacion(ubi)} />
+            <SelectorUbicacion
+              esPrimeraVez={false}
+              onClose={() => setMostrarSelectorUbicacion(false)}
+              onGuardar={(ubi, nuevasCoords) => {
+                setUbicacion(ubi);
+                actualizarUbicacion(ubi, nuevasCoords);
+              }}
+            />
           </div>
         </div>
       )}

@@ -102,7 +102,7 @@ export default function Registro() {
           const res = await fetch(`/api/geocode?lat=${lat}&lon=${lon}`);
           if (!res.ok) throw new Error();
           const data = await res.json();
-          const nombreCorto = [data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
+          const nombreCorto = [data.address?.district, data.address?.municipality, data.address?.city_district, data.address?.suburb, data.address?.neighbourhood, data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
             .filter(Boolean).slice(0, 2).join(', ') || data.name.split(',')[0];
           setUbicacion(nombreCorto);
         } catch {
