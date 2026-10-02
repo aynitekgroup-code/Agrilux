@@ -94,6 +94,9 @@ export default function Diagnostico({ onPlagaDetectada }) {
   const [leyendoSeccion, setLeyendoSeccion] = useState(null);
 
   const ubicacionEfectiva = (ubicacion || user?.ubicacion || localStorage.getItem('agrilux_ubicacion') || '').trim();
+  const hayUbicacionAproximada = Boolean(ubicacionEfectiva)
+    && ubicacionEfectiva !== 'Lugar aproximado no identificado'
+    && !/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(ubicacionEfectiva);
 
   // Sincronizar ubicación con AgentContext
   useEffect(() => {
@@ -1248,6 +1251,11 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
                     ? `${Number(coords.lat).toFixed(4)}, ${Number(coords.lon).toFixed(4)}`
                     : ubicacionEfectiva}
                 </p>
+                {hayUbicacionAproximada && (
+                  <p className="text-sm text-gray-500 mt-1 break-words">
+                    {ubicacionEfectiva}
+                  </p>
+                )}
               </div>
             </div>
 

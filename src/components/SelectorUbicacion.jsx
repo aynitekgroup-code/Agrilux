@@ -287,12 +287,11 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
           <div className="w-full max-w-sm text-center">
             <div className="bg-green-50 rounded-2xl p-5 mb-4">
               <Check size={28} className="text-green-500 mx-auto mb-2" />
-              <p className="text-green-700 font-bold text-lg">{ubicacion}</p>
-              {coordsSeleccionadas && (
-                <p className="text-green-600 text-xs mt-1 font-mono">
-                  📍 {coordsSeleccionadas.lat.toFixed(6)}, {coordsSeleccionadas.lon.toFixed(6)}
-                </p>
-              )}
+              <p className="text-green-700 font-bold text-lg">
+                {coordsSeleccionadas
+                  ? `${coordsSeleccionadas.lat.toFixed(6)}, ${coordsSeleccionadas.lon.toFixed(6)}`
+                  : ubicacion}
+              </p>
               <p className="text-green-600 text-sm mt-2">¿Es correcta tu ubicación?</p>
             </div>
           </div>
