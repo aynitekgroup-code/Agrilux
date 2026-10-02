@@ -261,9 +261,9 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
         )}
 
         {modo === 'mapa' && (
-          <div className="w-full max-w-sm">
+          <div className="w-full max-w-2xl mx-auto">
             <p className="text-sm text-gray-500 mb-2 text-center">Toca en el mapa para seleccionar tu ubicación</p>
-            <div ref={mapRef} className="w-full h-64 rounded-2xl border-2 border-gray-200 overflow-hidden" />
+            <div ref={mapRef} className="w-full h-[26rem] rounded-2xl border-2 border-gray-200 overflow-hidden" />
             <button onClick={() => setModo(null)} className="w-full mt-2 py-2 text-gray-500 text-sm font-medium hover:text-gray-700">
               ← Volver a opciones
             </button>
