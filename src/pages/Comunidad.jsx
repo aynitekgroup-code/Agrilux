@@ -43,7 +43,7 @@ export default function Comunidad() {
     if (!form.titulo || !form.contenido) { alert('Completa título y contenido'); return; }
     setPublicando(true);
     try {
-      const payload = { ...form, autor: user?.nombre, autorId: user?.id || user?.uid, fecha: new Date().toISOString(), likes: 0 };
+      const payload = { ...form, autor: user?.nombre, autor_id: user?.id || user?.uid, fecha: new Date().toISOString(), likes: 0 };
       const { data, error } = await supabase.from('comunidad').insert(payload).select().single();
       if (error) throw error;
       setMensajes(prev => [{ id: data.id, ...payload }, ...prev]);

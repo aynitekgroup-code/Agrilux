@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, Leaf, Calendar, Store, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle } from 'lucide-react';
+import { Camera, Leaf, Calendar, Store, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle, Download } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
 import SelectorUbicacion from './SelectorUbicacion';
@@ -28,6 +28,8 @@ export default function Layout({ children }) {
   const [claveLoading, setClaveLoading] = useState(false);
   const [claveExito, setClaveExito] = useState(false);
   const [claveError, setClaveError] = useState('');
+  const [adminIntentos, setAdminIntentos] = useState(0);
+  const adminBloqueado = adminIntentos >= 5;
 
   const ADMIN_EMAIL = 'aynitek.group@gmail.com';
   const esAdmin = user?.email === ADMIN_EMAIL;
@@ -46,6 +48,7 @@ export default function Layout({ children }) {
   };
 
   const handleAdminLogin = async () => {
+    if (adminBloqueado) { setAdminError('Demasiados intentos. Espera unos minutos.'); return; }
     try {
       const res = await fetch('/api/alertas-preventivas?type=auth', {
         method: 'POST',
@@ -54,10 +57,11 @@ export default function Layout({ children }) {
       });
       const data = await res.json();
       if (data.ok) {
-        sessionStorage.setItem('agrilux_admin', 'ok');
+        sessionStorage.setItem('agrilux_admin_token', data.token || Date.now().toString());
         setAdminModal(false);
         navigate('/admin');
       } else {
+        setAdminIntentos(prev => prev + 1);
         setAdminError('Clave incorrecta');
       }
     } catch {
@@ -105,7 +109,21 @@ export default function Layout({ children }) {
             </button>
           )}
         </div>
-        <div className="relative">
+        <div className="relative flex items-center gap-1">
+          <button
+            onClick={() => navigate('/descargar')}
+            title="Descargar app sin Play Store"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[#1a6b3c] text-white rounded-full text-xs font-bold hover:bg-[#14522e] transition-colors"
+          >
+            <Download size={14} /> Descargar
+          </button>
+          <button
+            onClick={() => navigate('/descargar')}
+            title="Descargar app"
+            className="sm:hidden p-2 bg-[#1a6b3c]/10 text-[#1a6b3c] rounded-lg hover:bg-[#1a6b3c]/20 transition-colors"
+          >
+            <Download size={18} />
+          </button>
           <button
             onClick={() => setMenuOpen(!menuOpen)}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -124,6 +142,13 @@ export default function Layout({ children }) {
                 className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-green-50 hover:text-green-700 transition-colors text-sm font-medium rounded-lg">
                 <Store size={18} />
                 Mi tienda / Ofertas
+              </button>
+              <button
+                onClick={() => { setMenuOpen(false); navigate('/descargar'); }}
+                className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg">
+                <Download size={18} />
+                Descargar app
+                <span className="ml-auto text-[10px] font-black bg-[#1a6b3c] text-white px-1.5 py-0.5 rounded">SIN PLAY STORE</span>
               </button>
               {user ? (
                 <>

@@ -74,7 +74,7 @@ export default function Marketing() {
     let mounted = true;
     const cargar = async () => {
       try {
-        const { data, error } = await supabase.from('contactos_marketing').select('*').order('createdAt', { ascending: false });
+        const { data, error } = await supabase.from('contactos_marketing').select('*').order('created_at', { ascending: false });
         if (error) throw error;
         if (mounted) setContactos(data || []);
       } catch {}
@@ -137,7 +137,7 @@ export default function Marketing() {
   const exportarContactos = () => {
     const csv = [
       'Nombre,Ubicación,Cultivo,Plataforma,Fecha',
-      ...contactos.map(c => `"${c.nombre || ''}","${c.ubicacion || ''}","${c.cultivo || ''}","${c.plataforma || ''}","${c.createdAt?.toDate?.() || ''}"`)
+      ...contactos.map(c => `"${c.nombre || ''}","${c.ubicacion || ''}","${c.cultivo || ''}","${c.plataforma || ''}","${c.created_at || ''}"`)
     ].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);

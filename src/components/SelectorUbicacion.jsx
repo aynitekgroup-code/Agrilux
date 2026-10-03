@@ -77,7 +77,7 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
         if (marker) marker.remove();
         marker = L.marker([lat, lng]).addTo(map);
         try {
-          const res = await fetch(`/api/geocode?lat=${lat}&lon=${lng}`);
+          const res = await fetch(`/api/mercadolibre?type=geocode&lat=${lat}&lon=${lng}`);
           if (res.ok) {
             const data = await res.json();
             setUbicacion(nombreAproximado(data));
@@ -96,10 +96,6 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
   }, [modo]);
 
   const detectarGPS = async () => {
-    if (!navigator.geolocation) {
-      setError('Tu dispositivo no tiene GPS. Usa la opción de escribir o voz.');
-      return;
-    }
     setDetectando(true);
     setError('');
     navigator.geolocation.getCurrentPosition(
@@ -124,6 +120,47 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
       },
       { enableHighAccuracy: true, timeout: 15000 }
     );
+    try {
+      let lat, lon;
+      // Intentar Capacitor Geolocation primero (APK nativa)
+      if (window.Capacitor?.isNativePlatform?.()) {
+        try {
+          const { Geolocation } = await import('@capacitor/geolocation');
+          const perm = await Geolocation.checkPermissions();
+          if (perm.location !== 'granted' && perm.coarseLocation !== 'granted') {
+            await Geolocation.requestPermissions();
+          }
+          const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 15000 });
+          lat = pos.coords.latitude;
+          lon = pos.coords.longitude;
+        } catch (e) {
+          throw new Error(e.message || 'GPS Capacitor falló');
+        }
+      } else {
+        if (!navigator.geolocation) throw new Error('Sin GPS');
+        const pos = await new Promise((resolve, reject) =>
+          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000 })
+        );
+        lat = pos.coords.latitude;
+        lon = pos.coords.longitude;
+      }
+      setCoordsSeleccionadas({ lat, lon });
+      try {
+        const res = await fetch(`/api/mercadolibre?type=geocode&lat=${lat}&lon=${lon}`);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        const nombreCorto = [data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
+          .filter(Boolean).slice(0, 2).join(', ') || data.name.split(',')[0];
+        setUbicacion(nombreCorto);
+      } catch {
+        setUbicacion(`${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+      }
+      setDetectando(false);
+      setModo('confirmar');
+    } catch {
+      setError('No se pudo obtener tu ubicación. Activa el GPS en Ajustes → Permisos → Agrilux → Ubicación → Permitir, e intenta de nuevo.');
+      setDetectando(false);
+    }
   };
 
   const grabarVoz = () => {
@@ -154,11 +191,10 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
     setConfirmando(true);
     setError('');
     try {
+      localStorage.setItem('agrilux_ubicacion', ubicacion.trim());
+      if (coordsSeleccionadas) localStorage.setItem('agrilux_coords', JSON.stringify(coordsSeleccionadas));
       if (user) {
         await updateUbicacion(ubicacion.trim(), coordsSeleccionadas);
-      } else {
-        localStorage.setItem('agrilux_ubicacion', ubicacion.trim());
-        if (coordsSeleccionadas) localStorage.setItem('agrilux_coords', JSON.stringify(coordsSeleccionadas));
       }
       onGuardar?.(ubicacion.trim(), coordsSeleccionadas);
       if (!esPrimeraVez) onClose?.();

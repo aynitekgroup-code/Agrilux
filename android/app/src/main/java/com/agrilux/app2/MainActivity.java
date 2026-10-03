@@ -1,4 +1,4 @@
-package com.agrilux.app;
+package com.agrilux.app2;
 
 import com.getcapacitor.BridgeActivity;
 

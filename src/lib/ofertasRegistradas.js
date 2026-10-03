@@ -56,18 +56,18 @@ async function cargarOfertasFirestore({ lat, lon, cultivo = '' } = {}) {
     const { data: preciosData, error: preciosError } = await supabase.from('precios_historicos').select('*').order('fecha', { ascending: false }).limit(100);
     if (preciosError) throw preciosError;
 
-    const tiendaIds = [...new Set((preciosData || []).map((d) => d.tiendaId).filter(Boolean))];
+    const tiendaIds = [...new Set((preciosData || []).map((d) => d.tienda_id).filter(Boolean))];
     const tiendasMap = {};
     await Promise.all(tiendaIds.map(async (id) => {
       const { data } = await supabase.from('tiendas_comunidad').select('*').eq('id', id).single();
-      if (data && data.propietarioId) tiendasMap[id] = data;
+      if (data && data.propietario_id) tiendasMap[id] = data;
     }));
 
     for (const p of (preciosData || [])) {
-      const tienda = tiendasMap[p.tiendaId];
+      const tienda = tiendasMap[p.tienda_id];
       ofertas.push({
-        tienda: p.tiendaNombre || tienda?.nombre || 'Tienda',
-        producto: p.productoNombre || PRODUCTOS[p.producto] || p.producto,
+        tienda: p.tienda_nombre || tienda?.nombre || 'Tienda',
+        producto: p.producto_nombre || PRODUCTOS[p.producto] || p.producto,
         precio: p.precio,
         region: p.departamento || tienda?.departamento || '',
         whatsapp: tienda?.whatsapp || null,
@@ -88,8 +88,8 @@ async function cargarOfertasFirestore({ lat, lon, cultivo = '' } = {}) {
       if (error) throw error;
 
       for (const tienda of (tiendasData || [])) {
-        if (!tienda.propietarioId) continue;
-        const preciosActuales = tienda.preciosActuales || {};
+        if (!tienda.propietario_id) continue;
+        const preciosActuales = tienda.precios_actuales || {};
         const entries = Object.entries(preciosActuales);
 
         if (entries.length === 0) {
@@ -102,7 +102,7 @@ async function cargarOfertasFirestore({ lat, lon, cultivo = '' } = {}) {
             facebook: tienda.facebook || null,
             lat: tienda.lat || null,
             lon: tienda.lon || null,
-            fecha: tienda.createdAt || null,
+            fecha: tienda.created_at || null,
             descuento: null,
           });
           continue;
@@ -118,7 +118,7 @@ async function cargarOfertasFirestore({ lat, lon, cultivo = '' } = {}) {
             facebook: tienda.facebook || null,
             lat: tienda.lat || null,
             lon: tienda.lon || null,
-            fecha: info?.fecha || tienda.ultimaActualizacion || null,
+            fecha: info?.fecha || tienda.ultima_actualizacion || null,
             descuento: null,
           });
         }

@@ -63,7 +63,7 @@ export default function CicloCultivo() {
       if (!user) { setLoading(false); return; }
       try {
         const uid = user?.id || user?.uid;
-        const { data: rows, error } = await supabase.from('parcelas').select('*').eq('userId', uid);
+        const { data: rows, error } = await supabase.from('parcelas').select('*').eq('user_id', uid);
         if (error) throw error;
         const data = rows || [];
         setParcelas(data);
@@ -85,7 +85,7 @@ export default function CicloCultivo() {
   // Cargar registros de monitoreo
   const cargarRegistros = async (pId) => {
     try {
-      const { data, error } = await supabase.from('registros_parcela').select('*').eq('parcelaId', pId).order('fecha', { ascending: false });
+      const { data, error } = await supabase.from('registros_parcela').select('*').eq('parcela_id', pId).order('fecha', { ascending: false });
       if (error) throw error;
       setRegistros((data || []).map(d => ({ ...d })));
     } catch { setRegistros([]); }

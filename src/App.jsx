@@ -5,13 +5,15 @@ import { AgentProvider } from './lib/AgentContext';
 import Layout from './components/Layout';
 import SelectorUbicacion from './components/SelectorUbicacion';
 import Registro from './pages/Registro';
-import Diagnostico from './pages/Diagnostico';
-import MiParcela from './pages/MiParcela';
-import CicloCultivo from './pages/CicloCultivo';
-import MercadoPage from './pages/MercadoPage';
-import Admin from './pages/Admin';
-import PrivacyPolicy from './pages/PrivacyPolicy';
 import { Clock, Mail, LogOut } from 'lucide-react';
+
+const Diagnostico = lazy(() => import('./pages/Diagnostico'));
+const MiParcela = lazy(() => import('./pages/MiParcela'));
+const CicloCultivo = lazy(() => import('./pages/CicloCultivo'));
+const MercadoPage = lazy(() => import('./pages/MercadoPage'));
+const Admin = lazy(() => import('./pages/Admin'));
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
+const Descargar = lazy(() => import('./pages/Descargar'));
 
 function PantallaPendiente() {
   const { user, logout } = useAuth();
@@ -113,13 +115,17 @@ function AppRoutes() {
     </div>
   );
 
-  // Public routes — always accessible
-  if (window.location.pathname === '/admin' || window.location.pathname === '/privacy') {
+  // Public routes — always accessible (sin layout)
+  const publicPaths = ['/admin', '/privacy', '/descargar'];
+  if (publicPaths.includes(location.pathname)) {
     return (
-      <Routes>
-        <Route path="/admin" element={<Admin />} />
-        <Route path="/privacy" element={<PrivacyPolicy />} />
-      </Routes>
+      <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="w-8 h-8 border-4 border-green-400 border-t-transparent rounded-full animate-spin" /></div>}>
+        <Routes>
+          <Route path="/admin" element={<Admin />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/descargar" element={<Descargar />} />
+        </Routes>
+      </Suspense>
     );
   }
 
@@ -132,10 +138,9 @@ function AppRoutes() {
   // Diagnóstico: SIEMPRE accesible (con o sin login)
   // Parcela y Ciclo: requieren login + aprobación
   return (
-    <Routes>
-      <Route path="/admin" element={<Admin />} />
-      <Route path="/privacy" element={<PrivacyPolicy />} />
-      <Route path="/registro" element={<Registro />} />
+    <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="w-8 h-8 border-4 border-green-400 border-t-transparent rounded-full animate-spin" /></div>}>
+      <Routes>
+        <Route path="/registro" element={<Registro />} />
 
       <Route path="*" element={
         <Layout>
@@ -143,14 +148,14 @@ function AppRoutes() {
             {/* Diagnóstico — siempre accesible */}
             <Route path="/" element={<Diagnostico onPlagaDetectada={setPlagaDetectada} />} />
 
-            {/* Parcela — requiere login */}
+            {/* Parcela — requiere login + aprobación */}
             <Route path="/parcela" element={
-              user ? <MiParcela /> : <Navigate to="/registro" />
+              user && isAprobado ? <MiParcela /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />
 
-            {/* Ciclo — requiere login */}
+            {/* Ciclo — requiere login + aprobación */}
             <Route path="/ciclo" element={
-              user ? <CicloCultivo /> : <Navigate to="/registro" />
+              user && isAprobado ? <CicloCultivo /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />
 
             {/* Mercado — ofertas + agente + mi tienda */}
@@ -162,11 +167,26 @@ function AppRoutes() {
           </Routes>
         </Layout>
       } />
-    </Routes>
+      </Routes>
+    </Suspense>
   );
 }
 
 export default function App() {
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && hash.includes('access_token')) {
+      const params = new URLSearchParams(hash.substring(1));
+      const type = params.get('type');
+      window.history.replaceState(null, '', window.location.pathname);
+      if (type === 'recovery') {
+        window.location.replace('/registro?mode=reset');
+      } else {
+        window.location.replace('/');
+      }
+    }
+  }, []);
+
   return (
     <AuthProvider>
       <AgentProvider>

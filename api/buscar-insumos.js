@@ -215,6 +215,27 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).end();
 
   const url = new URL(req.url, 'http://localhost');
+
+  // ── MercadoLibre proxy (cuando se llama vía /api/ml-proxy) ──
+  const mlQ = url.searchParams.get('q');
+  const isMLProxy = url.searchParams.get('ml') === '1' || req.url.includes('/api/ml-proxy');
+  if (isMLProxy && mlQ) {
+    try {
+      const mlUrl = `https://api.mercadolibre.com/sites/MLU/search?q=${encodeURIComponent(mlQ)}&limit=${url.searchParams.get('limit') || 10}&sort=${url.searchParams.get('sort') || 'relevance'}`;
+      const mlRes = await fetch(mlUrl, {
+        headers: { 'Accept': 'application/json', 'User-Agent': 'Agrilux/1.0' },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!mlRes.ok) return res.status(mlRes.status).json({ error: `ML ${mlRes.status}` });
+      const mlData = await mlRes.json();
+      res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate');
+      return res.status(200).json(mlData);
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  // ── Búsqueda normal de insumos ──
   const lat = parseFloat(url.searchParams.get('lat')) || -12.05;
   const lon = parseFloat(url.searchParams.get('lon')) || -77.04;
   const producto = url.searchParams.get('producto') || '';

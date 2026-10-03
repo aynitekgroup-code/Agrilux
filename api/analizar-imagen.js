@@ -10,17 +10,13 @@ export default async function handler(req, res) {
   const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
   const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
-  console.log('API Keys:', {
-    openrouter: OPENROUTER_API_KEY ? 'OK' : 'MISSING',
-    deepseek: DEEPSEEK_API_KEY ? 'OK' : 'MISSING',
-    github: GITHUB_TOKEN ? 'OK' : 'MISSING',
-  });
-
   const { images, prompt, systemPrompt } = req.body;
   if (!prompt) return res.status(400).json({ error: 'Falta el campo prompt' });
+  if (prompt.length > 4000) return res.status(400).json({ error: 'Prompt demasiado largo' });
 
   const tieneImagenes = Array.isArray(images) && images.length > 0;
-  console.log('Request:', { tieneImagenes, imageCount: images?.length || 0, promptLen: prompt?.length });
+  if (images && images.length > 3) return res.status(400).json({ error: 'Máximo 3 imágenes' });
+  if (images && JSON.stringify(images).length > 2000000) return res.status(413).json({ error: 'Imágenes demasiado grandes' });
 
   const systemMsg = systemPrompt ? [{ role: 'system', content: systemPrompt }] : [];
 

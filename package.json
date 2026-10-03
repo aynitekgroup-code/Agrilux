@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "clean-api": "cmd /c cleanup-api.bat",
     "generate-android-icons": "node scripts/generate-android-icons.js",
-    "deploy": "npm run build && git add -A && git commit -m \"deploy\" && git push"
+    "deploy": "npm run build && git add -A && git commit -m \"deploy: $(date +'%Y-%m-%d %H:%M')\" && git push"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",

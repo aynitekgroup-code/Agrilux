@@ -41,6 +41,7 @@ export default function Registro() {
   const [email, setEmail]         = useState('');
   const [ubicacion, setUbicacion] = useState('');
   const [password, setPassword]   = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [showPass, setShowPass]   = useState(false);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState('');
@@ -49,14 +50,24 @@ export default function Registro() {
   const [resetSent, setResetSent] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState('');
+  const [resetMode, setResetMode] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
 
   const submittingRef = useRef(false);
 
   useEffect(() => {
+    if (searchParams.get('mode') === 'reset') {
+      setResetMode(true);
+      setModo('login');
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     if (!user?.uid) return;
+    if (resetMode && !resetSuccess) return;
     const destino = redirectTab ? `${redirectTo}?tab=${redirectTab}` : redirectTo;
     navigate(destino, { replace: true });
-  }, [user?.uid, navigate, redirectTo, redirectTab]);
+  }, [user?.uid, navigate, redirectTo, redirectTab, resetMode, resetSuccess]);
 
   const cambiarModo = (m) => {
     setModo(m); setError('');
@@ -72,7 +83,9 @@ export default function Registro() {
     setResetLoading(true);
     setResetError('');
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/`,
+      });
       if (error) throw error;
       setResetSent(true);
     } catch (e) {
@@ -83,6 +96,24 @@ export default function Registro() {
       );
     } finally {
       setResetLoading(false);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    if (newPassword.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setResetSuccess(true);
+    } catch (e) {
+      setError('Error al actualizar la contraseña. Intenta de nuevo.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -99,7 +130,7 @@ export default function Registro() {
         const lon = pos.coords.longitude;
         setCoords({ lat, lon });
         try {
-          const res = await fetch(`/api/geocode?lat=${lat}&lon=${lon}`);
+          const res = await fetch(`/api/mercadolibre?type=geocode&lat=${lat}&lon=${lon}`);
           if (!res.ok) throw new Error();
           const data = await res.json();
           const nombreCorto = [data.address?.district, data.address?.municipality, data.address?.city_district, data.address?.suburb, data.address?.neighbourhood, data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
@@ -160,7 +191,6 @@ export default function Registro() {
       style={{ background: 'linear-gradient(160deg, #f0faf4 0%, #e8f5ee 100%)' }}
     >
       <div className="w-full max-w-sm">
-
         {/* Logo */}
         <div className="text-center mb-10">
             <img    src="/icons/icon-192x192.png" alt="Agrilux" className="w-24 h-24 mx-auto mb-5 shadow-xl rounded-3xl object-cover"/>
@@ -168,177 +198,230 @@ export default function Registro() {
           <p className="text-gray-500 mt-2 text-sm">Agricultura Inteligente del Perú</p>
         </div>
 
-        {/* Tabs */}
-        <div className="flex bg-gray-100 rounded-2xl p-1 mb-6">
-          {[['login', 'Iniciar sesión'], ['registro', 'Crear cuenta']].map(([m, label]) => (
-            <button
-              key={m}
-              onClick={() => cambiarModo(m)}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                modo === m ? 'bg-white text-primary shadow-sm' : 'text-gray-500'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="bg-white rounded-3xl shadow-xl p-6 space-y-4">
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3">
-              <p className="text-red-600 text-sm">{error}</p>
-            </div>
-          )}
-
-          {/* ── REGISTRO ── */}
-          {modo === 'registro' && (
-            <>
-              {/* Nombre */}
-              <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1.5">Nombre completo</label>
-                <div className="relative">
-                  <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
-                  <input
-                    value={nombre}
-                    onChange={e => setNombre(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                    placeholder="Ej: Juan Pérez García"
-                    className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
-                    autoComplete="name"
-                  />
-                </div>
+        {/* ── RESET PASSWORD FORM ── */}
+        {resetMode && (
+          <div className="bg-white rounded-3xl shadow-xl p-6 space-y-4">
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+                <p className="text-red-600 text-sm">{error}</p>
               </div>
+            )}
 
-              {/* WhatsApp */}
-              <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1.5">WhatsApp *</label>
-                <div className="relative">
-                  <input
-                    value={whatsapp}
-                    onChange={e => setWhatsapp(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                    placeholder="Ej: 987654321"
-                    className="w-full border-2 border-gray-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
-                    autoComplete="tel"
-                    inputMode="tel"
-                  />
+            {resetSuccess ? (
+              <div className="text-center py-4">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-3xl">✓</span>
                 </div>
+                <p className="text-green-700 font-semibold mb-2">¡Contraseña actualizada!</p>
+                <p className="text-gray-500 text-sm mb-4">Ya puedes iniciar sesión con tu nueva contraseña.</p>
+                <button
+                  onClick={() => { setResetMode(false); setResetSuccess(false); }}
+                  className="w-full bg-primary text-white font-bold py-3 rounded-2xl text-sm"
+                >
+                  Ir a iniciar sesión →
+                </button>
               </div>
-
-              {/* Ubicación */}
-              <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1.5">Ubicación *</label>
-                <div className="relative">
-                  <MapPin size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
-                  <input
-                    value={ubicacion}
-                    onChange={e => setUbicacion(e.target.value)}
-                    placeholder="Ej: Cutervo, Cajamarca"
-                    className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
-                  />
+            ) : (
+              <>
+                <p className="text-sm text-gray-600 text-center font-semibold">Ingresa tu nueva contraseña</p>
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">Nueva contraseña</label>
+                  <div className="relative">
+                    <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
+                    <input
+                      type={showPass ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)}
+                      placeholder="Mínimo 6 caracteres"
+                      className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-12 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPass(!showPass)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
                 <button
-                  type="button"
-                  onClick={detectarGPS}
-                  disabled={detectandoGPS}
-                  className="mt-2 w-full flex items-center justify-center gap-2 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 py-2.5 rounded-xl transition-colors"
+                  onClick={handleUpdatePassword}
+                  disabled={loading}
+                  className="w-full bg-primary text-white font-bold py-4 rounded-2xl text-base hover:bg-primary-dark transition-colors disabled:opacity-50 shadow-lg"
                 >
-                  {detectandoGPS ? (
-                    <><Loader2 size={14} className="animate-spin" /> Detectando ubicación...</>
-                  ) : (
-                    <><Navigation size={14} /> Usar GPS de mi teléfono</>
-                  )}
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 size={20} className="animate-spin" /> Guardando...
+                    </span>
+                  ) : 'Guardar nueva contraseña →'}
                 </button>
-                <p className="text-[10px] text-gray-400 mt-1 text-center">Tu ubicación se usa para recomendaciones climáticas precisas</p>
-              </div>
-            </>
-          )}
-
-          {/* ── CORREO (siempre visible) ── */}
-          <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-1.5">Correo electrónico</label>
-            <div className="relative">
-              <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                placeholder="tucorreo@gmail.com"
-                className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
-                autoComplete="email"
-                inputMode="email"
-              />
-            </div>
+              </>
+            )}
           </div>
+        )}
 
-          {/* ── CONTRASEÑA (siempre visible) ── */}
-          <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-1.5">
-              {modo === 'login' ? 'Contraseña' : 'Crear contraseña'}
-            </label>
-            <div className="relative">
-              <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
-              <input
-                type={showPass ? 'text' : 'password'}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                placeholder={modo === 'login' ? 'Tu contraseña' : 'Mínimo 6 caracteres'}
-                className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-12 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
-                autoComplete={modo === 'login' ? 'current-password' : 'new-password'}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPass(!showPass)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
+        {!resetMode && (
+          <>
+            {/* Tabs */}
+            <div className="flex bg-gray-100 rounded-2xl p-1 mb-6">
+              {[['login', 'Iniciar sesión'], ['registro', 'Crear cuenta']].map(([m, label]) => (
+                <button
+                  key={m}
+                  onClick={() => cambiarModo(m)}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                    modo === m ? 'bg-white text-primary shadow-sm' : 'text-gray-500'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-          </div>
 
-          {/* ── OLVIDÉ MI CONTRASEÑA ── */}
-          {modo === 'login' && (
-            <div className="text-right -mt-1">
-              {resetSent ? (
-                <p className="text-xs text-green-600 font-semibold">
-                  ✓ Correo enviado. Revisa tu bandeja de entrada.
-                </p>
-              ) : (
+            <div className="bg-white rounded-3xl shadow-xl p-6 space-y-4">
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+                  <p className="text-red-600 text-sm">{error}</p>
+                </div>
+              )}
+
+              {/* ── REGISTRO ── */}
+              {modo === 'registro' && (
                 <>
-                  <button
-                    type="button"
-                    onClick={handleResetPassword}
-                    disabled={resetLoading}
-                    className="text-xs text-primary font-semibold hover:underline disabled:opacity-50"
-                  >
-                    {resetLoading ? 'Enviando...' : '¿Olvidaste tu contraseña?'}
-                  </button>
-                  {resetError && (
-                    <p className="text-xs text-red-500 mt-1">{resetError}</p>
-                  )}
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1.5">Nombre completo</label>
+                    <div className="relative">
+                      <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
+                      <input
+                        value={nombre}
+                        onChange={e => setNombre(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                        placeholder="Ej: Juan Pérez García"
+                        className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                        autoComplete="name"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1.5">WhatsApp *</label>
+                    <div className="relative">
+                      <input
+                        value={whatsapp}
+                        onChange={e => setWhatsapp(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                        placeholder="Ej: 987654321"
+                        className="w-full border-2 border-gray-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                        autoComplete="tel"
+                        inputMode="tel"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1.5">Ubicación *</label>
+                    <div className="relative">
+                      <MapPin size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
+                      <input
+                        value={ubicacion}
+                        onChange={e => setUbicacion(e.target.value)}
+                        placeholder="Ej: Cutervo, Cajamarca"
+                        className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={detectarGPS}
+                      disabled={detectandoGPS}
+                      className="mt-2 w-full flex items-center justify-center gap-2 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 py-2.5 rounded-xl transition-colors"
+                    >
+                      {detectandoGPS ? (
+                        <><Loader2 size={14} className="animate-spin" /> Detectando ubicación...</>
+                      ) : (
+                        <><Navigation size={14} /> Usar GPS de mi teléfono</>
+                      )}
+                    </button>
+                    <p className="text-[10px] text-gray-400 mt-1 text-center">Tu ubicación se usa para recomendaciones climáticas precisas</p>
+                  </div>
                 </>
               )}
+
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1.5">Correo electrónico</label>
+                <div className="relative">
+                  <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                    placeholder="tucorreo@gmail.com"
+                    className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                    autoComplete="email"
+                    inputMode="email"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1.5">
+                  {modo === 'login' ? 'Contraseña' : 'Crear contraseña'}
+                </label>
+                <div className="relative">
+                  <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
+                  <input
+                    type={showPass ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                    placeholder={modo === 'login' ? 'Tu contraseña' : 'Mínimo 6 caracteres'}
+                    className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-12 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                    autoComplete={modo === 'login' ? 'current-password' : 'new-password'}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPass(!showPass)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              {modo === 'login' && (
+                <div className="text-right -mt-1">
+                  {resetSent ? (
+                    <p className="text-xs text-green-600 font-semibold">✓ Correo enviado. Revisa tu bandeja de entrada.</p>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleResetPassword}
+                        disabled={resetLoading}
+                        className="text-xs text-primary font-semibold hover:underline disabled:opacity-50"
+                      >
+                        {resetLoading ? 'Enviando...' : '¿Olvidaste tu contraseña?'}
+                      </button>
+                      {resetError && (
+                        <p className="text-xs text-red-500 mt-1">{resetError}</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={handleSubmit}
+                disabled={loading}
+                className="w-full bg-primary text-white font-bold py-4 rounded-2xl text-base hover:bg-primary-dark transition-colors disabled:opacity-50 shadow-lg mt-2"
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 size={20} className="animate-spin" /> Procesando...
+                  </span>
+                ) : modo === 'login' ? 'Iniciar sesión →' : 'Crear cuenta →'}
+              </button>
             </div>
-          )}
-
-          {/* Botón */}
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="w-full bg-primary text-white font-bold py-4 rounded-2xl text-base hover:bg-primary-dark transition-colors disabled:opacity-50 shadow-lg mt-2"
-          >
-            {loading
-              ? <span className="flex items-center justify-center gap-2">
-                  <Loader2 size={20} className="animate-spin" /> Procesando...
-                </span>
-              : modo === 'login' ? 'Iniciar sesión →' : 'Crear cuenta →'
-            }
-          </button>
-
-        </div>
 
         {/* Pie */}
         <div className="mt-6 flex items-center justify-between">
