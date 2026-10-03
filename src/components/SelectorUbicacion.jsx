@@ -1,6 +1,32 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader2, MapPin, Mic, Navigation, Check, X, Map } from 'lucide-react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { useAuth } from '../lib/AuthContext';
+
+function nombreAproximado(data) {
+  const address = data.address || {};
+  const nombres = [
+    address.city_district,
+    address.municipality,
+    address.city,
+    address.town,
+    address.village,
+    address.district,
+    address.province,
+    address.state_district,
+    address.county,
+    address.region,
+    address.state,
+  ].filter(Boolean);
+
+  if (nombres.length) return [...new Set(nombres)].slice(0, 2).join(', ');
+
+  const detalle = (data.name || data.display_name || '').split(',')
+    .map(parte => parte.trim())
+    .filter(parte => parte && !/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(parte));
+  return detalle.slice(1, 3).join(', ') || detalle[0] || 'Lugar aproximado no identificado';
+}
 
 export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) {
   const { user, updateUbicacion } = useAuth();
@@ -38,8 +64,6 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
 
   useEffect(() => {
     if (modo === 'mapa' && mapRef.current && !mapInstanceRef.current) {
-      const L = window.L;
-      if (!L) return;
       const lat = -10.0;
       const lon = -76.5;
       const map = L.map(mapRef.current, { zoomControl: false }).setView([lat, lon], 6);
@@ -56,14 +80,12 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
           const res = await fetch(`/api/mercadolibre?type=geocode&lat=${lat}&lon=${lng}`);
           if (res.ok) {
             const data = await res.json();
-            const nombre = [data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
-              .filter(Boolean).slice(0, 2).join(', ') || data.name?.split(',')[0] || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-            setUbicacion(nombre);
+            setUbicacion(nombreAproximado(data));
           } else {
-            setUbicacion(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+            setUbicacion('Lugar aproximado no identificado');
           }
         } catch {
-          setUbicacion(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+          setUbicacion('Lugar aproximado no identificado');
         }
         setModo('confirmar');
       });
@@ -76,6 +98,28 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
   const detectarGPS = async () => {
     setDetectando(true);
     setError('');
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        setCoordsSeleccionadas({ lat, lon });
+        try {
+          const res = await fetch(`/api/geocode?lat=${lat}&lon=${lon}`);
+          if (!res.ok) throw new Error();
+          const data = await res.json();
+          setUbicacion(nombreAproximado(data));
+        } catch {
+          setUbicacion('Lugar aproximado no identificado');
+        }
+        setDetectando(false);
+        setModo('confirmar');
+      },
+      () => {
+        setError('No se pudo obtener tu ubicación. Activa el GPS e intenta de nuevo, o usa otra opción.');
+        setDetectando(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
     try {
       let lat, lon;
       // Intentar Capacitor Geolocation primero (APK nativa)
@@ -152,7 +196,7 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
       if (user) {
         await updateUbicacion(ubicacion.trim(), coordsSeleccionadas);
       }
-      onGuardar?.(ubicacion.trim());
+      onGuardar?.(ubicacion.trim(), coordsSeleccionadas);
       if (!esPrimeraVez) onClose?.();
     } catch {
       setError('Error al guardar. Intenta de nuevo.');
@@ -253,9 +297,9 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
         )}
 
         {modo === 'mapa' && (
-          <div className="w-full max-w-sm">
+          <div className="w-full max-w-2xl mx-auto">
             <p className="text-sm text-gray-500 mb-2 text-center">Toca en el mapa para seleccionar tu ubicación</p>
-            <div ref={mapRef} className="w-full h-64 rounded-2xl border-2 border-gray-200 overflow-hidden" />
+            <div ref={mapRef} className="w-full h-[26rem] rounded-2xl border-2 border-gray-200 overflow-hidden" />
             <button onClick={() => setModo(null)} className="w-full mt-2 py-2 text-gray-500 text-sm font-medium hover:text-gray-700">
               ← Volver a opciones
             </button>
@@ -279,13 +323,18 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
           <div className="w-full max-w-sm text-center">
             <div className="bg-green-50 rounded-2xl p-5 mb-4">
               <Check size={28} className="text-green-500 mx-auto mb-2" />
-              <p className="text-green-700 font-bold text-lg">{ubicacion}</p>
-              {coordsSeleccionadas && (
-                <p className="text-green-600 text-xs mt-1 font-mono">
-                  📍 {coordsSeleccionadas.lat.toFixed(6)}, {coordsSeleccionadas.lon.toFixed(6)}
-                </p>
-              )}
-              <p className="text-green-600 text-sm mt-2">¿Es correcta tu ubicación?</p>
+              <div className="text-green-700 font-bold text-lg leading-tight">
+                <div>{ubicacion}</div>
+                {coordsSeleccionadas && (
+                  <div className="mt-2 flex items-center justify-center gap-2 text-base font-medium text-green-700">
+                    <span className="text-[16px]">📍</span>
+                    <span className="font-mono text-sm sm:text-base">
+                      {coordsSeleccionadas.lat.toFixed(6)}, {coordsSeleccionadas.lon.toFixed(6)}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <p className="text-green-600 text-sm mt-3">¿Es correcta tu ubicación?</p>
             </div>
           </div>
         )}

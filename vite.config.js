@@ -110,14 +110,13 @@ export default defineConfig({
     hmr: {
       protocol: 'ws',
       host: 'localhost',
-      port: 5173,
     },
     proxy: {
       '/api/supabase-proxy': {
         target: process.env.VITE_SUPABASE_URL || 'https://rtznwwggggjcjfjzqsax.supabase.co',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/supabase-proxy/, ''),
-        secure: true,
+        secure: false,
         ws: true,
       },
     },

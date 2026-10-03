@@ -133,7 +133,7 @@ export default function Registro() {
           const res = await fetch(`/api/mercadolibre?type=geocode&lat=${lat}&lon=${lon}`);
           if (!res.ok) throw new Error();
           const data = await res.json();
-          const nombreCorto = [data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
+          const nombreCorto = [data.address?.district, data.address?.municipality, data.address?.city_district, data.address?.suburb, data.address?.neighbourhood, data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
             .filter(Boolean).slice(0, 2).join(', ') || data.name.split(',')[0];
           setUbicacion(nombreCorto);
         } catch {
@@ -193,11 +193,9 @@ export default function Registro() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-10">
-          <div className="flex justify-center mb-4">
-            <img src="/icons/icon-192x192.png" alt="Agrilux" className="w-20 h-20 shadow-xl rounded-3xl object-cover" />
-          </div>
-          <h1 className="text-[2.2rem] font-black tracking-[0.14em] text-primary leading-none">AGRILUX</h1>
-          <p className="text-base mt-2 text-[#3f5d52] font-normal">Agricultura Inteligente del Perú</p>
+            <img    src="/icons/icon-192x192.png" alt="Agrilux" className="w-24 h-24 mx-auto mb-5 shadow-xl rounded-3xl object-cover"/>
+          <h1 className="text-4xl font-display font-bold text-primary">AGRILUX</h1>
+          <p className="text-gray-500 mt-2 text-sm">Agricultura Inteligente del Perú</p>
         </div>
 
         {/* ── RESET PASSWORD FORM ── */}
@@ -425,33 +423,42 @@ export default function Registro() {
               </button>
             </div>
 
-            <div className="mt-6 flex flex-col items-center justify-center text-center space-y-3">
-              <p className="text-sm text-gray-400 font-normal">
-                ¿Dificultad o dudas para ingresar? Contacta con soporte:
-              </p>
-              <div className="flex items-center justify-center gap-2 flex-wrap">
-                <a
-                  href="https://wa.me/51920789045"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-2 bg-white border border-[#b2d8d0] text-[#0C5435] font-bold text-sm px-3.5 py-1.5 rounded-full shadow-sm hover:bg-gray-50 transition-all"
-                >
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#6ed4b8]"></span>
-                  <span>Contactanos</span>
-                </a>
-              </div >
-                <div className="flex items-center space-x-1.5 text-xs text-slate-400">
-                  <span>Plataforma Agrícola Oficial</span>    
-                <button
-                onClick={() => navigate('/admin')}
-                className="text-xs text-gray-300 hover:text-gray-500 transition-colors"
-                >
-                · · ·
-                </button>
-                </div>
-            </div>
-          </>
-        )}
+        {/* Pie */}
+        <div className="mt-6 flex items-center justify-between">
+          <p className="text-xs text-gray-400">
+            ¿Ayuda?{' '}
+            <a
+              href="https://wa.me/51920277794"
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary font-semibold"
+            >
+              920 277 794
+            </a>
+            <a
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary font-semibold"
+            >
+              -
+            </a>
+            <a
+              href="https://wa.me/51935211605"
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary font-semibold"
+            >
+              935 211 605
+            </a>
+          </p>
+          <button
+            onClick={() => navigate('/admin')}
+            className="text-xs text-gray-300 hover:text-gray-500 transition-colors"
+          >
+            · · ·
+          </button>
+        </div>
+
       </div>
     </div>
   );

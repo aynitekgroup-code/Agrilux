@@ -5,6 +5,8 @@ dist
 !.env.example
 android-build/
 .vercel/
+<<<<<<< Updated upstream
+=======
 .vercel
-
-
+.idea
+>>>>>>> Stashed changes
