@@ -375,6 +375,8 @@ export default function Registro() {
             · · ·
           </button>
         </div>
+          </>
+        )}
 
       </div>
     </div>
