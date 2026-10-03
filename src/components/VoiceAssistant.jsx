@@ -32,12 +32,22 @@ export default function VoiceAssistant({
   useEffect(() => {
     if (coords?.lat && coords?.lon) {
       setCoordenadas({ lat: coords.lat, lon: coords.lon });
-    } else if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => setCoordenadas({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-        () => {},
-        { timeout: 5000 }
-      );
+    } else {
+      (async () => {
+        try {
+          if (window.Capacitor?.isNativePlatform?.()) {
+            const { Geolocation } = await import('@capacitor/geolocation');
+            const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 5000 });
+            setCoordenadas({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+          } else if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => setCoordenadas({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+              () => {},
+              { timeout: 5000 }
+            );
+          }
+        } catch {}
+      })();
     }
   }, [coords?.lat, coords?.lon]);
 

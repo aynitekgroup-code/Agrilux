@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrilux — Presentación</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #000; overflow: hidden; }
+  body {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: #fff;
+    -webkit-font-smoothing: antialiased;
+  }
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center; padding: 6vh 8vw;
+    opacity: 0; visibility: hidden;
+    transform: scale(0.98);
+    transition: opacity .7s ease, transform .7s ease, visibility .7s;
+  }
+  .slide.active { opacity: 1; visibility: visible; transform: scale(1); }
+  h1 { font-size: clamp(2.5rem, 7vw, 5.5rem); font-weight: 700; letter-spacing: -0.03em; line-height: 1.05; }
+  h2 { font-size: clamp(1.8rem, 4.5vw, 3.5rem); font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+  p.sub { font-size: clamp(1.1rem, 2.2vw, 1.6rem); color: #a1a1aa; margin-top: 1.4rem; font-weight: 400; max-width: 800px; line-height: 1.5; }
+  .green { color: #7cb342; }
+  .dim { color: #71717a; }
+  .kicker {
+    font-size: clamp(.8rem, 1.4vw, 1rem); letter-spacing: .35em;
+    text-transform: uppercase; color: #7cb342; margin-bottom: 2rem; font-weight: 600;
+  }
+  .logo-card {
+    background: #eef2ec; border-radius: 32px; padding: clamp(18px, 3vw, 40px);
+    box-shadow: 0 30px 80px rgba(124,179,66,.18);
+    margin-bottom: 3rem;
+  }
+  .logo-card img { display: block; width: clamp(180px, 26vw, 340px); height: auto; border-radius: 18px; }
+  .feature {
+    display: flex; flex-direction: column; align-items: center; gap: 1.2rem;
+  }
+  .feature .icon { font-size: clamp(3rem, 8vw, 6rem); line-height: 1; }
+  .feature .num {
+    font-size: .9rem; letter-spacing: .3em; color: #52525b; text-transform: uppercase;
+    position: absolute; top: 8vh;
+  }
+  .quote { font-style: italic; font-weight: 300; }
+  .final-logo { width: clamp(140px, 18vw, 220px); border-radius: 20px; margin-bottom: 2.5rem; box-shadow: 0 20px 60px rgba(124,179,66,.25); }
+  .url { margin-top: 2.5rem; font-size: clamp(.95rem, 1.8vw, 1.3rem); color: #7cb342; letter-spacing: .05em; }
+  #progress {
+    position: fixed; bottom: 0; left: 0; height: 3px;
+    background: linear-gradient(90deg, #4a7c2f, #9ccc65);
+    transition: width .5s ease; z-index: 10;
+  }
+  #hint {
+    position: fixed; bottom: 18px; right: 24px; z-index: 10;
+    font-size: 12px; color: #3f3f46; letter-spacing: .1em;
+  }
+  #counter {
+    position: fixed; bottom: 18px; left: 24px; z-index: 10;
+    font-size: 12px; color: #3f3f46; letter-spacing: .15em;
+  }
+</style>
+</head>
+<body>
+
+<section class="slide active">
+  <div class="logo-card">
+    <img src="public/icons/Agrilux.logo.bordes.png" alt="Agrilux">
+  </div>
+  <p class="sub">La tecnología que tu campo merece.</p>
+</section>
+
+<section class="slide">
+  <div class="kicker">El problema</div>
+  <h1>Hoy, un agricultor<br>pierde su cosecha<br><span class="dim">porque llegó tarde.</span></h1>
+  <p class="sub">El campo decide con intuición.<br>Mientras el clima decide por él.</p>
+</section>
+
+<section class="slide">
+  <div class="kicker">La solución</div>
+  <h1>Presentamos<br><span class="green">Agrilux.</span></h1>
+  <p class="sub">Una sola app que convierte tu teléfono<br>en el agrónomo más potente del valle.</p>
+</section>
+
+<section class="slide">
+  <div class="feature">
+    <span class="num">01 — Diagnóstico</span>
+    <div class="icon">🌿</div>
+    <h2> Foto + IA =<br>diagnóstico en segundos.</h2>
+    <p class="sub">Plaga, enfermedad, deficiencia.<br>Sin laboratorio. Sin esperar.</p>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="feature">
+    <span class="num">02 — Satélite y alertas</span>
+    <div class="icon">🛰️</div>
+    <h2>Ve lo que<br>el ojo no ve.</h2>
+    <p class="sub">Índices NDVI, MSAVI2 y NDRE de tu parcela en tiempo real.<br>Te avisa <span class="green">antes</span> de que el problema exista.</p>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="feature">
+    <span class="num">03 — Voz</span>
+    <div class="icon">🔊</div>
+    <h2>Habla. No escribas.</h2>
+    <p class="sub">Pregúntale a tu asistente en el campo,<br>con las manos ocupadas. Él responde hablando.</p>
+  </div>
+</section>
+
+<section class="slide">
+  <h2 class="quote">“Un campo sin datos es como<br>un avión sin instrumentos.”</h2>
+  <p class="sub dim">Y todo sin Play Store: directo a tu teléfono.</p>
+</section>
+
+<section class="slide">
+  <img class="final-logo" src="public/icons/Agrilux.logo.bordes.png" alt="Agrilux">
+  <h1>El campo,<br><span class="green">ahora inteligente.</span></h1>
+  <div class="url">www.vitalfarmbright.store/descargar</div>
+</section>
+
+<div id="progress"></div>
+<div id="counter">01 / 08</div>
+<div id="hint">← → &nbsp;o&nbsp; clic</div>
+
+<script>
+  const slides = [...document.querySelectorAll('.slide')];
+  let i = 0;
+  const progress = document.getElementById('progress');
+  const counter = document.getElementById('counter');
+
+  function go(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, k) => s.classList.toggle('active', k === i));
+    progress.style.width = ((i + 1) / slides.length * 100) + '%';
+    counter.textContent = String(i + 1).padStart(2, '0') + ' / ' + String(slides.length).padStart(2, '0');
+  }
+
+  document.addEventListener('keydown', e => {
+    if (['ArrowRight', ' ', 'PageDown', 'Enter'].includes(e.key)) go(i + 1);
+    if (['ArrowLeft', 'PageUp'].includes(e.key)) go(i - 1);
+    if (e.key === 'Home') go(0);
+    if (e.key === 'End') go(slides.length - 1);
+  });
+  document.addEventListener('click', e => {
+    if (e.clientX > window.innerWidth / 3) go(i + 1); else go(i - 1);
+  });
+  let tx = null;
+  document.addEventListener('touchstart', e => tx = e.touches[0].clientX);
+  document.addEventListener('touchend', e => {
+    if (tx === null) return;
+    const dx = e.changedTouches[0].clientX - tx;
+    if (Math.abs(dx) > 50) dx < 0 ? go(i + 1) : go(i - 1);
+    tx = null;
+  });
+  go(0);
+</script>
+</body>
+</html>
