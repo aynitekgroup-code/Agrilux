@@ -15,6 +15,7 @@
     "@capacitor/android": "^8.5.0",
     "@capacitor/cli": "^8.4.2",
     "@capacitor/core": "^8.4.2",
+    "@capacitor/geolocation": "^8.2.3",
     "@supabase/supabase-js": "^2.112.4",
     "dompurify": "^3.4.11",
     "dotenv": "^17.4.2",
