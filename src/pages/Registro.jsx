@@ -432,7 +432,7 @@ export default function Registro() {
                 ¿Dificultad o dudas para ingresar? Contacta con soporte:
               </p>
               <a
-                href="https://wa.me/51935211605"
+                href="https://wa.me/51920789045"
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 bg-white border border-[#b2d8d0] text-[#0C5435] font-bold text-sm px-3.5 py-1.5 rounded-full shadow-sm hover:bg-gray-50 transition-all"
