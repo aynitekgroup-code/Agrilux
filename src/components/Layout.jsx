@@ -161,7 +161,7 @@ export default function Layout({ children }) {
                 <span className="ml-auto text-[10px] font-black bg-[#1a6b3c] text-white px-1.5 py-0.5 rounded">SIN PLAY STORE</span>
               </button>
               <a
-                href="/public/icons/Manual_de_uso_Agrilux_mejorado.pdf"
+                href="/icons/Manual_de_uso_Agrilux_mejorado.pdf"
                 onClick={() => setMenuOpen(false)}
                 className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg">
                 <BookOpen size={18} />
