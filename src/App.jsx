@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { AgentProvider } from './lib/AgentContext';
 import Layout from './components/Layout';
@@ -59,6 +59,7 @@ function PantallaPendiente() {
 
 function AppRoutes() {
   const { user, loading, isAprobado } = useAuth();
+  const location = useLocation();
   const [plagaDetectada, setPlagaDetectada] = useState('');
   const [selectorMostrado, setSelectorMostrado] = useState(() => {
     try {

@@ -93,10 +93,17 @@ export default function Descargar() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-emerald-50">
       <header className="bg-white/80 backdrop-blur sticky top-0 z-10 border-b border-green-100">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-3 py-0.3 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2">
-            <span className="w-9 h-9 bg-[#1a6b3c] rounded-xl flex items-center justify-center text-white font-black text-lg">A</span>
-            <span className="font-black text-[#1a6b3c] text-lg tracking-tight">AGRILUX</span>
+            <img
+              src="/icons/Agrilux.logo.sinfondo.png"
+              onError={(event) => {
+                event.currentTarget.onerror = null;
+                event.currentTarget.src = '/icons/apple-touch-icon.png';
+              }}
+              alt="Logo Agrilux"
+              className="w-24 h-30 rounded-xl object-contain"
+            />
           </a>
           <a href="/" className="text-sm text-gray-500 hover:text-[#1a6b3c] font-medium">← Volver a la app</a>
         </div>
