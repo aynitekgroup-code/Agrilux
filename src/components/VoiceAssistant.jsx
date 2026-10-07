@@ -24,8 +24,10 @@ export default function VoiceAssistant({
   const [respuesta, setRespuesta]         = useState('');
   const [error, setError]                 = useState('');
   const [coordenadas, setCoordenadas]     = useState(null);
-  const [historial, setHistorial]         = useState([]);
-  const [started, setStarted]             = useState(false);
+  const [historial, setHistorial] = useState([]);
+  const [started, setStarted] = useState(false);
+  const [textoManual, setTextoManual] = useState('');
+  const soportaVoz = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
 
   const recognitionRef = useRef(null);
 
@@ -154,6 +156,25 @@ export default function VoiceAssistant({
     setEscuchando(false);
   }, []);
 
+  // Envío por texto (fallback para APK donde no hay SpeechRecognition en WebView)
+  const enviarTextoManual = useCallback(async () => {
+    const texto = textoManual.trim();
+    if (!texto || procesando) return;
+    setTextoManual('');
+    setStarted(true);
+    const nuevoHistorial = [...historial, { rol: 'usuario', texto }];
+    setHistorial(nuevoHistorial);
+    const resp = await enviarAI(texto, nuevoHistorial);
+    try {
+      await guardarConversacion({
+        userId: user?.id || user?.uid || null,
+        agente: agentType,
+        pregunta: texto,
+        respuesta: resp,
+      });
+    } catch {}
+  }, [textoManual, procesando, historial, enviarAI, user, agentType]);
+
   // Auto-start welcome on mount (fullPage or embedded mode)
   useEffect(() => {
     if ((fullPage || embedded) && !started) {
@@ -219,6 +240,29 @@ export default function VoiceAssistant({
              procesando ? '⏳ Consultando...' :
              'Toca el micrófono para preguntar sobre tu parcela'}
           </p>
+          {!soportaVoz && (
+            <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+              🎤 Voz no disponible en esta versión — escribe tu pregunta abajo 👇
+            </p>
+          )}
+        </div>
+
+        {/* Entrada por texto — funciona siempre (web + APK) */}
+        <div className="flex gap-2">
+          <input
+            value={textoManual}
+            onChange={(e) => setTextoManual(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') enviarTextoManual(); }}
+            placeholder="O escribe tu pregunta aquí..."
+            className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary"
+          />
+          <button
+            onClick={enviarTextoManual}
+            disabled={procesando || !textoManual.trim()}
+            className="bg-primary text-white font-bold px-4 rounded-xl text-sm disabled:opacity-40"
+          >
+            Enviar
+          </button>
         </div>
       </div>
     );
@@ -278,6 +322,29 @@ export default function VoiceAssistant({
            procesando ? '⏳ Consultando...' :
            'Toca el micrófono para hablar'}
         </p>
+        {!soportaVoz && (
+          <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+            🎤 Voz no disponible en esta versión — escribe abajo 👇
+          </p>
+        )}
+
+        {/* Entrada por texto — funciona siempre (web + APK) */}
+        <div className="flex gap-2 max-w-md w-full">
+          <input
+            value={textoManual}
+            onChange={(e) => setTextoManual(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') enviarTextoManual(); }}
+            placeholder="O escribe tu pregunta aquí..."
+            className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary"
+          />
+          <button
+            onClick={enviarTextoManual}
+            disabled={procesando || !textoManual.trim()}
+            className="bg-primary text-white font-bold px-5 rounded-xl text-sm disabled:opacity-40"
+          >
+            Enviar
+          </button>
+        </div>
       </div>
     );
   }
@@ -325,6 +392,24 @@ export default function VoiceAssistant({
           <p className="text-xs text-gray-700">{respuesta}</p>
         </div>
       )}
+
+      {/* Entrada por texto flotante — fallback APK sin SpeechRecognition */}
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-2 max-w-[280px] w-[280px] flex gap-1.5">
+        <input
+          value={textoManual}
+          onChange={(e) => setTextoManual(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') enviarTextoManual(); }}
+          placeholder={soportaVoz ? 'Pregunta por voz o texto...' : 'Escribe tu pregunta...'}
+          className="flex-1 min-w-0 text-xs px-2 py-1.5 focus:outline-none"
+        />
+        <button
+          onClick={enviarTextoManual}
+          disabled={procesando || !textoManual.trim()}
+          className="bg-primary text-white text-xs font-bold px-3 rounded-lg disabled:opacity-40"
+        >
+          ➤
+        </button>
+      </div>
     </div>
   );
 }
