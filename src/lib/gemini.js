@@ -67,7 +67,7 @@ export async function invokeGemini({
     return extraerJSON(text) || FALLBACK_DIAGNOSTICO;
   } catch (err) {
     console.error('Error en invokeGemini:', err);
-    if (response_json_schema) return FALLBACK_DIAGNOSTICO;
+    if (response_json_schema) return { ...FALLBACK_DIAGNOSTICO, error_red: true, detalle: err.message };
     throw err;
   }
 }

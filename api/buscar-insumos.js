@@ -211,7 +211,11 @@ function productosRelacionados(producto) {
 }
 
 export default async function handler(req, res) {
+  // CORS para APK Capacitor (origen capacitor:// / https://localhost) y web
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).end();
 
   const url = new URL(req.url, 'http://localhost');

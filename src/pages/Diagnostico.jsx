@@ -288,7 +288,12 @@ Responde SOLO con este JSON (sin markdown):
         !r.nombre_problema && !r.tiene_problema &&
         (!r.que_tiene || r.que_tiene.includes('No se pudo') || r.que_tiene.includes('correctamente'))
       );
-      if (todosFallaron) { setResultado({ error: true }); setAnalizando(false); return; }
+      if (todosFallaron) {
+        const sinConexion = intentos.every(r => r.error_red);
+        setResultado({ error: true, errorRed: sinConexion });
+        setAnalizando(false);
+        return;
+      }
 
       const analisis = obtenerConsenso(intentos);
       setResultado(analisis);
@@ -1327,7 +1332,11 @@ Responde breve (máx 4 oraciones) con recomendaciones prácticas ajustadas al cl
           <div className="bg-red-50 rounded-2xl p-4 text-center">
             <AlertTriangle size={32} className="mx-auto text-red-400 mb-2" />
             <p className="text-red-600 font-semibold text-sm">Error en el análisis</p>
-            <p className="text-red-400 text-xs mt-1">Intenta con una foto más clara o describe el problema con más detalle</p>
+            <p className="text-red-400 text-xs mt-1">
+              {resultado.errorRed
+                ? 'Sin conexión al servidor. Verifica tu internet y que la app esté actualizada.'
+                : 'Intenta con una foto más clara o describe el problema con más detalle'}
+            </p>
           </div>
         )}
 
