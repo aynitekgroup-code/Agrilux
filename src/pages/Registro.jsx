@@ -8,7 +8,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
-import { Loader2, Eye, EyeOff, User, Mail, Lock, MapPin, Navigation } from 'lucide-react';
+import { Loader2, Eye, EyeOff, User, Phone, Mail, Lock, MapPin, Navigation } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { supabase } from '../lib/supabase';
 
@@ -133,7 +133,7 @@ export default function Registro() {
           const res = await fetch(`/api/mercadolibre?type=geocode&lat=${lat}&lon=${lon}`);
           if (!res.ok) throw new Error();
           const data = await res.json();
-          const nombreCorto = [data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
+          const nombreCorto = [data.address?.district, data.address?.municipality, data.address?.city_district, data.address?.suburb, data.address?.neighbourhood, data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
             .filter(Boolean).slice(0, 2).join(', ') || data.name.split(',')[0];
           setUbicacion(nombreCorto);
         } catch {
@@ -291,7 +291,7 @@ export default function Registro() {
               {modo === 'registro' && (
                 <>
                   <div>
-                    <label className="text-xs font-semibold text-gray-600 block mb-1.5">Nombre completo</label>
+                    <label className="text-xs font-semibold text-gray-700 block mb-2">Nombre completo</label>
                     <div className="relative">
                       <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
                       <input
@@ -299,21 +299,22 @@ export default function Registro() {
                         onChange={e => setNombre(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && handleSubmit()}
                         placeholder="Ej: Juan Pérez García"
-                        className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                        className="w-full bg-[#e8f0fe] rounded-2xl pl-10 pr-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors"
                         autoComplete="name"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-gray-600 block mb-1.5">WhatsApp *</label>
+                    <label className="text-xs font-semibold text-gray-700 block mb-2">WhatsApp *</label>
                     <div className="relative">
+                      <Phone size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
                       <input
                         value={whatsapp}
                         onChange={e => setWhatsapp(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && handleSubmit()}
                         placeholder="Ej: 987654321"
-                        className="w-full border-2 border-gray-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                        className="w-full bg-[#e8f0fe] rounded-2xl pl-10 pr-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors"
                         autoComplete="tel"
                         inputMode="tel"
                       />
@@ -321,14 +322,14 @@ export default function Registro() {
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-gray-600 block mb-1.5">Ubicación *</label>
+                    <label className="text-xs font-semibold text-gray-700 block mb-2">Ubicación *</label>
                     <div className="relative">
                       <MapPin size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
                       <input
                         value={ubicacion}
                         onChange={e => setUbicacion(e.target.value)}
                         placeholder="Ej: Cutervo, Cajamarca"
-                        className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                        className="w-full bg-[#e8f0fe] rounded-2xl pl-10 pr-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors"
                       />
                     </div>
                     <button
@@ -349,7 +350,7 @@ export default function Registro() {
               )}
 
               <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1.5">Correo electrónico</label>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">Correo electrónico</label>
                 <div className="relative">
                   <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
                   <input
@@ -358,7 +359,7 @@ export default function Registro() {
                     onChange={e => setEmail(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleSubmit()}
                     placeholder="tucorreo@gmail.com"
-                    className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                    className="w-full bg-[#e8f0fe] rounded-2xl pl-10 pr-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors"
                     autoComplete="email"
                     inputMode="email"
                   />
@@ -366,7 +367,7 @@ export default function Registro() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1.5">
+                <label className="text-xs font-semibold text-gray-700 block mb-2">
                   {modo === 'login' ? 'Contraseña' : 'Crear contraseña'}
                 </label>
                 <div className="relative">
@@ -377,7 +378,7 @@ export default function Registro() {
                     onChange={e => setPassword(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleSubmit()}
                     placeholder={modo === 'login' ? 'Tu contraseña' : 'Mínimo 6 caracteres'}
-                    className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-12 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                    className="w-full bg-[#e8f0fe] rounded-2xl pl-10 pr-12 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors"
                     autoComplete={modo === 'login' ? 'current-password' : 'new-password'}
                   />
                   <button
@@ -425,30 +426,30 @@ export default function Registro() {
               </button>
             </div>
 
+        {/* Pie */}
             <div className="mt-6 flex flex-col items-center justify-center text-center space-y-3">
               <p className="text-sm text-gray-400 font-normal">
                 ¿Dificultad o dudas para ingresar? Contacta con soporte:
               </p>
-              <div className="flex items-center justify-center gap-2 flex-wrap">
-                <a
-                  href="https://wa.me/51920789045"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-2 bg-white border border-[#b2d8d0] text-[#0C5435] font-bold text-sm px-3.5 py-1.5 rounded-full shadow-sm hover:bg-gray-50 transition-all"
-                >
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#6ed4b8]"></span>
-                  <span>Contactanos</span>
-                </a>
-              </div >
-                <div className="flex items-center space-x-1.5 text-xs text-slate-400">
-                  <span>Plataforma Agrícola Oficial</span>    
+              <a
+                href="https://wa.me/51920789045"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 bg-white border border-[#b2d8d0] text-[#0C5435] font-bold text-sm px-3.5 py-1.5 rounded-full shadow-sm hover:bg-gray-50 transition-all"
+              >
+                <span className="w-2.5 h-2.5 rounded-full bg-[#6ed4b8]" />
+                <span>Contáctanos</span>
+              </a>
+              <div className="flex items-center space-x-1.5 text-xs text-slate-400">
+                <span>Plataforma Agrícola Oficial</span>
                 <button
-                onClick={() => navigate('/admin')}
-                className="text-xs text-gray-300 hover:text-gray-500 transition-colors"
+                  onClick={() => navigate('/admin')}
+                  aria-label="Administración"
+                  className="text-xs text-gray-300 hover:text-gray-500 transition-colors"
                 >
-                · · ·
+                  · · ·
                 </button>
-                </div>
+              </div>
             </div>
           </>
         )}

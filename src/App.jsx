@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { AgentProvider } from './lib/AgentContext';
@@ -59,13 +59,41 @@ function PantallaPendiente() {
 
 function AppRoutes() {
   const { user, loading, isAprobado } = useAuth();
-  const [plagaDetectada, setPlagaDetectada] = useState('');
   const location = useLocation();
+  const [plagaDetectada, setPlagaDetectada] = useState('');
+  const [selectorMostrado, setSelectorMostrado] = useState(() => {
+    try {
+      return localStorage.getItem('agrilux_selector_mostrado') === '1';
+    } catch {
+      return false;
+    }
+  });
 
-  let ubicacionGuardada = null;
+  let ubicacionGuardada = false;
   try {
-    ubicacionGuardada = user?.ubicacion || localStorage.getItem('agrilux_ubicacion');
-  } catch { /* ignore */ }
+    const ubicacionLocal = user?.ubicacion || localStorage.getItem('agrilux_ubicacion') || '';
+    ubicacionGuardada = Boolean(String(ubicacionLocal).trim());
+  } catch {
+    ubicacionGuardada = Boolean(String(user?.ubicacion || '').trim());
+  }
+
+  useEffect(() => {
+    if (ubicacionGuardada) {
+      try {
+        localStorage.setItem('agrilux_selector_mostrado', '1');
+      } catch {}
+      setSelectorMostrado(true);
+    }
+  }, [ubicacionGuardada]);
+
+  useEffect(() => {
+    if (user && !ubicacionGuardada && !selectorMostrado) {
+      try {
+        localStorage.setItem('agrilux_selector_mostrado', '1');
+      } catch {}
+      setSelectorMostrado(true);
+    }
+  }, [user, ubicacionGuardada, selectorMostrado]);
 
   if (loading) return (
     <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-green-50 to-green-200">
@@ -102,8 +130,8 @@ function AppRoutes() {
     );
   }
 
-  // Logged in, no location → selector (also checks localStorage as fallback)
-  if (user && !ubicacionGuardada) {
+  // Logged in, no location → selector (solo una vez por sesión/usuario hasta guardar ubicación)
+  if (user && !ubicacionGuardada && !selectorMostrado) {
     return <SelectorUbicacion esPrimeraVez={true} />;
   }
 

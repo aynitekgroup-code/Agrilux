@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, Leaf, Calendar, Store, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle, Download } from 'lucide-react';
+import { Camera, Leaf, Calendar, Store, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle, Download, BookOpen } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
 import SelectorUbicacion from './SelectorUbicacion';
@@ -94,10 +94,18 @@ export default function Layout({ children }) {
   return (
     <div className="flex flex-col min-h-screen max-w-[430px] mx-auto">
       <OnlineStatus />
-      <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-100 sticky top-0 z-40">
+      <div className="flex justify-between items-center px-4 py-0.3 bg-white border-b border-gray-100 sticky top-0 z-40">
         <div className="flex items-center gap-2 min-w-0">
           <div className="text-sm font-semibold text-gray-700 truncate">
-            {user?.nombre ? `Hola, ${user.nombre.split(' ')[0]}` : 'Agrilux'}
+            {user?.nombre ? (
+              `Hola, ${user.nombre.split(' ')[0]}`
+            ) : (
+              <img
+                src="/icons/Agrilux.logo.sinfondo.png"
+                alt="Logo Agrilux"
+                className="w-23 h-24 object-contain"
+              />
+            )}
           </div>
           {user?.ubicacion && (
             <button onClick={() => setMostrarUbicacion(true)}
@@ -126,11 +134,13 @@ export default function Layout({ children }) {
           </button>
           <button
             onClick={() => setMenuOpen(!menuOpen)}
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             {menuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
           {menuOpen && (
-            <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-100 z-50">
+            <div className="absolute top-full right-0 mt-2 w-56 max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain bg-white rounded-lg shadow-lg border border-gray-100 z-50">
               <button
                 onClick={() => { setMenuOpen(false); setMostrarUbicacion(true); }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg">
@@ -150,6 +160,13 @@ export default function Layout({ children }) {
                 Descargar app
                 <span className="ml-auto text-[10px] font-black bg-[#1a6b3c] text-white px-1.5 py-0.5 rounded">SIN PLAY STORE</span>
               </button>
+              <a
+                href="/icons/Manual_de_uso_Agrilux_mejorado.pdf"
+                onClick={() => setMenuOpen(false)}
+                className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg">
+                <BookOpen size={18} />
+                Manual usuario
+              </a>
               {user ? (
                 <>
                   <button

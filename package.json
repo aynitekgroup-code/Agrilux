@@ -9,8 +9,8 @@
     "preview": "vite preview",
     "clean-api": "cmd /c cleanup-api.bat",
     "generate-android-icons": "node scripts/generate-android-icons.js",
-    "deploy": "npm run build && git add -A && git commit -m \"deploy: $(date +'%Y-%m-%d %H:%M')\" && git push"
-  },
+    "deploy": "npm run build && git add -A && git commit -m \"deploy: $(date +'%Y-%m-%d %H:%M')\" && git push",
+  "sync:win": "npm run build && mkdir -p /mnt/c/Users/User/Pictures/LUMAJIRA_SOC/clon_agrilux_android/Agrilux/android/app/src/main/assets/public && cp -r dist/* /mnt/c/Users/User/Pictures/LUMAJIRA_SOC/clon_agrilux_android/Agrilux/android/app/src/main/assets/public/"  },
   "dependencies": {
     "@capacitor/android": "^8.5.0",
     "@capacitor/cli": "^8.4.2",
