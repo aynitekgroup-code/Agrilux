@@ -4,6 +4,11 @@
 //   SOLO TEXTO:  OpenRouter Gemini 2.5 Flash → DeepSeek → GitHub Phi-4
 
 export default async function handler(req, res) {
+  // CORS para APK Capacitor (origen capacitor:// / https://localhost) y web
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).end();
 
   const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;

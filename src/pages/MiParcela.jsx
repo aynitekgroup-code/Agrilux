@@ -15,6 +15,7 @@ import NdviParcela from '../components/NdviParcela';
 import VistaMapaParcela from '../components/VistaMapaParcela';
 import VoiceAssistant from '../components/VoiceAssistant';
 import PrediccionPlagas from './PrediccionPlagas';
+import ParcelaEmpresas from './ParcelaEmpresas';
 
 export default function MiParcela() {
   const { user } = useAuth();
@@ -40,6 +41,7 @@ export default function MiParcela() {
   const [mostrarMapa, setMostrarMapa] = useState(false);
   const [mostrarPrediccion, setMostrarPrediccion] = useState(false);
   const [indicesParcela, setIndicesParcela] = useState(null);
+  const [modoEmpresa, setModoEmpresa] = useState(false);
 
   // Auto-fill GPS con coordenadas exactas del usuario al abrir modal
   useEffect(() => {
@@ -277,6 +279,30 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
     </div>
   );
 
+  if (modoEmpresa) return (
+    <div className="min-h-screen pb-24">
+      <div className="bg-primary text-white px-6 pt-12 pb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-display font-bold">Mi Parcela</h1>
+            <p className="text-white/70 text-sm mt-1">Gestiona y monitorea tus cultivos</p>
+          </div>
+        </div>
+        <div className="flex gap-2 mt-3">
+          <button onClick={() => setModoEmpresa(false)}
+            className="flex-1 text-xs font-bold py-2 rounded-xl bg-white/20 text-white">
+            👤 Mi campo
+          </button>
+          <button onClick={() => setModoEmpresa(true)}
+            className="flex-1 text-xs font-bold py-2 rounded-xl bg-white text-primary">
+            🏢 Empresa
+          </button>
+        </div>
+      </div>
+      <div className="px-4 py-4"><ParcelaEmpresas /></div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen pb-24">
       <div className="bg-primary text-white px-6 pt-12 pb-6">
@@ -292,6 +318,17 @@ Da recomendaciones concretas y sencillas para optimizar el cultivo. Máximo 3-4 
           <button onClick={() => setModalNuevo(true)}
             className="bg-white text-primary font-bold text-sm px-4 py-2 rounded-xl flex items-center gap-1 shadow-sm">
             <Plus size={16} /> Nueva
+          </button>
+        </div>
+        {/* Modo: Mi campo (individual) | Empresa (multi-fundo) */}
+        <div className="flex gap-2 mt-3">
+          <button onClick={() => setModoEmpresa(false)}
+            className={`flex-1 text-xs font-bold py-2 rounded-xl ${!modoEmpresa ? 'bg-white text-primary' : 'bg-white/20 text-white'}`}>
+            👤 Mi campo
+          </button>
+          <button onClick={() => setModoEmpresa(true)}
+            className={`flex-1 text-xs font-bold py-2 rounded-xl ${modoEmpresa ? 'bg-white text-primary' : 'bg-white/20 text-white'}`}>
+            🏢 Empresa
           </button>
         </div>
       </div>

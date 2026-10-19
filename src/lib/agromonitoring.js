@@ -6,18 +6,14 @@ async function fetchJson(url) {
 }
 
 export async function geocodeUbicacion(q) {
-  const url = new URL('/api/agromonitoring', window.location.origin);
-  url.searchParams.set('action', 'geocode');
-  url.searchParams.set('q', q);
-  return await fetchJson(url.toString());
+  // URL relativa para que el shim nativo de main.jsx la redirija al backend
+  const url = `/api/agromonitoring?action=geocode&q=${encodeURIComponent(q)}`;
+  return await fetchJson(url);
 }
 
 export async function getWeather({ lat, lon, units = 'metric' }) {
-  const url = new URL('/api/agromonitoring', window.location.origin);
-  url.searchParams.set('action', 'weather');
-  url.searchParams.set('lat', String(lat));
-  url.searchParams.set('lon', String(lon));
-  url.searchParams.set('units', units);
+  // URL relativa para que el shim nativo de main.jsx la redirija al backend
+  const url = `/api/agromonitoring?action=weather&lat=${lat}&lon=${lon}&units=${units}`;
   return await fetchJson(url.toString());
 }
 

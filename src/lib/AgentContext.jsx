@@ -44,15 +44,30 @@ export function AgentProvider({ children }) {
     // Prioridad: 1) coords del perfil, 2) coords de localStorage, 3) GPS en tiempo real
     if (user?.coords?.lat && user?.coords?.lon) {
       setCoords({ lat: user.coords.lat, lon: user.coords.lon });
-    } else {
-      const savedCoords = localStorage.getItem('agrilux_coords');
-      if (savedCoords) {
-        try {
-          const parsed = JSON.parse(savedCoords);
-          if (parsed.lat && parsed.lon) setCoords(parsed);
-        } catch {}
-      }
-      // GPS en tiempo real como último fallback
+      return;
+    }
+    const savedCoords = localStorage.getItem('agrilux_coords');
+    if (savedCoords) {
+      try {
+        const parsed = JSON.parse(savedCoords);
+        if (parsed.lat && parsed.lon) {
+          setCoords(parsed);
+          return;
+        }
+      } catch {}
+    }
+    // GPS en tiempo real como último fallback (nativo Capacitor primero)
+    (async () => {
+      try {
+        if (window.Capacitor?.isNativePlatform?.()) {
+          const { Geolocation } = await import('@capacitor/geolocation');
+          const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 8000 });
+          if (pos?.coords) {
+            setCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+            return;
+          }
+        }
+      } catch {}
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
@@ -62,10 +77,10 @@ export function AgentProvider({ children }) {
             });
           },
           () => {},
-          { enableHighAccuracy: true, timeout: 5000 }
+          { enableHighAccuracy: true, timeout: 8000 }
         );
       }
-    }
+    })();
   }, [user?.ubicacion, user?.coords]);
 
   // ── Cargar ofertas de tiendas registradas ──
