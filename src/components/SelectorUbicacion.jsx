@@ -3,6 +3,18 @@ import { Loader2, MapPin, Mic, Navigation, Check, X, Map } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useAuth } from '../lib/AuthContext';
+import { Capacitor } from '@capacitor/core';
+
+// SpeechRecognition se carga dinámicamente solo en plataforma nativa
+let SpeechRecognition = null;
+(async () => {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const mod = await import('@capacitor-community/speech-recognition');
+      SpeechRecognition = mod.SpeechRecognition;
+    } catch {}
+  }
+})();
 
 function nombreAproximado(data) {
   const address = data.address || {};
@@ -38,7 +50,6 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
   const [modo, setModo] = useState(null);
   const [coordsSeleccionadas, setCoordsSeleccionadas] = useState(null);
   const inputRef = useRef(null);
-  const reconRef = useRef(null);
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
 
@@ -163,27 +174,64 @@ export default function SelectorUbicacion({ esPrimeraVez, onClose, onGuardar }) 
     }
   };
 
-  const grabarVoz = () => {
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      setError('Usa Chrome para la función de voz.'); return;
+  const grabarVoz = async () => {
+    setError('');
+    if (!SpeechRecognition) {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const mod = await import('@capacitor-community/speech-recognition');
+          SpeechRecognition = mod.SpeechRecognition;
+        } catch (e) {
+          console.warn('[Ubicacion] no se pudo cargar plugin voz:', e);
+        }
+      }
     }
-    if (grabando) { reconRef.current?.stop(); return; }
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const r = new SR();
-    r.lang = 'es-PE';
-    r.continuous = false;
-    r.interimResults = false;
-    r.onstart = () => setGrabando(true);
-    r.onresult = (e) => {
-      const texto = e.results[0][0].transcript;
-      setUbicacion(texto);
+    if (!SpeechRecognition) {
+      setError('Reconocimiento de voz solo disponible en app nativa Android');
+      return;
+    }
+    try {
+      const { available } = await SpeechRecognition.available();
+      if (!available) {
+        setError('Activa “Speech Services by Google” y vuelve a intentar. (available=false)');
+        return;
+      }
+      // Pide permiso y verifica resultado (algunas ROMs lo deniegan en silencio)
+      const perm = await SpeechRecognition.requestPermissions().catch(() => null);
+      if (perm?.speechRecognition === 'denied') {
+        setError('Permiso de micrófono denegado. Actívalo en Ajustes → Apps → Agrilux → Permisos.');
+        return;
+      }
+      setGrabando(true);
+      const result = await SpeechRecognition.start({
+        language: 'es-PE',
+        maxResults: 5,
+        prompt: 'Di tu ubicación... ej. Cutervo, Cajamarca',
+        popup: true,
+        partialResults: false,
+      });
       setGrabando(false);
-      setModo('confirmar');
-    };
-    r.onerror = () => { setGrabando(false); setError('No te escuché bien. Intenta de nuevo o escribe la ubicación.'); };
-    r.onend = () => setGrabando(false);
-    reconRef.current = r;
-    r.start();
+      const texto = (result.matches || []).find((m) => m && m.trim())?.trim() || '';
+      if (texto) {
+        setUbicacion(texto);
+        setModo('confirmar');
+      } else {
+        setError('No te escuché bien. Habla más fuerte, cerca del micrófono e intenta de nuevo. (matches vacío)');
+      }
+    } catch (e) {
+      try { await SpeechRecognition?.stop?.(); } catch {}
+      setGrabando(false);
+      console.warn('[Ubicacion] start falló:', e);
+      const msg = String(e?.message || '');
+      const code = String(e?.code || '');
+      if (e?.code === 'permission' || /permission|denied|RECORD_AUDIO/i.test(msg)) {
+        setError('Permiso de micrófono denegado. Actívalo en Ajustes → Apps → Agrilux → Permisos.');
+      } else if (/network|internet|offline|unavailable|no speech|empty|timeout/i.test(msg)) {
+        setError('No te escuché bien. Revisa tu internet y que “Speech Services by Google” esté actualizado.');
+      } else {
+        setError(`No te escuché bien. Intenta de nuevo. (diag: ${code || 'sin-code'} ${msg.slice(0, 120)})`);
+      }
+    }
   };
 
   const guardar = async () => {

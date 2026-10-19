@@ -18,6 +18,21 @@ import {
 } from '../lib/externalApis';
 import { CULTIVOS }      from '../lib/constants';
 import { supabase }      from '../lib/supabase';
+import { Capacitor } from '@capacitor/core';
+
+// Helper: obtiene SpeechRecognition nativo solo en Android (evita romper web)
+let _SRnative = null;
+let _SRloading = null;
+const getNativeSR = async () => {
+  if (!Capacitor.isNativePlatform()) return null;
+  if (_SRnative) return _SRnative;
+  if (!_SRloading) {
+    _SRloading = import('@capacitor-community/speech-recognition')
+      .then((mod) => { _SRnative = mod.SpeechRecognition; return _SRnative; })
+      .catch(() => null);
+  }
+  return _SRloading;
+};
 
 import DOMPurify from 'dompurify';
 import { SISTEMA_PROMPT, CHAT_SYSTEM, ANALISIS_SCHEMA } from './diagnostico/diagnosticoPrompts';
@@ -423,7 +438,45 @@ Responde SOLO con este JSON (sin markdown):
   };
 
   // ── Grabar voz para la consulta principal ────────────────────────────────────
-  const grabarVozConsulta = () => {
+  const grabarVozConsulta = async () => {
+    console.log('[Diagnostico] grabarVozConsulta llamado, grabando:', grabando);
+    // Toggle-off: si ya está grabando, detener todo y salir (da feedback visible)
+    if (grabando) {
+      try { (await getNativeSR())?.stop?.(); } catch {}
+      try { reconPregRef.current?.stop?.(); } catch {}
+      setGrabando(false);
+      return;
+    }
+    // 1. Nativo Android: plugin Capacitor
+    const SRnative = await getNativeSR();
+    console.log('[Diagnostico] SRnative:', SRnative);
+    if (SRnative) {
+      try {
+        const { available } = await SRnative.available();
+        if (!available) { alert('Reconocimiento de voz no disponible (available=false). Activa “Speech Services by Google”.'); return; }
+        await SRnative.requestPermissions();
+        setGrabando(true);
+        const result = await SRnative.start({
+          language: 'es-PE', maxResults: 5,
+          prompt: 'Habla ahora...', popup: true, partialResults: false,
+        });
+        setGrabando(false);
+        const texto = (result.matches || []).find((m) => m && m.trim())?.trim() || '';
+        if (texto) {
+          setPregunta(texto);
+          if (!fotos.length) setTimeout(() => analizar(texto), 300);
+        } else {
+          alert('No te escuché bien. Habla más fuerte y cerca del micrófono. (matches vacío)');
+        }
+      } catch (e) {
+        try { await SRnative?.stop?.(); } catch {}
+        setGrabando(false);
+        console.warn('[Diagnostico] voz consulta falló:', e);
+        alert(`No te escuché bien. Intenta de nuevo. (diag: ${String(e?.code || 'sin-code')} ${String(e?.message || '').slice(0, 120)})`);
+      }
+      return;
+    }
+    // 2. Web / fallback navegador
     if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
       alert('Usa Chrome para la función de voz'); return;
     }
@@ -439,14 +492,50 @@ Responde SOLO con este JSON (sin markdown):
       // Si dictó la consulta y no hay fotos, analizar directo
       if (!fotos.length) setTimeout(() => analizar(texto), 300);
     };
-    r.onerror  = () => setGrabando(false);
+    r.onerror  = (ev) => { setGrabando(false); alert('No te escuché bien. Intenta de nuevo o escribe tu consulta.'); console.warn('[Diagnostico] web voz consulta error:', ev?.error); };
     r.onend    = () => setGrabando(false);
     reconPregRef.current = r;
-    r.start();
+    try {
+      r.start();
+    } catch (e) {
+      setGrabando(false);
+      alert('No se pudo iniciar el micrófono. Revisa el permiso e intenta de nuevo.');
+    }
   };
 
   // ── Grabar voz para el chat del resultado ────────────────────────────────────
-  const grabarVozChat = () => {
+  const grabarVozChat = async () => {
+    if (grabando) {
+      try { (await getNativeSR())?.stop?.(); } catch {}
+      try { reconRef.current?.stop?.(); } catch {}
+      setGrabando(false);
+      return;
+    }
+    // 1. Nativo Android: plugin Capacitor
+    const SRnative = await getNativeSR();
+    if (SRnative) {
+      try {
+        const { available } = await SRnative.available();
+        if (!available) { alert('Reconocimiento de voz no disponible (available=false). Activa “Speech Services by Google”.'); return; }
+        await SRnative.requestPermissions();
+        setGrabando(true);
+        const result = await SRnative.start({
+          language: 'es-PE', maxResults: 5,
+          prompt: 'Habla ahora...', popup: true, partialResults: false,
+        });
+        setGrabando(false);
+        const texto = (result.matches || []).find((m) => m && m.trim())?.trim() || '';
+        if (texto) setPregunta(texto);
+        else alert('No te escuché bien. Habla más fuerte y cerca del micrófono. (matches vacío)');
+      } catch (e) {
+        try { await SRnative?.stop?.(); } catch {}
+        setGrabando(false);
+        console.warn('[Diagnostico] voz chat falló:', e);
+        alert(`No te escuché bien. Intenta de nuevo. (diag: ${String(e?.code || 'sin-code')} ${String(e?.message || '').slice(0, 120)})`);
+      }
+      return;
+    }
+    // 2. Web / fallback navegador
     if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
       alert('Usa Chrome para la función de voz'); return;
     }
@@ -455,10 +544,15 @@ Responde SOLO con este JSON (sin markdown):
     r.lang = 'es-PE'; r.continuous = false;
     r.onstart  = () => setGrabando(true);
     r.onresult = (e) => { setPregunta(e.results[0][0].transcript); setGrabando(false); };
-    r.onerror  = () => setGrabando(false);
+    r.onerror  = (ev) => { setGrabando(false); alert('No te escuché bien. Intenta de nuevo o escribe tu consulta.'); console.warn('[Diagnostico] web voz chat error:', ev?.error); };
     r.onend    = () => setGrabando(false);
     reconRef.current = r;
-    r.start();
+    try {
+      r.start();
+    } catch (e) {
+      setGrabando(false);
+      alert('No se pudo iniciar el micrófono. Revisa el permiso e intenta de nuevo.');
+    }
   };
 
   const enviarPregunta = async () => {

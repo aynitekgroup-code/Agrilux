@@ -12,14 +12,15 @@
     "deploy": "npm run build && git add -A && git commit -m \"deploy: $(date +'%Y-%m-%d %H:%M')\" && git push"
   },
   "dependencies": {
+    "@capacitor-community/speech-recognition": "^7.0.1",
     "@capacitor/android": "^8.5.0",
+    "@capacitor/camera": "^8.2.5",
     "@capacitor/cli": "^8.4.2",
     "@capacitor/core": "^8.4.2",
     "@capacitor/geolocation": "^8.2.3",
     "@supabase/supabase-js": "^2.112.4",
     "dompurify": "^3.4.11",
     "dotenv": "^17.4.2",
-    "firebase": "^12.18.0",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.475.0",

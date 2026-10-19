@@ -147,7 +147,7 @@ export async function cargarOfertasRegistradas({ lat, lon, cultivo = '' } = {}) 
     const res = await fetch(`/api/tiendas?${params}`);
     const data = await res.json().catch(() => ({}));
 
-    if (res.ok && data.firebase_ok !== false && data.supabase_ok !== false) {
+    if (res.ok && data.supabase_ok !== false) {
       return {
         ofertas: data.ofertas || [],
         total: data.total || 0,

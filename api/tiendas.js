@@ -38,7 +38,6 @@ function respuestaSupabaseNoDisponible(res, type) {
   const hint = 'Agrega SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en Vercel (Settings → Environment Variables).';
   const base = {
     supabase_ok: false,
-    firebase_ok: false,
     hint,
     total: 0,
   };
@@ -260,7 +259,6 @@ export default async function handler(req, res) {
       return res.status(503).json({
         error: 'Supabase no configurado en el servidor. Agrega SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en Vercel.',
         supabase_ok: false,
-        firebase_ok: false,
       });
     }
 
@@ -318,7 +316,7 @@ export default async function handler(req, res) {
             .sort((a, b) => (a.distanciaKm || 999) - (b.distanciaKm || 999));
         }
 
-        return res.status(200).json({ tiendas, total: tiendas.length, supabase_ok: true, firebase_ok: true });
+        return res.status(200).json({ tiendas, total: tiendas.length, supabase_ok: true });
       }
 
       if (req.method === 'POST') {
@@ -459,7 +457,6 @@ export default async function handler(req, res) {
         total: ofertas.length,
         timestamp: new Date().toISOString(),
         supabase_ok: true,
-        firebase_ok: true,
       });
     }
 

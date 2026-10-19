@@ -31,9 +31,9 @@ export default function PrivacyPolicy() {
             <h2 className="text-xl font-semibold text-gray-800 mb-3">3. Servicios de terceros</h2>
             <p>Utilizamos los siguientes servicios de terceros que pueden recopilar información:</p>
             <ul className="list-disc list-inside mt-2 space-y-1">
-              <li><strong>Firebase (Google):</strong> Para autenticación, base de datos y análisis de uso.</li>
-              <li><strong>Google Maps:</strong> Para mostrar mapas y procesar ubicación GPS.</li>
-              <li><strong>Servidores SQL:</strong> Para almacenar datos de forma segura.</li>
+              <li><strong>Supabase:</strong> Para autenticación, base de datos PostgreSQL y almacenamiento.</li>
+              <li><strong>Google Maps / Leaflet:</strong> Para mostrar mapas y procesar ubicación GPS.</li>
+              <li><strong>Servidores PostgreSQL (Supabase):</strong> Para almacenar datos de forma segura.</li>
             </ul>
             <p className="mt-2">Estos servicios están sujetos a sus propias políticas de privacidad.</p>
           </section>

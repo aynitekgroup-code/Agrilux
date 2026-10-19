@@ -3,6 +3,18 @@ import { Mic, MicOff, Loader2 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { useAgentes } from '../lib/AgentContext';
 import { guardarConversacion } from '../lib/learningSystem';
+import { Capacitor } from '@capacitor/core';
+
+// SpeechRecognition se carga dinámicamente solo en plataforma nativa
+let SpeechRecognition = null;
+(async () => {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const mod = await import('@capacitor-community/speech-recognition');
+      SpeechRecognition = mod.SpeechRecognition;
+    } catch {}
+  }
+})();
 
 const WELCOME_VENTAS = '¡Hola! Soy tu agente de ventas Agrilux. Conozco las ofertas de tiendas registradas en la app. Pregúntame por productos, precios o dónde comprar cerca. ¿Qué necesitas?';
 const WELCOME_PLAGAS = '¡Hola! Soy tu asistente técnico. Puedo ayudarte con diagnóstico de plagas, recomendaciones de productos y consejos para tus cultivos. ¿En qué te puedo ayudar?';
@@ -109,49 +121,72 @@ export default function VoiceAssistant({
     }
   }, [coordenadas, user, agentType, ubicacion, coords, leerTexto, ofertasRegistradas, productoRecomendado, parcelaContext, misTiendas]);
 
-  const iniciarEscucha = useCallback(() => {
-    setError('');
-    setStarted(true);
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      setError('Tu navegador no soporta voz. Usa Chrome.');
+  const iniciarEscucha = useCallback(async () => {
+    // Toggle: si ya está escuchando, detiene y sale
+    if (escuchando) {
+      await detenerEscucha();
       return;
     }
-    detenerVoz();
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SR();
-    recognition.lang = 'es-PE';
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-    recognition.onstart = () => { setEscuchando(true); setTranscripcion(''); };
-    recognition.onresult = (event) => {
-      let interim = '', final_ = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const t = event.results[i][0].transcript;
-        if (event.results[i].isFinal) final_ += t; else interim += t;
+    if (!SpeechRecognition) {
+      // Reintento de carga tardía (por si el import dinámico aún no terminó)
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const mod = await import('@capacitor-community/speech-recognition');
+          SpeechRecognition = mod.SpeechRecognition;
+        } catch {}
       }
-      setTranscripcion(final_ || interim);
-      if (final_) {
-        setEscuchando(false);
-        const nuevoHistorial = [...historial, { rol: 'usuario', texto: final_ }];
-        setHistorial(nuevoHistorial);
-        enviarAI(final_, nuevoHistorial);
-      }
-    };
-    recognition.onerror = (event) => {
+    }
+    if (!SpeechRecognition) {
+      setError('Reconocimiento de voz solo disponible en app nativa Android');
+      return;
+    }
+    try {
+      const { available } = await SpeechRecognition.available();
+      if (!available) { setError('Reconocimiento de voz no disponible (available=false). Activa “Speech Services by Google”.'); return; }
+      await SpeechRecognition.requestPermissions();
+      setEscuchando(true);
+      setTranscripcion('');
+      const result = await SpeechRecognition.start({
+        language: 'es-PE',
+        maxResults: 5,
+        prompt: 'Habla ahora...',
+        popup: true,
+        partialResults: false,
+      });
       setEscuchando(false);
-      if (event.error === 'no-speech') setError('No te escuché. Intenta de nuevo.');
-      else if (event.error === 'audio-capture') setError('No se pudo acceder al micrófono.');
-      else if (event.error !== 'aborted') setError('Error de voz. Intenta de nuevo.');
-    };
-    recognition.onend = () => setEscuchando(false);
-    recognitionRef.current = recognition;
-    recognition.start();
-  }, [historial, enviarAI, detenerVoz]);
+      const finalText = (result.matches || []).find((m) => m && m.trim())?.trim() || '';
+      if (finalText) {
+        setTranscripcion(finalText);
+        const nuevoHistorial = [...historial, { rol: 'usuario', texto: finalText }];
+        setHistorial(nuevoHistorial);
+        enviarAI(finalText, nuevoHistorial);
+      } else {
+        setError('No te escuché bien. Habla más fuerte y cerca del micrófono. (matches vacío)');
+      }
+    } catch (e) {
+      try { await SpeechRecognition?.stop?.(); } catch {}
+      setEscuchando(false);
+      console.warn('[Voz] start falló:', e);
+      const msg = String(e?.message || '');
+      const code = String(e?.code || '');
+      if (code === 'permission' || /permission|denied|RECORD_AUDIO/i.test(msg)) setError('Permiso de micrófono denegado');
+      else setError(`Error de voz. Intenta de nuevo. (diag: ${code || 'sin-code'} ${msg.slice(0, 120)})`);
+    }
+  }, [historial, enviarAI]);
 
-  const detenerEscucha = useCallback(() => {
-    recognitionRef.current?.stop();
+  const detenerEscucha = useCallback(async () => {
+    // Fuerza el estado a false INMEDIATAMENTE para UI responsiva
     setEscuchando(false);
+    
+    if (!SpeechRecognition) return;
+    
+    try {
+      console.log('[Voz] detenerEscucha llamado');
+      await SpeechRecognition.stop();
+      console.log('[Voz] stop() completado');
+    } catch (e) {
+      console.warn('[Voz] Error en stop():', e);
+    }
   }, []);
 
   // Auto-start welcome on mount (fullPage or embedded mode)
@@ -167,7 +202,19 @@ export default function VoiceAssistant({
     }
   }, [fullPage, embedded]);
 
-  if (disabled) return null;
+  // Limpieza al desmontar o si se deshabilita
+  useEffect(() => {
+    return () => {
+      if (SpeechRecognition && escuchando) {
+        SpeechRecognition.stop().catch(() => {});
+      }
+    };
+  }, [escuchando, disabled]);
+
+  if (disabled) {
+    if (escuchando) setEscuchando(false);
+    return null;
+  }
 
   // ── Embedded mode (inline card, e.g. Mi Parcela) ──
   if (embedded) {

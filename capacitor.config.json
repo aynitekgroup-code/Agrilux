@@ -20,6 +20,10 @@
     },
     "Camera": {
       "androidPermissions": ["android.permission.CAMERA"]
+    },
+    "SpeechRecognition": {
+      "lang": "es-PE",
+      "androidPermissions": ["android.permission.RECORD_AUDIO"]
     }
   }
 }

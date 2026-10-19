@@ -53,10 +53,6 @@ self.addEventListener('fetch', (event) => {
   // No cachear hosts externos que no controlamos
   const skipHosts = [
     'openrouter.ai',
-    'firebaseapp.com',
-    'firebase.googleapis.com',
-    'firebasestorage.googleapis.com',
-    'identitytoolkit.googleapis.com',
     'api.deepseek.com',
     'models.inference.ai.azure.com',
     'huggingface.co',
