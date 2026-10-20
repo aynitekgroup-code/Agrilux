@@ -5,8 +5,20 @@ dist
 !.env.example
 android-build/
 .vercel/
-<<<<<<< Updated upstream
-=======
-.vercel
 .idea
->>>>>>> Stashed changes
+android/.idea
+android/app/.idea
+android/.gradle
+android/build
+android/app/build
+android/app/release
+android/app/debug
+android/local.properties
+android/.kotlin
+android/captures
+*.keystore
+*.jks
+keystore.properties
+.DS_Store
+Thumbs.db
+*.log
