@@ -13,7 +13,9 @@
    "sync:win": "npm run build && mkdir -p /mnt/c/Users/User/Pictures/LUMAJIRA_SOC/clon_agrilux_android/Agrilux/android/app/src/main/assets/public && cp -r dist/* /mnt/c/Users/User/Pictures/LUMAJIRA_SOC/clon_agrilux_android/Agrilux/android/app/src/main/assets/public/"  },
    
   "dependencies": {
+    "@capacitor-community/speech-recognition": "^7.0.1",
     "@capacitor/android": "^8.5.0",
+    "@capacitor/camera": "^8.2.5",
     "@capacitor/cli": "^8.4.2",
     "@capacitor/core": "^8.4.2",
     "@capacitor/geolocation": "^8.2.3",
