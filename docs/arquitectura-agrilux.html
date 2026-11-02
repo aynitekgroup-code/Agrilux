@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <title>Mapa de arquitectura · Agrilux</title>
+  <style>
+    :root {
+      --bg: #111318;
+      --panel: #1b1e26;
+      --text: #f8fafc;
+      --muted: #a7afbf;
+      --line: #687080;
+      --green: #00d978;
+      --cyan: #38d5e8;
+      --blue: #5d8dff;
+      --purple: #c176ff;
+      --orange: #f6a63c;
+      --pink: #f15b87;
+      --yellow: #f2d45c;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 1040px;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 50% 25%, #222b3b 0, transparent 38rem),
+        var(--bg);
+      font: 14px/1.35 Arial, sans-serif;
+    }
+    .map { width: 1440px; margin: auto; padding: 28px 34px 46px; }
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+    h1 { margin: 0; font-size: 30px; letter-spacing: -.8px; }
+    h1 span { color: var(--green); }
+    .badge { color: #d7ffe9; border: 1px solid #168a5b; border-radius: 999px; padding: 7px 13px; font-size: 12px; }
+    .legend { display: flex; gap: 12px; color: var(--muted); font-size: 11px; margin-bottom: 22px; }
+    .legend i { width: 9px; height: 9px; display: inline-block; border-radius: 50%; margin-right: 4px; }
+    .board { position: relative; display: grid; grid-template-columns: 220px 250px 250px 250px 250px; gap: 36px; }
+    .column { position: relative; min-height: 640px; }
+    .column h2 { margin: 0 0 14px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 1.4px; }
+    .stack { display: flex; flex-direction: column; gap: 12px; }
+    .node {
+      position: relative; z-index: 2; border: 1px solid; border-radius: 10px;
+      padding: 13px 15px; background: var(--panel); min-height: 64px;
+      box-shadow: 0 7px 18px #0005;
+    }
+    .node strong { display: block; font-size: 14px; }
+    .node small { display: block; color: var(--muted); margin-top: 5px; font-size: 11px; }
+    .node.green { border-color: var(--green); } .node.green strong { color: #74ffc0; }
+    .node.cyan { border-color: var(--cyan); } .node.cyan strong { color: #8cf2ff; }
+    .node.blue { border-color: var(--blue); } .node.blue strong { color: #a8c0ff; }
+    .node.purple { border-color: var(--purple); } .node.purple strong { color: #e2b9ff; }
+    .node.orange { border-color: var(--orange); } .node.orange strong { color: #ffd18b; }
+    .node.pink { border-color: var(--pink); } .node.pink strong { color: #ffacc5; }
+    .node.yellow { border-color: var(--yellow); } .node.yellow strong { color: #ffef9f; }
+    .center {
+      min-height: 100px; display: grid; place-items: center; text-align: center;
+      border: 2px solid var(--green); border-radius: 14px;
+      background: linear-gradient(135deg, #00d978, #00b86a); color: #062719;
+      font-size: 23px; font-weight: 800; box-shadow: 0 0 30px #00d97855;
+      margin-top: 228px;
+    }
+    .center small { display: block; font-size: 11px; font-weight: 600; margin-top: 5px; }
+    .group { border: 1px dashed #49515f; border-radius: 12px; padding: 12px; margin-top: 18px; }
+    .group h3 { margin: 0 0 9px; color: #dce3ee; font-size: 12px; }
+    .group .node { margin-top: 8px; min-height: auto; padding: 9px 10px; }
+    .group .node strong { font-size: 12px; }
+    .group .node small { font-size: 10px; }
+    .flow {
+      position: absolute; z-index: 1; left: 178px; right: 178px; top: 300px;
+      border-top: 2px dashed var(--line); pointer-events: none;
+    }
+    .flow::before, .flow::after {
+      content: ""; position: absolute; top: -5px; width: 8px; height: 8px;
+      border-top: 2px solid var(--line); border-right: 2px solid var(--line); transform: rotate(45deg);
+    }
+    .flow::before { left: 0; transform: rotate(-135deg); }
+    .flow::after { right: 0; }
+    .note { margin-top: 20px; color: var(--muted); font-size: 11px; max-width: 760px; }
+    footer { border-top: 1px solid #303541; margin-top: 30px; padding-top: 14px; color: var(--muted); font-size: 11px; }
+  </style>
+</head>
+<body>
+  <main class="map">
+    <header>
+      <h1>¿Cómo funciona <span>Agrilux</span>?</h1>
+      <div class="badge">Mapa técnico del proyecto · 2026</div>
+    </header>
+
+    <div class="legend">
+      <span><i style="background:var(--green)"></i>producto</span>
+      <span><i style="background:var(--cyan)"></i>módulo</span>
+      <span><i style="background:var(--purple)"></i>servicio</span>
+      <span><i style="background:var(--orange)"></i>infraestructura</span>
+      <span><i style="background:var(--pink)"></i>integración externa</span>
+    </div>
+
+    <section class="board">
+      <div class="flow"></div>
+      <section class="column">
+        <h2>1 · Entrada del agricultor</h2>
+        <div class="stack">
+          <div class="node pink"><strong>Diagnóstico con foto</strong><small>Plaga, enfermedad y recomendación</small></div>
+          <div class="node blue"><strong>Voz primero</strong><small>Consulta y respuesta por audio</small></div>
+          <div class="node cyan"><strong>Ubicación y GPS</strong><small>Parcela, clima y geocodificación</small></div>
+          <div class="node green"><strong>Modo offline</strong><small>PWA, caché y almacenamiento local</small></div>
+          <div class="node orange"><strong>Android / PWA</strong><small>Capacitor y navegadores móviles</small></div>
+        </div>
+      </section>
+
+      <section class="column">
+        <h2>2 · Módulos Agrilux</h2>
+        <div class="stack">
+          <div class="node cyan"><strong>Diagnóstico</strong><small>IA visual · suelo · clima · NDVI</small></div>
+          <div class="node cyan"><strong>Ciclo del cultivo</strong><small>Etapas · tareas · recomendaciones</small></div>
+          <div class="node cyan"><strong>Mi Parcela</strong><small>Mapas · monitoreo · predicción</small></div>
+          <div class="node cyan"><strong>Gestión</strong><small>Métricas · alertas · finanzas</small></div>
+          <div class="node cyan"><strong>Mercado</strong><small>Ofertas · tiendas · agentes de venta</small></div>
+        </div>
+      </section>
+
+      <section class="column">
+        <h2>3 · Núcleo de aplicación</h2>
+        <div class="center">AGRILUX<small>agricultura inteligente</small></div>
+        <div class="group">
+          <h3>React + Vite</h3>
+          <div class="node green"><strong>App.jsx</strong><small>rutas, autenticación y layout</small></div>
+          <div class="node green"><strong>components</strong><small>voz, ubicación, insumos y estado online</small></div>
+          <div class="node green"><strong>lib</strong><small>contextos, servicios, offline y agentes</small></div>
+        </div>
+      </section>
+
+      <section class="column">
+        <h2>4 · Backend serverless</h2>
+        <div class="stack">
+          <div class="node purple"><strong>/api/analizar-imagen</strong><small>visión y diagnóstico</small></div>
+          <div class="node purple"><strong>/api/ciclo-recomendaciones</strong><small>asesoría agronómica</small></div>
+          <div class="node purple"><strong>/api/weather · senamhi</strong><small>clima y pronóstico</small></div>
+          <div class="node purple"><strong>/api/soil-nasa · sentinel</strong><small>suelo, incendios y satélite</small></div>
+          <div class="node purple"><strong>/api/tiendas · insumos</strong><small>mercado y lugares cercanos</small></div>
+          <div class="node purple"><strong>/api/voice-assistant</strong><small>asistente conversacional</small></div>
+        </div>
+      </section>
+
+      <section class="column">
+        <h2>5 · Datos e integraciones</h2>
+        <div class="group" style="margin-top:0">
+          <h3>Datos y autenticación</h3>
+          <div class="node orange"><strong>Supabase</strong><small>Auth · PostgreSQL · Storage</small></div>
+          <div class="node orange"><strong>Offline storage</strong><small>continuidad sin conexión</small></div>
+        </div>
+        <div class="group">
+          <h3>IA y conocimiento</h3>
+          <div class="node pink"><strong>OpenRouter · DeepSeek</strong><small>modelos de texto y visión</small></div>
+          <div class="node pink"><strong>GitHub Models</strong><small>fallback gratuito</small></div>
+          <div class="node pink"><strong>Crop.health · Plant.id</strong><small>enfermedades y plagas</small></div>
+        </div>
+        <div class="group">
+          <h3>Territorio y operación</h3>
+          <div class="node yellow"><strong>Open-Meteo · NASA · Sentinel</strong><small>clima, alertas y vegetación</small></div>
+          <div class="node yellow"><strong>Vercel + Capacitor</strong><small>despliegue web y Android</small></div>
+        </div>
+      </section>
+    </section>
+
+    <p class="note">Lectura recomendada: el agricultor entra por un módulo, la página usa componentes y servicios del dominio, las funciones <code>/api</code> protegen las claves y Supabase centraliza identidad y datos.</p>
+    <footer>Generado a partir de la estructura actual de Agrilux · No contiene credenciales ni datos de usuarios.</footer>
+  </main>
+</body>
+</html>

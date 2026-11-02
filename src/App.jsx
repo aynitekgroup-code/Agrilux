@@ -13,9 +13,10 @@ const CicloCultivo = lazy(() => import('./modules/ciclo/CicloPage'));
 const Gestion = lazy(() => import('./modules/gestion/GestionPage'));
 const SaludFinanciera = lazy(() => import('./modules/gestion/SaludFinancieraPage'));
 const MercadoPage = lazy(() => import('./modules/mercado/MercadoPage'));
-const Admin = lazy(() => import('./pages/Admin'));
+const Admin = lazy(() => import('./pages/admin/Admin'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
 const Descargar = lazy(() => import('./pages/Descargar'));
+const EliminarCuenta = lazy(() => import('./pages/EliminarCuenta'));
 
 function PantallaPendiente() {
   const { user, logout } = useAuth();
@@ -144,6 +145,9 @@ function AppRoutes() {
     <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="w-8 h-8 border-4 border-green-400 border-t-transparent rounded-full animate-spin" /></div>}>
       <Routes>
         <Route path="/registro" element={<Registro />} />
+        <Route path="/eliminar-cuenta" element={
+          user ? <EliminarCuenta /> : <Navigate to="/registro" replace />
+        } />
 
       <Route path="*" element={
         <Layout>

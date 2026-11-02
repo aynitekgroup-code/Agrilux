@@ -2,6 +2,10 @@
 
 Agrilux se organiza por **módulos funcionales**. Cada módulo representa una capacidad del producto y contiene sus páginas relacionadas. La infraestructura transversal permanece en `src/lib` y `src/components` para evitar duplicar autenticación, Supabase, APIs externas y componentes reutilizables.
 
+El mapa técnico se consulta desde la pestaña **Docs** del panel administrador.
+No se publica como HTML independiente para evitar que la arquitectura interna
+quede accesible sin autorización.
+
 ## Estructura
 
 ```text
@@ -53,6 +57,9 @@ src/
 ├── components/       # Componentes compartidos
 ├── lib/              # Infraestructura y servicios compartidos
 ├── pages/             # Páginas públicas o secundarias
+│   └── admin/          # Panel administrativo y su documentación privada
+│       ├── Admin.jsx
+│       └── AdminDocs.jsx
 └── App.jsx            # Composición de rutas
 ```
 
@@ -77,6 +84,11 @@ src/
 5. La autenticación, Supabase, almacenamiento offline y contexto global pertenecen a `src/lib`.
 6. Las rutas públicas sin dominio agrícola, como Registro, Administración y Privacidad, permanecen en `src/pages`.
 7. Al crear un módulo, actualizar esta matriz y agregar su ruta en `src/App.jsx`.
+
+El panel administrativo se mantiene agrupado en `src/pages/admin`. Sus consultas
+usan `src/lib/supabase.js` y sus APIs usan `api/`; estos archivos no se duplican
+dentro de `admin` porque también pueden ser compartidos o deben ejecutarse en el
+servidor.
 
 ## Flujo para migrar código existente
 

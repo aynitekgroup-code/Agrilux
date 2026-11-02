@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, Leaf, Calendar, Store, ClipboardList, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle, Download, BookOpen } from 'lucide-react';
+import { Camera, Leaf, Calendar, Store, ClipboardList, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle, Download, BookOpen, Trash2 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
 import SelectorUbicacion from './SelectorUbicacion';
@@ -168,6 +168,15 @@ export default function Layout({ children }) {
                 <BookOpen size={18} />
                 Manual usuario
               </a>
+              {user && (
+                <button
+                  type="button"
+                  onClick={() => { setMenuOpen(false); navigate('/eliminar-cuenta'); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors text-sm font-medium rounded-lg">
+                  <Trash2 size={18} />
+                  Eliminar cuenta
+                </button>
+              )}
               {user ? (
                 <>
                   <button

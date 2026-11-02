@@ -1,5 +1,5 @@
 /**
- * src/pages/Admin.jsx
+ * src/pages/admin/Admin.jsx
  *
  * Acceso: protegido por VITE_ADMIN_KEY en .env
  * Solo tú (Lumajira SAC) puedes entrar.
@@ -12,18 +12,19 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../lib/AuthContext';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../lib/AuthContext';
 import JSZip from 'jszip';
 import {
   Users, Camera, Download, RefreshCw, ChevronDown, ChevronUp,
   Search, X, MapPin, Phone, Calendar, TrendingUp, CloudUpload,
   CheckCircle, AlertCircle, Loader2, FolderOpen, ExternalLink,
   Plus, Eye, EyeOff, Lock, UserPlus, LogOut, Truck, XCircle,
-  Megaphone, UserCheck, UserX, Bell, Pencil, Trash2, MessageCircle
+  Megaphone, UserCheck, UserX, Bell, Pencil, Trash2, MessageCircle, BookOpen
 } from 'lucide-react';
-import Marketing from '../components/Marketing';
-import { eliminarTodasTiendasComunidad } from '../lib/tiendasComunidad';
+import Marketing from '../../components/Marketing';
+import { eliminarTodasTiendasComunidad } from '../../lib/tiendasComunidad';
+import AdminDocs from './AdminDocs';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 const GOOGLE_CLIENT_ID   = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -1332,6 +1333,7 @@ export default function Admin() {
               { id: 'marketing', label: 'Marketing', icon: Megaphone },
               { id: 'diagnosticos', label: 'Diagnósticos', icon: Camera },
               { id: 'exportar', label: 'Exportar', icon: Download },
+              { id: 'docs', label: 'Docs', icon: BookOpen },
             ].map(({ id, label, icon: Icon }) => (
               <button key={id} onClick={() => { setTab(id); setBusqueda(''); setExpandido(null); }}
                 className={`flex-shrink-0 flex flex-col items-center py-2 px-3 rounded-lg text-xs font-semibold gap-0.5 transition-all min-w-[70px] relative ${tab === id ? 'bg-white text-gray-900' : 'text-white/60'}`}>
@@ -1802,6 +1804,9 @@ export default function Admin() {
             )}
           </div>
         )}
+
+        {/* ── DOCUMENTACIÓN TÉCNICA ─────────────────────────────────────────── */}
+        {tab === 'docs' && <AdminDocs />}
 
       </div>
     </div>
