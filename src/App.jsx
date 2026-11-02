@@ -10,6 +10,8 @@ import { Clock, Mail, LogOut } from 'lucide-react';
 const Diagnostico = lazy(() => import('./pages/Diagnostico'));
 const MiParcela = lazy(() => import('./pages/MiParcela'));
 const CicloCultivo = lazy(() => import('./pages/CicloCultivo'));
+const Gestion = lazy(() => import('./pages/Gestion'));
+const SaludFinanciera = lazy(() => import('./pages/SaludFinanciera'));
 const MercadoPage = lazy(() => import('./pages/MercadoPage'));
 const Admin = lazy(() => import('./pages/Admin'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
@@ -157,6 +159,14 @@ function AppRoutes() {
             {/* Ciclo — requiere login + aprobación */}
             <Route path="/ciclo" element={
               user && isAprobado ? <CicloCultivo /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
+            } />
+
+            {/* Gestión — requiere login + aprobación */}
+            <Route path="/gestion" element={
+              user && isAprobado ? <Gestion /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
+            } />
+            <Route path="/gestion/finanzas" element={
+              user && isAprobado ? <SaludFinanciera /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />
 
             {/* Mercado — ofertas + agente + mi tienda */}

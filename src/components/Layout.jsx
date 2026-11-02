@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, Leaf, Calendar, Store, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle, Download, BookOpen } from 'lucide-react';
+import { Camera, Leaf, Calendar, Store, ClipboardList, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle, Download, BookOpen } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
 import SelectorUbicacion from './SelectorUbicacion';
@@ -11,6 +11,7 @@ const navItems = [
   { path: '/',        icon: Camera,  label: 'Diagnóstico' },
   { path: '/ciclo',   icon: Calendar, label: 'Ciclo' },
   { path: '/parcela', icon: Leaf,    label: 'Parcela' },
+  { path: '/gestion', icon: ClipboardList, label: 'Gestión' },
   { path: '/mercado', icon: Store,   label: 'Mercado' },
 ];
 
@@ -212,10 +213,10 @@ export default function Layout({ children }) {
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-gray-100 shadow-lg z-50">
         <div className="flex">
           {navItems.map(({ path, icon: Icon, label }) => {
-            const active = location.pathname === path;
+            const active = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
             return (
               <button key={path} onClick={() => {
-                  if (!user && (path === '/parcela' || path === '/ciclo')) {
+                  if (!user && (path === '/parcela' || path === '/ciclo' || path === '/gestion')) {
                     navigate('/registro');
                   } else {
                     navigate(path);
