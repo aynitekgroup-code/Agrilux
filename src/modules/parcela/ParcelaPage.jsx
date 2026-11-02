@@ -1,19 +1,21 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Camera, Leaf, Calendar, TrendingUp, Loader2, Map, Download, Mic, Satellite, Trash2, Sparkles } from 'lucide-react';
-import { useAuth } from '../lib/AuthContext';
-import { useAgentes } from '../lib/AgentContext';
-import { CULTIVOS } from '../lib/constants';
-import { getSentinelNDVI } from '../lib/externalApis';
-import { obtenerCoordsParcela } from '../lib/parcelaCoords';
-import { supabase } from '../lib/supabase';
-import { invokeGemini } from '../lib/gemini';
+import { useAuth } from '../../lib/AuthContext';
+import { useAgentes } from '../../lib/AgentContext';
+import { CULTIVOS } from '../../lib/constants';
+import { getSentinelNDVI } from './parcelaService';
+import { obtenerCoordsParcela } from '../../lib/parcelaCoords';
+import { supabase } from '../../lib/supabase';
+import { invokeGemini } from '../../lib/gemini';
 import { useNavigate } from 'react-router-dom';
-import MapaParcela from '../components/MapaParcela';
-import { exportarParcelasExcel } from '../lib/exportExcel';
-import { GraficoMonitoreo } from '../components/GraficosCultivo';
-import NdviParcela from '../components/NdviParcela';
-import VistaMapaParcela from '../components/VistaMapaParcela';
-import VoiceAssistant from '../components/VoiceAssistant';
+import { exportarParcelasExcel } from '../../lib/exportExcel';
+import {
+  MapaParcela,
+  GraficoMonitoreo,
+  NdviParcela,
+  VistaMapaParcela,
+  VoiceAssistant,
+} from './components';
 import PrediccionPlagas from './PrediccionPlagas';
 import ParcelaEmpresas from './ParcelaEmpresas';
 

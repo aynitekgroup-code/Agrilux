@@ -2,8 +2,8 @@
  * Panel de campaña + Detalle del lote (pantallas 1 y 2 de Parcela empresas)
  */
 import React, { useState, useEffect } from 'react';
-import NdviParcela from '../NdviParcela';
-import { etiquetaRiesgo, colorRiesgo } from '../../lib/empresaApi';
+import NdviParcela from './NdviParcela';
+import { etiquetaRiesgo, colorRiesgo } from '../../../lib/empresaApi';
 
 const fmt = (n, d = 0) => (Number(n) || 0).toLocaleString('es-PE', { maximumFractionDigits: d });
 

@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '../lib/AuthContext';
-import { useAgentes } from '../lib/AgentContext';
-import { CULTIVOS } from '../lib/constants';
-import { getPronosticoPlagas } from '../lib/externalApis';
-import { predecirPlagas, getEtapaCultivo } from '../lib/scoringModel';
-import TimelineRiesgo from '../components/TimelineRiesgo';
+import { useAuth } from '../../lib/AuthContext';
+import { useAgentes } from '../../lib/AgentContext';
+import { CULTIVOS } from '../../lib/constants';
+import { getPronosticoPlagas } from './parcelaService';
+import { predecirPlagas, getEtapaCultivo } from '../../lib/scoringModel';
+import { TimelineRiesgo } from './components';
 import {
   Loader2,
   AlertTriangle,

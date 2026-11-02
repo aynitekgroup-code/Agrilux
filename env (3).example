@@ -1,23 +1,90 @@
-# ── Variables existentes ────────────────────────────────────────────
+# Agrilux - plantilla de variables de entorno
+#
+# Copia este archivo como .env.local para desarrollo:
+#   cp "env (3).example" .env.local
+#
+# Nunca coloques valores reales aquí ni subas .env/.env.local al repositorio.
+# Las variables con VITE_ se envían al navegador: solo deben contener valores
+# públicos. Las demás son privadas y se configuran en Vercel como Environment
+# Variables para las funciones de api/.
+
+# ---------------------------------------------------------------------------
+# Frontend: Supabase
+# ---------------------------------------------------------------------------
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+
+# Solo para scripts de migración/administración. Nunca usar en el frontend.
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+# Solo lo consume el script legacy de migración; no debe existir en un
+# despliegue público porque expone privilegios administrativos.
+VITE_SUPABASE_SERVICE_ROLE_KEY=
+
+# ---------------------------------------------------------------------------
+# Frontend: aplicación y mapas
+# ---------------------------------------------------------------------------
+# Vacío usa las rutas /api del mismo despliegue.
+VITE_API_BASE_URL=
+VITE_MAPBOX_TOKEN=
+
+# OAuth de Google usado por el panel de administración para Google Drive.
+VITE_GOOGLE_CLIENT_ID=
+
+# ---------------------------------------------------------------------------
+# Backend: autenticación y administración
+# ---------------------------------------------------------------------------
+ADMIN_KEY=
+# Compatibilidad con el flujo anterior del frontend.
+VITE_ADMIN_KEY=
+
+# ---------------------------------------------------------------------------
+# Backend: inteligencia artificial
+# ---------------------------------------------------------------------------
 OPENROUTER_API_KEY=
-VITE_GEMINI_API_KEY=
-GEMINI_API_KEY=
-VITE_DEEPSEEK_API_KEY=
 DEEPSEEK_API_KEY=
+OPENAI_API_KEY=
+GITHUB_TOKEN=
+
+# ---------------------------------------------------------------------------
+# Backend: diagnóstico de plantas
+# ---------------------------------------------------------------------------
 CROP_HEALTH_API_KEY=
 PLANT_ID_API_KEY=
 HUGGINGFACE_API_KEY=
-AGROMONITORING_API_KEY=
+
+# ---------------------------------------------------------------------------
+# Backend: clima, suelo y datos satelitales
+# ---------------------------------------------------------------------------
+# Open-Meteo y SoilGrids funcionan sin clave.
 OPENWEATHER_API_KEY=
+AGROMONITORING_API_KEY=
+# Alias aceptado por integraciones antiguas.
+AGRO_API_KEY=
+NASA_EARTHDATA_KEY=
+
+# Sentinel Hub / Copernicus. Opcional; existe fallback en api/sentinel.js.
+SENTINEL_INSTANCE_ID=
 SENTINEL_CLIENT_ID=
 SENTINEL_CLIENT_SECRET=
-NASA_EARTHDATA_KEY=
+
+# ---------------------------------------------------------------------------
+# Backend: búsqueda de insumos y tiendas
+# ---------------------------------------------------------------------------
+GOOGLE_PLACES_API_KEY=
+
+# ---------------------------------------------------------------------------
+# Backend: notas por WhatsApp
+# ---------------------------------------------------------------------------
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_WHATSAPP_FROM=
-VITE_MAPBOX_TOKEN=
-VITE_CULQI_PUBLIC_KEY=
-CULQI_SECRET_KEY=
+
+# ---------------------------------------------------------------------------
+# Migración legacy: Firebase
+# ---------------------------------------------------------------------------
+# Solo necesarios para scripts de migración/exportación.
 VITE_FIREBASE_API_KEY=
 VITE_FIREBASE_AUTH_DOMAIN=
 VITE_FIREBASE_PROJECT_ID=
@@ -25,18 +92,10 @@ VITE_FIREBASE_STORAGE_BUCKET=
 VITE_FIREBASE_MESSAGING_SENDER_ID=
 VITE_FIREBASE_APP_ID=
 
-# ── Nuevas variables de Admin y Piloto ─────────────────────────────
-
-# Clave para entrar al panel /admin — solo tú la sabes
-# Ponla en Vercel → Environment Variables
-# Ej: VITE_ADMIN_KEY=lumajira2024admin
-VITE_ADMIN_KEY=
-
-# Contraseña por defecto para agricultores creados desde el admin
-# Cuando creas un usuario manualmente y no le asignas contraseña
-# usa esta. El agricultor puede cambiarla después.
-# Ej: VITE_PILOT_DEFAULT_PASS=agrilux2024
-VITE_PILOT_DEFAULT_PASS=agrilux2024
-
-# Google Drive (para exportar dataset)
-VITE_GOOGLE_CLIENT_ID=
+# ---------------------------------------------------------------------------
+# Integraciones planificadas/no activas por defecto
+# ---------------------------------------------------------------------------
+VITE_CULQI_PUBLIC_KEY=
+CULQI_SECRET_KEY=
+VITE_MP_PUBLIC_KEY=
+MP_ACCESS_TOKEN=

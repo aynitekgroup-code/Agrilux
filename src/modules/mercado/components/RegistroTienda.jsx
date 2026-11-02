@@ -1,5 +1,5 @@
 /**
- * src/components/RegistroTienda.jsx
+ * src/modules/mercado/components/RegistroTienda.jsx
  *
  * Formulario para que usuarios registren su tienda agrícola
  * Se almacena en Supabase tabla 'tiendas_comunidad'
@@ -7,8 +7,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../lib/AuthContext';
+import { supabase } from '../../../lib/supabase';
+import { useAuth } from '../../../lib/AuthContext';
 import {
   Store, MapPin, Globe, Camera, Image as ImageIcon,
   CheckCircle, Loader2, X, ChevronDown, Lock, Trash2,

@@ -1,4 +1,4 @@
-// src/pages/diagnostico/diagnosticoPrompts.js
+// src/modules/diagnostico/diagnosticoPrompts.js
 
 export const SISTEMA_PROMPT = {
   papa: `Eres PlaguIA, asistente agrónomo especializado en el cultivo de papa (Solanum tuberosum) para agricultores peruanos.

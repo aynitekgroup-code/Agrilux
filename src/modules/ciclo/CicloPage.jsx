@@ -5,15 +5,15 @@ import {
   Cloud, Droplets, Thermometer, Wind, AlertTriangle,
   Volume2, VolumeX, Info,
 } from 'lucide-react';
-import { useAuth } from '../lib/AuthContext';
-import { useAgentes } from '../lib/AgentContext';
-import { CULTIVOS } from '../lib/constants';
-import { supabase } from '../lib/supabase';
-import { getWeather, getSoilData, getCicloRecomendaciones, getPronosticoSENAMHI } from '../lib/externalApis';
-import { invokeGemini } from '../lib/gemini';
-import TimelineEtapa from '../components/TimelineEtapa';
-import BuscadorInsumos from '../components/BuscadorInsumos';
-import { getResumenProblemas } from '../lib/learningSystem';
+import { useAuth } from '../../lib/AuthContext';
+import { useAgentes } from '../../lib/AgentContext';
+import { CULTIVOS } from '../../lib/constants';
+import { supabase } from '../../lib/supabase';
+import { getWeather, getSoilData, getCicloRecomendaciones, getPronosticoSENAMHI } from './cicloService';
+import { invokeGemini } from '../../lib/gemini';
+import TimelineEtapa from './components/TimelineEtapa';
+import BuscadorInsumos from '../../components/BuscadorInsumos';
+import { getResumenProblemas } from '../../lib/learningSystem';
 
 function diasDesdeSiembra(fecha) {
   if (!fecha) return 0;

@@ -3,8 +3,8 @@
  * (pantallas 3, 4 y calendario de Parcela empresas)
  */
 import React, { useState, useMemo } from 'react';
-import { TIPOS_LABOR, iniciales, exportarCSV } from '../../lib/empresaApi';
-import { isOnline } from '../../lib/offlineStorage';
+import { TIPOS_LABOR, iniciales, exportarCSV } from '../../../lib/empresaApi';
+import { isOnline } from '../../../lib/offlineStorage';
 
 const fmtFecha = (f) => { try { return new Date(f + 'T12:00:00').toLocaleDateString('es-PE', { day: 'numeric', month: 'short' }); } catch { return f; } };
 

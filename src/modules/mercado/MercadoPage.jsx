@@ -5,13 +5,12 @@ import {
   MessageCircle, ExternalLink, ShoppingBag, Trash2, AlertTriangle, Pencil,
   Bot, Search, Zap, Globe, ChevronDown, ChevronUp,
 } from 'lucide-react';
-import { useAgentes } from '../lib/AgentContext';
-import { useAuth } from '../lib/AuthContext';
-import { cargarOfertasRegistradas } from '../lib/ofertasRegistradas';
-import { ejecutarAgentes, cargarOfertasAgentesLocal, onAgentUpdate } from '../lib/agents/agentRunner';
-import VoiceAssistant from '../components/VoiceAssistant';
-import RegistroTienda from '../components/RegistroTienda';
-import { supabase } from '../lib/supabase';
+import { useAgentes } from '../../lib/AgentContext';
+import { useAuth } from '../../lib/AuthContext';
+import { cargarOfertasRegistradas } from './mercadoService';
+import { ejecutarAgentes, cargarOfertasAgentesLocal, onAgentUpdate } from './mercadoService';
+import { VoiceAssistant, RegistroTienda } from './components';
+import { supabase } from '../../lib/supabase';
 
 const FILTROS_REGION = ['todas', 'cajamarca', 'lambayeque', 'piura', 'ica', 'junín'];
 const FUENTES_AGENTE = ['todas', 'Fertilizantes', 'Fumigadoras', 'Herramientas', 'Maquinaria', 'Riego', 'Tecnología', 'Semillas', 'Protección'];

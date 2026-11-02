@@ -2,7 +2,7 @@
  * Cosecha y costos + Equipo y reportes (pantallas 5 y 6 de Parcela empresas)
  */
 import React, { useState } from 'react';
-import { CATEGORIAS_GASTO, iniciales, exportarCSV, ROLES } from '../../lib/empresaApi';
+import { CATEGORIAS_GASTO, iniciales, exportarCSV, ROLES } from '../../../lib/empresaApi';
 
 const fmt = (n) => (Number(n) || 0).toLocaleString('es-PE', { maximumFractionDigits: 0 });
 const CAT_LABEL = { insumos: 'Insumos', mano_obra: 'Mano de obra', riego: 'Riego', maquinaria: 'Maquinaria', otros: 'Otros' };

@@ -1,5 +1,5 @@
 /**
- * src/components/GraficosCultivo.jsx
+ * src/modules/parcela/components/GraficosCultivo.jsx
  * Gráficos estadísticos del monitoreo de cultivos
  */
 import React from 'react';

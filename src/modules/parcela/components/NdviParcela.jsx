@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
-import { getSentinelNDVI } from '../lib/externalApis';
-import IndicesSatelitalesPanel from './IndicesSatelitalesPanel';
+import { getSentinelNDVI } from '../../../lib/externalApis';
+import IndicesSatelitalesPanel from '../../../components/IndicesSatelitalesPanel';
 
 export default function NdviParcela({ lat, lon, cultivo, nombre, diasDesdeSiembra = 0, parcelaId = '', coordenadas = null }) {
   const [ndviData, setNdviData] = useState(null);

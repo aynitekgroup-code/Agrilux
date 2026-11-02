@@ -7,12 +7,12 @@ import SelectorUbicacion from './components/SelectorUbicacion';
 import Registro from './pages/Registro';
 import { Clock, Mail, LogOut } from 'lucide-react';
 
-const Diagnostico = lazy(() => import('./pages/Diagnostico'));
-const MiParcela = lazy(() => import('./pages/MiParcela'));
-const CicloCultivo = lazy(() => import('./pages/CicloCultivo'));
-const Gestion = lazy(() => import('./pages/Gestion'));
-const SaludFinanciera = lazy(() => import('./pages/SaludFinanciera'));
-const MercadoPage = lazy(() => import('./pages/MercadoPage'));
+const Diagnostico = lazy(() => import('./modules/diagnostico/DiagnosticoPage'));
+const MiParcela = lazy(() => import('./modules/parcela/ParcelaPage'));
+const CicloCultivo = lazy(() => import('./modules/ciclo/CicloPage'));
+const Gestion = lazy(() => import('./modules/gestion/GestionPage'));
+const SaludFinanciera = lazy(() => import('./modules/gestion/SaludFinancieraPage'));
+const MercadoPage = lazy(() => import('./modules/mercado/MercadoPage'));
 const Admin = lazy(() => import('./pages/Admin'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
 const Descargar = lazy(() => import('./pages/Descargar'));

@@ -1,19 +1,25 @@
 /**
- * src/pages/ParcelaEmpresas.jsx
+ * src/modules/parcela/ParcelaEmpresas.jsx
  * Sección Parcela EMPRESAS: Panel, Lotes, Bitácora, Tareas,
  * Calendario, Cosecha y Equipo. Lee/escribe Supabase directo.
  */
 import React, { useState, useEffect, useMemo } from 'react';
-import { useAuth } from '../lib/AuthContext';
-import { isOnline } from '../lib/offlineStorage';
+import { useAuth } from '../../lib/AuthContext';
+import { isOnline } from '../../lib/offlineStorage';
 import {
   DEMO, listarEmpresas, crearEmpresa, cargarTodoEmpresa,
   crearFundo, crearLote, crearLabor, crearTarea, crearCosecha,
   crearGasto, invitarMiembro, actualizarTarea, calcularKPIs,
-} from '../lib/empresaApi';
-import { PanelCampana, LoteDetalle } from '../components/empresa/PanelLote';
-import { Bitacora, TareasEquipo, CalendarioEmpresa } from '../components/empresa/BitacoraTareas';
-import { CosechaCostos, EquipoReportes } from '../components/empresa/CosechaEquipo';
+} from '../../lib/empresaApi';
+import {
+  PanelCampana,
+  LoteDetalle,
+  Bitacora,
+  TareasEquipo,
+  CalendarioEmpresa,
+  CosechaCostos,
+  EquipoReportes,
+} from './components';
 
 const TABS = [
   { id: 'panel', label: 'Panel' },

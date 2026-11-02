@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Polygon, useMap, useMapEvents } from 'react-leaflet';
 import { X, Undo2, Check, Upload, Locate } from 'lucide-react';
-import { importarKmzKml } from '../lib/importKmz';
+import { importarKmzKml } from '../../../lib/importKmz';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 

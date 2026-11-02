@@ -4,9 +4,9 @@ import {
   Mic, MicOff, Volume2, VolumeX,
   Sparkles, X, MapPin, Upload, MapPinOff, ChevronDown, Navigation, Plus, ArrowRight
 } from 'lucide-react';
-import { useAuth }       from '../lib/AuthContext';
-import { useAgentes }    from '../lib/AgentContext';
-import { invokeGemini }  from '../lib/gemini';
+import { useAuth }       from '../../lib/AuthContext';
+import { useAgentes }    from '../../lib/AgentContext';
+import { invokeGemini }  from '../../lib/gemini';
 import {
   geocodePlace,
   getWeather,
@@ -15,9 +15,9 @@ import {
   getNasaAlerts,
   getSentinelNDVI,
   getPronosticoSENAMHI,
-} from '../lib/externalApis';
-import { CULTIVOS }      from '../lib/constants';
-import { supabase }      from '../lib/supabase';
+} from './diagnosticoService';
+import { CULTIVOS }      from '../../lib/constants';
+import { supabase }      from '../../lib/supabase';
 import { Capacitor } from '@capacitor/core';
 
 // Helper: obtiene SpeechRecognition nativo solo en Android (evita romper web)
@@ -35,18 +35,20 @@ const getNativeSR = async () => {
 };
 
 import DOMPurify from 'dompurify';
-import { SISTEMA_PROMPT, CHAT_SYSTEM, ANALISIS_SCHEMA } from './diagnostico/diagnosticoPrompts';
-import SelectorUbicacion  from '../components/SelectorUbicacion';
-import VoiceAssistant     from '../components/VoiceAssistant';
-import BuscadorInsumos    from '../components/BuscadorInsumos';
-import IndicesSatelitalesPanel from '../components/IndicesSatelitalesPanel';
-import { isOnline, guardarDiagnosticoOffline, guardarClima, obtenerClimaCacheado } from '../lib/offlineStorage';
+import { SISTEMA_PROMPT, CHAT_SYSTEM, ANALISIS_SCHEMA } from './diagnosticoPrompts';
+import {
+  SelectorUbicacion,
+  VoiceAssistant,
+  BuscadorInsumos,
+  IndicesSatelitalesPanel,
+} from './components';
+import { isOnline, guardarDiagnosticoOffline, guardarClima, obtenerClimaCacheado } from '../../lib/offlineStorage';
 import { 
   guardarHistorialClinico, 
   calificarDiagnostico, 
   getContextoHistorial,
   getResumenProblemas 
-} from '../lib/learningSystem';
+} from '../../lib/learningSystem';
 
 const COLOR_HEADER = {
   critica:  'bg-red-700',
