@@ -11,8 +11,6 @@ const Diagnostico = lazy(() => import('./modules/diagnostico/DiagnosticoPage'));
 const MiParcela = lazy(() => import('./modules/parcela/ParcelaPage'));
 const CicloCultivo = lazy(() => import('./modules/ciclo/CicloPage'));
 const Gestion = lazy(() => import('./modules/gestion/GestionPage'));
-const SaludFinanciera = lazy(() => import('./modules/gestion/SaludFinancieraPage'));
-const MercadoPage = lazy(() => import('./modules/mercado/MercadoPage'));
 const Admin = lazy(() => import('./pages/admin/Admin'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
 const Descargar = lazy(() => import('./pages/Descargar'));
@@ -169,14 +167,12 @@ function AppRoutes() {
             <Route path="/gestion" element={
               user && isAprobado ? <Gestion /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />
-            <Route path="/gestion/finanzas" element={
-              user && isAprobado ? <SaludFinanciera /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
-            } />
+            <Route path="/gestion/finanzas" element={<Navigate to="/gestion" replace />} />
 
-            {/* Mercado — ofertas + agente + mi tienda */}
-            <Route path="/mercado" element={<MercadoPage />} />
-            <Route path="/ofertas" element={<Navigate to="/mercado" replace />} />
-            <Route path="/voz" element={<Navigate to="/mercado?tab=agente" replace />} />
+            {/* Mercado desactivado: las rutas antiguas vuelven al diagnóstico */}
+            <Route path="/mercado" element={<Navigate to="/" replace />} />
+            <Route path="/ofertas" element={<Navigate to="/" replace />} />
+            <Route path="/voz" element={<Navigate to="/" replace />} />
 
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

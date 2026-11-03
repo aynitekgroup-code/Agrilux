@@ -1,10 +1,9 @@
 import React from 'react';
-import { Beaker, CalendarCheck, ChevronRight, CircleDollarSign, Leaf, Package, Plus, Tractor } from 'lucide-react';
+import { Beaker, CalendarCheck, ChevronRight, Leaf, Package, Plus, Tractor } from 'lucide-react';
 
 const acciones = [
   { titulo: 'Mis parcelas', descripcion: 'Consulta tus cultivos, lotes y condiciones de campo.', icon: Leaf, color: 'bg-emerald-100 text-emerald-700', ruta: '/parcela' },
   { titulo: 'Planificar ciclo', descripcion: 'Organiza las actividades de tu campaña agrícola.', icon: CalendarCheck, color: 'bg-blue-100 text-blue-700', ruta: '/ciclo' },
-  { titulo: 'Salud financiera', descripcion: 'Monitorea tus costos de producción y ventas.', icon: CircleDollarSign, color: 'bg-amber-100 text-amber-700', ruta: '/gestion/finanzas' },
   { titulo: 'Gestión de Riego & IoT', descripcion: 'Monitoreo de sectores, electroválvulas y m³.', icon: Beaker, color: 'bg-cyan-100 text-cyan-700', estado: 'En turno' },
   { titulo: 'Maquinaria y Equipos', descripcion: 'Tractores, bombas, horómetro y mantenimientos.', icon: Tractor, color: 'bg-orange-100 text-orange-700' },
   { titulo: 'Inventario de Insumos', descripcion: 'Fertilizantes, agroquímicos, kardex y stock.', icon: Package, color: 'bg-violet-100 text-violet-700', estado: '1 crítico' },

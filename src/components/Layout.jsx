@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, Leaf, Calendar, Store, ClipboardList, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle, Download, BookOpen, Trash2 } from 'lucide-react';
+import { Camera, Leaf, Calendar, ClipboardList, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle, Download, BookOpen, Trash2 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
 import SelectorUbicacion from './SelectorUbicacion';
@@ -12,7 +12,6 @@ const navItems = [
   { path: '/ciclo',   icon: Calendar, label: 'Ciclo' },
   { path: '/parcela', icon: Leaf,    label: 'Parcela' },
   { path: '/gestion', icon: ClipboardList, label: 'Gestión' },
-  { path: '/mercado', icon: Store,   label: 'Mercado' },
 ];
 
 export default function Layout({ children }) {
@@ -108,15 +107,6 @@ export default function Layout({ children }) {
               />
             )}
           </div>
-          {user?.ubicacion && (
-            <button onClick={() => setMostrarUbicacion(true)}
-              className="flex items-center gap-1 text-xs text-primary bg-primary/5 px-2 py-1 rounded-full hover:bg-primary/10 transition-colors shrink-0">
-              <MapPin size={12} />
-              <span className="truncate max-w-[120px]">
-                {user?.coords?.lat ? `${user.coords.lat.toFixed(4)}, ${user.coords.lon.toFixed(4)}` : user.ubicacion.split(',')[0]}
-              </span>
-            </button>
-          )}
         </div>
         <div className="relative flex items-center gap-1">
           <button
@@ -147,12 +137,6 @@ export default function Layout({ children }) {
                 className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg">
                 <MapPin size={18} />
                 Cambiar ubicación
-              </button>
-              <button
-                onClick={() => { setMenuOpen(false); navigate('/mercado?tab=mitienda'); }}
-                className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-green-50 hover:text-green-700 transition-colors text-sm font-medium rounded-lg">
-                <Store size={18} />
-                Mi tienda / Ofertas
               </button>
               <button
                 onClick={() => { setMenuOpen(false); navigate('/descargar'); }}
