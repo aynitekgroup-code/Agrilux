@@ -38,6 +38,13 @@ body {
   background-attachment: fixed;
 }
 
+@media (min-width: 768px) {
+  body {
+    max-width: none;
+    margin: 0;
+  }
+}
+
 body::before {
   content: '';
   position: fixed;

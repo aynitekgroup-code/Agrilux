@@ -2,10 +2,26 @@ import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { AgentProvider } from './lib/AgentContext';
-import Layout from './components/Layout';
+import { useExperienceType } from './lib/useExperienceType';
+import WebLayout from './components/layout/WebLayout';
+import MobileLayout from './components/layout/MobileLayout';
 import SelectorUbicacion from './components/SelectorUbicacion';
 import Registro from './pages/Registro';
 import { Clock, Mail, LogOut } from 'lucide-react';
+
+/**
+ * ExperienceLayout — elige el layout según el entorno detectado.
+ * WebLayout (escritorio) o MobileLayout (PWA/Capacitor/móvil).
+ * No participa en auth ni permisos: solo presentación.
+ */
+function ExperienceLayout({ children }) {
+  const experience = useExperienceType();
+  return experience === 'mobile' ? (
+    <MobileLayout>{children}</MobileLayout>
+  ) : (
+    <WebLayout>{children}</WebLayout>
+  );
+}
 
 const Diagnostico = lazy(() => import('./modules/diagnostico/DiagnosticoPage'));
 const MiParcela = lazy(() => import('./modules/parcela/ParcelaPage'));
@@ -148,7 +164,7 @@ function AppRoutes() {
         } />
 
       <Route path="*" element={
-        <Layout>
+        <ExperienceLayout>
           <Routes>
             {/* Diagnóstico — siempre accesible */}
             <Route path="/" element={<Diagnostico onPlagaDetectada={setPlagaDetectada} />} />
@@ -176,7 +192,7 @@ function AppRoutes() {
 
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
-        </Layout>
+        </ExperienceLayout>
       } />
       </Routes>
     </Suspense>

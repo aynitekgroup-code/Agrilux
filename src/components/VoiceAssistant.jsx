@@ -42,6 +42,10 @@ export default function VoiceAssistant({
   const soportaVoz = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
 
   const recognitionRef = useRef(null);
+  const reconocimientoWebRef = useRef(null);
+  const vozWebActivaRef = useRef(false);
+  const reinicioWebRef = useRef(null);
+  const escuchandoRef = useRef(false);
 
   useEffect(() => {
     if (coords?.lat && coords?.lon) {
@@ -125,13 +129,89 @@ export default function VoiceAssistant({
 
   const iniciarEscucha = useCallback(async () => {
     // Toggle: si ya está escuchando, detiene y sale
-    if (escuchando) {
+    if (escuchandoRef.current) {
       await detenerEscucha();
       return;
     }
+    const esNativo = Capacitor.isNativePlatform();
+
+    if (!esNativo && soportaVoz) {
+      const SpeechRecognitionWeb = window.SpeechRecognition || window.webkitSpeechRecognition;
+      vozWebActivaRef.current = true;
+      setError('');
+      setTranscripcion('');
+      escuchandoRef.current = true;
+      setEscuchando(true);
+
+      const iniciarReconocimientoWeb = () => {
+        if (!vozWebActivaRef.current) return;
+        const reconocimiento = new SpeechRecognitionWeb();
+        reconocimiento.lang = 'es-PE';
+        reconocimiento.continuous = true;
+        reconocimiento.interimResults = true;
+        reconocimiento.maxAlternatives = 3;
+        reconocimientoWebRef.current = reconocimiento;
+
+        reconocimiento.onresult = (event) => {
+          const resultadoActual = event.results[event.results.length - 1];
+          const texto = resultadoActual?.[0]?.transcript?.trim() || '';
+          if (!texto) return;
+          setTranscripcion(texto);
+
+          if (resultadoActual.isFinal) {
+            const nuevoHistorial = [...historial, { rol: 'usuario', texto }];
+            setHistorial(nuevoHistorial);
+            enviarAI(texto, nuevoHistorial);
+          }
+        };
+
+        reconocimiento.onerror = (event) => {
+          const erroresDefinitivos = ['not-allowed', 'service-not-allowed', 'audio-capture'];
+          if (erroresDefinitivos.includes(event.error)) {
+            vozWebActivaRef.current = false;
+            reconocimientoWebRef.current = null;
+            escuchandoRef.current = false;
+            setEscuchando(false);
+            const mensajes = {
+              'not-allowed': 'Permiso de micrófono denegado. Habilítalo en la configuración del navegador.',
+              'service-not-allowed': 'El navegador no permite el reconocimiento de voz en este sitio.',
+              'audio-capture': 'No se encontró un micrófono disponible.',
+            };
+            setError(mensajes[event.error]);
+          }
+        };
+
+        reconocimiento.onend = () => {
+          reconocimientoWebRef.current = null;
+          if (vozWebActivaRef.current) {
+            reinicioWebRef.current = window.setTimeout(iniciarReconocimientoWeb, 150);
+          } else {
+            escuchandoRef.current = false;
+            setEscuchando(false);
+          }
+        };
+
+        try {
+          reconocimiento.start();
+        } catch (e) {
+          reconocimientoWebRef.current = null;
+          if (vozWebActivaRef.current) {
+            reinicioWebRef.current = window.setTimeout(iniciarReconocimientoWeb, 300);
+          } else {
+            escuchandoRef.current = false;
+            setEscuchando(false);
+            setError(`No se pudo iniciar el micrófono: ${e.message || 'intenta de nuevo.'}`);
+          }
+        }
+      };
+
+      iniciarReconocimientoWeb();
+      return;
+    }
+
     if (!SpeechRecognition) {
       // Reintento de carga tardía (por si el import dinámico aún no terminó)
-      if (Capacitor.isNativePlatform()) {
+      if (esNativo) {
         try {
           const mod = await import('@capacitor-community/speech-recognition');
           SpeechRecognition = mod.SpeechRecognition;
@@ -139,7 +219,7 @@ export default function VoiceAssistant({
       }
     }
     if (!SpeechRecognition) {
-      setError('Reconocimiento de voz solo disponible en app nativa Android');
+      setError('Reconocimiento de voz no disponible en este navegador. Puedes escribir tu pregunta.');
       return;
     }
     try {
@@ -147,6 +227,7 @@ export default function VoiceAssistant({
       if (!available) { setError('Reconocimiento de voz no disponible (available=false). Activa “Speech Services by Google”.'); return; }
       await SpeechRecognition.requestPermissions();
       setEscuchando(true);
+      escuchandoRef.current = true;
       setTranscripcion('');
       const result = await SpeechRecognition.start({
         language: 'es-PE',
@@ -156,6 +237,7 @@ export default function VoiceAssistant({
         partialResults: false,
       });
       setEscuchando(false);
+      escuchandoRef.current = false;
       const finalText = (result.matches || []).find((m) => m && m.trim())?.trim() || '';
       if (finalText) {
         setTranscripcion(finalText);
@@ -168,17 +250,31 @@ export default function VoiceAssistant({
     } catch (e) {
       try { await SpeechRecognition?.stop?.(); } catch {}
       setEscuchando(false);
+      escuchandoRef.current = false;
       console.warn('[Voz] start falló:', e);
       const msg = String(e?.message || '');
       const code = String(e?.code || '');
       if (code === 'permission' || /permission|denied|RECORD_AUDIO/i.test(msg)) setError('Permiso de micrófono denegado');
       else setError(`Error de voz. Intenta de nuevo. (diag: ${code || 'sin-code'} ${msg.slice(0, 120)})`);
     }
-  }, [historial, enviarAI]);
+  }, [historial, enviarAI, soportaVoz]);
 
   const detenerEscucha = useCallback(async () => {
     // Fuerza el estado a false INMEDIATAMENTE para UI responsiva
     setEscuchando(false);
+    escuchandoRef.current = false;
+
+    vozWebActivaRef.current = false;
+    if (reinicioWebRef.current) {
+      window.clearTimeout(reinicioWebRef.current);
+      reinicioWebRef.current = null;
+    }
+
+    if (reconocimientoWebRef.current) {
+      reconocimientoWebRef.current.stop();
+      reconocimientoWebRef.current = null;
+      return;
+    }
     
     if (!SpeechRecognition) return;
     
@@ -226,11 +322,16 @@ export default function VoiceAssistant({
   // Limpieza al desmontar o si se deshabilita
   useEffect(() => {
     return () => {
+      vozWebActivaRef.current = false;
+      escuchandoRef.current = false;
+      if (reinicioWebRef.current) window.clearTimeout(reinicioWebRef.current);
+      reconocimientoWebRef.current?.abort();
+      reconocimientoWebRef.current = null;
       if (SpeechRecognition && escuchando) {
         SpeechRecognition.stop().catch(() => {});
       }
     };
-  }, [escuchando, disabled]);
+  }, [disabled]);
 
   if (disabled) {
     if (escuchando) setEscuchando(false);
@@ -262,7 +363,7 @@ export default function VoiceAssistant({
         <div className="flex flex-col items-center gap-3 py-2">
           <button
             onClick={escuchando ? detenerEscucha : iniciarEscucha}
-            disabled={procesando}
+            disabled={procesando && !escuchandoRef.current}
             className={`
               w-20 h-20 rounded-full shadow-lg flex items-center justify-center
               transition-all duration-200 active:scale-95
@@ -343,7 +444,7 @@ export default function VoiceAssistant({
         {/* Micrófono grande */}
         <button
           onClick={escuchando ? detenerEscucha : iniciarEscucha}
-          disabled={procesando}
+          disabled={procesando && !escuchandoRef.current}
           className={`
             w-24 h-24 rounded-full shadow-xl flex items-center justify-center
             transition-all duration-200 active:scale-95
@@ -401,7 +502,7 @@ export default function VoiceAssistant({
     <div className="fixed bottom-24 right-4 z-50 flex flex-col items-end gap-2">
       <button
         onClick={escuchando ? detenerEscucha : iniciarEscucha}
-        disabled={procesando}
+        disabled={procesando && !escuchandoRef.current}
         className={`
           w-16 h-16 rounded-full shadow-xl flex items-center justify-center
           transition-all duration-200 active:scale-95
