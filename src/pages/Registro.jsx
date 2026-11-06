@@ -17,12 +17,14 @@ const ERRORES = {
   'auth/email-already-in-use':     'Este correo ya está registrado.',
   'auth/invalid-email':            'El correo no es válido.',
   'auth/weak-password':            'La contraseña debe tener al menos 6 caracteres.',
-  'auth/invalid-credential':       'Correo o contraseña incorrectos.',
+  'auth/invalid-credential':       'Correo o contraseña incorrectos. Si no tienes cuenta, regístrate en "Crear cuenta".',
   'auth/too-many-requests':        'Demasiados intentos.',
-  'auth/user-not-found':           'No existe una cuenta con ese correo.',
+  'auth/user-not-found':           'Tu cuenta no está registrada. Regístrate primero en "Crear cuenta".',
   'auth/wrong-password':           'Contraseña incorrecta.',
   'auth/network-request-failed':   'Error de conexión.',
   'auth/operation-not-allowed':    'Este método no está habilitado.',
+  'over_email_send_rate_limit':    'Has solicitado demasiados correos. Espera unos minutos antes de intentar de nuevo.',
+  email_not_confirmed:             'Tu correo aún no está confirmado. Revisa tu bandeja de entrada o spam, o reenvía el enlace de confirmación.',
 };
 
 function msgError(code) {
@@ -30,7 +32,7 @@ function msgError(code) {
 }
 
 export default function Registro() {
-  const { register, login, user } = useAuth();
+  const { register, login, resendConfirmation, user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '/';
@@ -45,6 +47,10 @@ export default function Registro() {
   const [showPass, setShowPass]   = useState(false);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState('');
+  const [errorCode, setErrorCode] = useState('');
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendInfo, setResendInfo] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [detectandoGPS, setDetectandoGPS] = useState(false);
   const [coords, setCoords]       = useState(null);
   const [resetSent, setResetSent] = useState(false);
@@ -63,13 +69,22 @@ export default function Registro() {
   }, [searchParams]);
 
   useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setInterval(() => {
+        setResendCooldown(prev => prev - 1);
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [resendCooldown]);
+
+  useEffect(() => {
     if (!user?.uid) return;
     if (resetMode && !resetSuccess) return;
     navigate(redirectTo, { replace: true });
   }, [user?.uid, navigate, redirectTo, resetMode, resetSuccess]);
 
   const cambiarModo = (m) => {
-    setModo(m); setError('');
+    setModo(m); setError(''); setErrorCode(''); setResendInfo('');
     setNombre(''); setWhatsapp(''); setEmail(''); setUbicacion(''); setPassword(''); setCoords(null);
     setResetSent(false); setResetError('');
   };
@@ -95,6 +110,24 @@ export default function Registro() {
       );
     } finally {
       setResetLoading(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    if (!email.trim()) {
+      setError('Ingresa tu correo electrónico para reenviar la confirmación.');
+      return;
+    }
+    setResendLoading(true);
+    setResendInfo('');
+    try {
+      await resendConfirmation(email);
+      setResendInfo('Correo reenviado. Revisa tu bandeja de entrada y la carpeta de spam.');
+      setResendCooldown(60);
+    } catch (e) {
+      setError(e.code ? msgError(e.code) : (e.message || 'No se pudo reenviar el correo.'));
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -150,6 +183,8 @@ export default function Registro() {
 
   const handleSubmit = async () => {
     setError('');
+    setErrorCode('');
+    setResendInfo('');
 
     if (submittingRef.current) return;
     submittingRef.current = true;
@@ -177,7 +212,17 @@ export default function Registro() {
       }
     } catch (e) {
       console.error('Auth error:', e.code, e.message);
-      setError(msgError(e.code));
+      const code = e.code || '';
+      setErrorCode(code);
+      if (code === 'email_not_confirmed') {
+        setError(
+          modo === 'registro'
+            ? 'Tu cuenta fue creada. Revisa tu correo electrónico y confirma el enlace para poder iniciar sesión.'
+            : msgError(code)
+        );
+      } else {
+        setError(msgError(code));
+      }
     } finally {
       setLoading(false);
       submittingRef.current = false;
@@ -272,8 +317,32 @@ export default function Registro() {
 
             <div className="bg-white rounded-3xl shadow-xl p-6 space-y-4">
               {error && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-3">
-                  <p className="text-red-600 text-sm">{error}</p>
+                <div
+                  className={`rounded-xl border p-3 ${
+                    errorCode === 'email_not_confirmed'
+                      ? 'border-amber-200 bg-amber-50'
+                      : 'border-red-200 bg-red-50'
+                  }`}
+                >
+                  <p className={`text-sm ${errorCode === 'email_not_confirmed' ? 'text-amber-800' : 'text-red-600'}`}>
+                    {error}
+                  </p>
+                  {errorCode === 'email_not_confirmed' ? (
+                    <div className="mt-2">
+                      {resendInfo ? (
+                        <p className="text-xs font-semibold text-emerald-700">{resendInfo}</p>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleResendConfirmation}
+                          disabled={resendLoading || resendCooldown > 0}
+                          className="text-xs font-bold text-amber-900 underline disabled:opacity-50"
+                        >
+                          {resendLoading ? 'Reenviando...' : resendCooldown > 0 ? `Reenviar en ${resendCooldown}s` : 'Reenviar correo de confirmación'}
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               )}
 

@@ -120,18 +120,34 @@ export const AuthProvider = ({ children }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── Registro: status = 'aprobado' (acceso inmediato) ──────
+  // ── Registro: requiere sesión real (o confirmación de correo) ─────────────
   const register = async ({ nombre, email, password, ubicacion, coords, whatsapp }) => {
     const whatsappNormalizado = normalizarWhatsapp(whatsapp);
     const emailNorm = email.trim().toLowerCase();
+    const emailRedirectTo = typeof window !== 'undefined' ? `${window.location.origin}/` : undefined;
     const { data, error } = await supabase.auth.signUp({
       email: emailNorm,
       password,
-      options: { data: { nombre: nombre.trim() } }
+      options: {
+        data: { nombre: nombre.trim() },
+        ...(emailRedirectTo ? { emailRedirectTo } : {}),
+      },
     });
     if (error) throw error;
     const uid = data.user?.id;
     if (!uid) throw new Error('No se pudo crear el usuario');
+
+    // Si Supabase exige confirmar el correo, no hay sesión todavía.
+    // No se debe marcar al usuario como autenticado localmente.
+    if (!data.session) {
+      const confirmError = new Error(
+        'Tu cuenta fue creada. Revisa tu correo electrónico y confirma el enlace para poder iniciar sesión.'
+      );
+      confirmError.code = 'email_not_confirmed';
+      confirmError.email = emailNorm;
+      throw confirmError;
+    }
+
     const perfil = {
       id: uid,
       nombre: nombre.trim(),
@@ -143,7 +159,10 @@ export const AuthProvider = ({ children }) => {
       status: 'aprobado',
       creado_por: 'self',
     };
-    await supabase.from('usuarios').insert(perfil);
+    const { error: perfilError } = await supabase.from('usuarios').insert(perfil);
+    if (perfilError) {
+      console.warn('No se pudo crear el perfil en usuarios:', perfilError.message);
+    }
     setUser({
       id: uid,
       uid,
@@ -166,7 +185,46 @@ export const AuthProvider = ({ children }) => {
       password,
     });
     if (error) throw error;
+
+    // Si el usuario se registró con confirmación de correo pendiente, el perfil
+    // no pudo insertarse en el registro. Se repara aquí, ya con sesión activa.
+    const authUser = data.user;
+    if (authUser) {
+      const { data: perfil, error: perfilError } = await supabase
+        .from('usuarios')
+        .select('id')
+        .eq('id', authUser.id)
+        .maybeSingle();
+
+      if (!perfilError && !perfil) {
+        const { error: insertError } = await supabase.from('usuarios').insert({
+          id: authUser.id,
+          nombre: authUser.user_metadata?.nombre || authUser.email?.split('@')[0] || 'Usuario Agrilux',
+          email: authUser.email,
+          rol: 'agricultor',
+          status: 'aprobado',
+          creado_por: 'self',
+        });
+        if (insertError) {
+          console.warn('No se pudo reparar el perfil en usuarios:', insertError.message);
+        }
+      }
+    }
+
     return data.user;
+  };
+
+  // ── Reenvío de correo de confirmación ──────────────────────────────────────
+  const resendConfirmation = async (email) => {
+    const emailNorm = String(email || '').trim().toLowerCase();
+    if (!emailNorm) throw new Error('Ingresa tu correo electrónico.');
+    const emailRedirectTo = typeof window !== 'undefined' ? `${window.location.origin}/` : undefined;
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: emailNorm,
+      ...(emailRedirectTo ? { options: { emailRedirectTo } } : {}),
+    });
+    if (error) throw error;
   };
 
   const updateUbicacion = async (ubicacion, coords = null) => {
@@ -245,7 +303,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, register, login, logout, updateUbicacion, updatePerfil, isAprobado, empresa_activa_id, empresas_disponibles, setEmpresaActiva }}>
+    <AuthContext.Provider value={{ user, loading, register, login, logout, resendConfirmation, updateUbicacion, updatePerfil, isAprobado, empresa_activa_id, empresas_disponibles, setEmpresaActiva }}>
       {children}
     </AuthContext.Provider>
   );
