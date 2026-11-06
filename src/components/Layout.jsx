@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, Leaf, Calendar, ClipboardList, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle, Download, BookOpen, Trash2 } from 'lucide-react';
+import { Camera, Leaf, Calendar, ClipboardList, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle, Download, BookOpen, Trash2, Users, Building } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
 import SelectorUbicacion from './SelectorUbicacion';
@@ -17,7 +17,7 @@ const navItems = [
 export default function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, empresa_activa_id, empresas_disponibles, setEmpresaActiva } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mostrarUbicacion, setMostrarUbicacion] = useState(false);
   const [adminModal, setAdminModal] = useState(false);
@@ -138,6 +138,32 @@ export default function Layout({ children }) {
                 <MapPin size={18} />
                 Cambiar ubicación
               </button>
+              {user && (
+                <>
+                  <div className="border-t border-gray-100 pt-3 mb-2"></div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 px-4">Empresa</h3>
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      navigate('/empresa/miembros');
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg"
+                  >
+                    <Users size={18} />
+                    Miembros de empresa
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      navigate('/empresa/plan');
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg"
+                  >
+                    <Shield size={18} />
+                    Mi membresía
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => { setMenuOpen(false); navigate('/descargar'); }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg">

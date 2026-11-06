@@ -233,8 +233,6 @@ function LoginAdmin({ onAcceso }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 function ModalAgregarUsuario({ onCerrar, onAgregado }) {
   const [form, setForm]   = useState({ nombre: '', rol: 'agricultor', celular: '', ubicacion: '' });
-  const [pass, setPass]   = useState('agrilux2024');
-  const [verPass, setVer] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError]    = useState('');
 
@@ -252,7 +250,6 @@ function ModalAgregarUsuario({ onCerrar, onAgregado }) {
         rol:            form.rol,
         celular:        form.celular || null,
         ubicacion:      form.ubicacion || null,
-        password_default: pass,
         creado_por:      'admin',
       });
       if (error) throw error;
@@ -304,27 +301,11 @@ function ModalAgregarUsuario({ onCerrar, onAgregado }) {
           </select>
         </div>
 
-        <div>
-          <label className="text-xs font-semibold text-gray-600 block mb-1">Contraseña para el usuario</label>
-          <div className="relative">
-            <input
-              type={verPass ? 'text' : 'password'}
-              value={pass}
-              onChange={e => setPass(e.target.value)}
-              className="w-full border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary pr-10"
-            />
-            <button onClick={() => setVer(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-              {verPass ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
-          <p className="text-xs text-gray-400 mt-1">Dile esta clave al agricultor. Podrá ingresar con su nombre completo.</p>
-        </div>
-
         {form.nombre.trim() && (
           <div className="bg-green-50 rounded-xl p-3">
             <p className="text-xs text-green-700 font-semibold">Vista previa de acceso:</p>
             <p className="text-xs text-green-600 mt-1">Nombre: <strong>{form.nombre}</strong></p>
-            <p className="text-xs text-green-600">Contraseña: <strong>{pass}</strong></p>
+            <p className="text-xs text-green-600">La cuenta deberá activarse mediante Supabase Auth.</p>
           </div>
         )}
 
@@ -1428,15 +1409,6 @@ export default function Admin() {
                             <p className="text-sm font-semibold text-gray-700 truncate">{val}</p>
                           </div>
                         ))}
-                      </div>
-
-                      {/* Credenciales de acceso */}
-                      <div className="bg-blue-50 rounded-xl p-3">
-                        <p className="text-xs font-bold text-blue-600 mb-1">🔑 Datos de acceso (solo tú ves esto)</p>
-                        <p className="text-xs text-blue-700">Nombre: <strong>{u.nombre}</strong></p>
-                        {u.password_default && (
-                          <p className="text-xs text-blue-700 mt-0.5">Contraseña: <strong>{u.password_default}</strong></p>
-                        )}
                       </div>
 
                       <div className="flex gap-2">

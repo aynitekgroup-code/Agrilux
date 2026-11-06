@@ -7,6 +7,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from './supabase';
+import { listarEmpresasDelUsuario, cambiarEmpresaActiva } from './empresaApi';
 
 const AuthContext = createContext();
 
@@ -21,6 +22,8 @@ const normalizarWhatsapp = (valor) => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
+  const [empresa_activa_id, setEmpresaActivaId] = useState(null);
+  const [empresas_disponibles, setEmpresasDisponibles] = useState([]);
 
   const fetchPerfil = async (sessionUser) => {
     if (!sessionUser) return null;
@@ -59,8 +62,22 @@ export const AuthProvider = ({ children }) => {
           ubicacion: perfil?.ubicacion || ubicacionLS || '',
           coords: perfil?.coords || coordsLS || null,
         });
+
+        // Cargar empresas donde el usuario es miembro activo
+        try {
+          const empresas = await listarEmpresasDelUsuario(session.user.id);
+          setEmpresasDisponibles(empresas);
+          // Si no hay empresa activa seleccionada y hay empresas disponibles, seleccionar la primera
+          if (!empresa_activa_id && empresas.length > 0) {
+            setEmpresaActivaId(empresas[0].id);
+          }
+        } catch (e) {
+          console.warn('Error cargando empresas del usuario:', e.message);
+        }
       } else {
         setUser(null);
+        setEmpresasDisponibles([]);
+        setEmpresaActivaId(null);
       }
       setLoading(false);
     });
@@ -81,8 +98,22 @@ export const AuthProvider = ({ children }) => {
           ubicacion: perfil?.ubicacion || ubicacionLS || '',
           coords: perfil?.coords || coordsLS || null,
         });
+
+        // Cargar empresas donde el usuario es miembro activo
+        try {
+          const empresas = await listarEmpresasDelUsuario(session.user.id);
+          setEmpresasDisponibles(empresas);
+          // Si no hay empresa activa seleccionada y hay empresas disponibles, seleccionar la primera
+          if (!empresa_activa_id && empresas.length > 0) {
+            setEmpresaActivaId(empresas[0].id);
+          }
+        } catch (e) {
+          console.warn('Error cargando empresas del usuario:', e.message);
+        }
       } else {
         setUser(null);
+        setEmpresasDisponibles([]);
+        setEmpresaActivaId(null);
       }
       setLoading(false);
     });
@@ -198,8 +229,23 @@ export const AuthProvider = ({ children }) => {
   // Helper: ¿el usuario está aprobado?
   const isAprobado = user?.status === 'aprobado' || user?.rol === 'admin';
 
+  // Cambiar empresa activa (validar membresía)
+  const setEmpresaActiva = async (empresaId) => {
+    try {
+      const resultado = await cambiarEmpresaActiva(empresaId, user?.id || user?.uid);
+      if (resultado) {
+        setEmpresaActivaId(empresaId);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.warn('No se pudo cambiar la empresa activa:', e.message);
+      return false;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, register, login, logout, updateUbicacion, updatePerfil, isAprobado }}>
+    <AuthContext.Provider value={{ user, loading, register, login, logout, updateUbicacion, updatePerfil, isAprobado, empresa_activa_id, empresas_disponibles, setEmpresaActiva }}>
       {children}
     </AuthContext.Provider>
   );

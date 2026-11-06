@@ -3,12 +3,13 @@
  *
  * Registro: nombre + correo + ubicación + contraseña
  * Login:    correo + contraseña
+ * Empresa:  crear empresa, unirse a empresa, invitación
  */
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
-import { Loader2, Eye, EyeOff, User, Phone, Mail, Lock, MapPin, Navigation } from 'lucide-react';
+import { Loader2, Eye, EyeOff, User, Phone, Mail, Lock, MapPin, Navigation, Building, Key } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { supabase } from '../lib/supabase';
 
@@ -16,12 +17,12 @@ const ERRORES = {
   'auth/email-already-in-use':     'Este correo ya está registrado.',
   'auth/invalid-email':            'El correo no es válido.',
   'auth/weak-password':            'La contraseña debe tener al menos 6 caracteres.',
-  'auth/invalid-credential':       'Correo o contraseña incorrectos. Si no tienes cuenta, crea una en "Crear cuenta".',
-  'auth/too-many-requests':        'Demasiados intentos. Espera unos minutos.',
-  'auth/user-not-found':           'No existe una cuenta con este correo. Crea una en "Crear cuenta".',
+  'auth/invalid-credential':       'Correo o contraseña incorrectos.',
+  'auth/too-many-requests':        'Demasiados intentos.',
+  'auth/user-not-found':           'No existe una cuenta con ese correo.',
   'auth/wrong-password':           'Contraseña incorrecta.',
-  'auth/network-request-failed':   'Error de conexión. Verifica tu internet.',
-  'auth/operation-not-allowed':    'Este método de inicio de sesión no está habilitado.',
+  'auth/network-request-failed':   'Error de conexión.',
+  'auth/operation-not-allowed':    'Este método no está habilitado.',
 };
 
 function msgError(code) {
@@ -33,7 +34,6 @@ export default function Registro() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '/';
-  const redirectTab = searchParams.get('tab');
 
   const [modo, setModo]           = useState('login');
   const [nombre, setNombre]       = useState('');
@@ -65,9 +65,8 @@ export default function Registro() {
   useEffect(() => {
     if (!user?.uid) return;
     if (resetMode && !resetSuccess) return;
-    const destino = redirectTab ? `${redirectTo}?tab=${redirectTab}` : redirectTo;
-    navigate(destino, { replace: true });
-  }, [user?.uid, navigate, redirectTo, redirectTab, resetMode, resetSuccess]);
+    navigate(redirectTo, { replace: true });
+  }, [user?.uid, navigate, redirectTo, resetMode, resetSuccess]);
 
   const cambiarModo = (m) => {
     setModo(m); setError('');
@@ -91,7 +90,7 @@ export default function Registro() {
     } catch (e) {
       setResetError(
         e.message?.includes('not found') || e.code === 'user_not_found'
-          ? 'No existe una cuenta con este correo.'
+          ? 'No existe una cuenta con ese correo.'
           : 'Error al enviar el correo. Intenta de nuevo.'
       );
     } finally {
@@ -133,7 +132,7 @@ export default function Registro() {
           const res = await fetch(`/api/mercadolibre?type=geocode&lat=${lat}&lon=${lon}`);
           if (!res.ok) throw new Error();
           const data = await res.json();
-          const nombreCorto = [data.address?.district, data.address?.municipality, data.address?.city_district, data.address?.suburb, data.address?.neighbourhood, data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
+          const nombreCorto = [data.address?.district, data.address?.city_district, data.address?.city, data.address?.suburb, data.address?.neighbourhood, data.address?.city, data.address?.town, data.address?.village, data.address?.county, data.address?.state]
             .filter(Boolean).slice(0, 2).join(', ') || data.name.split(',')[0];
           setUbicacion(nombreCorto);
         } catch {
@@ -186,17 +185,14 @@ export default function Registro() {
   };
 
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center p-6"
-      style={{ background: 'linear-gradient(160deg, #f0faf4 0%, #e8f5ee 100%)' }}
-    >
+    <div className="min-h-screen flex flex-col items-center justify-center p-6" style={{ background: 'linear-gradient(160deg, #f0faf4 0%, #e8f5ee 100%)' }}>
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-10">
           <div className="flex justify-center mb-4">
-            <img src="/icons/icon-192x192.png" alt="Agrilux" className="w-20 h-20 shadow-xl rounded-3xl object-cover" />
+            <img src="/icons/icon-192x192.png" alt="Agrilux" className="w-20 h-20 shadow-xl rounded-3xl object-contain" />
           </div>
-          <h1 className="text-[2.2rem] font-black tracking-[0.14em] text-primary leading-none">AGRILUX</h1>
+          <h1 className="text-[2.2rem] font-bold tracking-[0.14em] text-primary leading-none">AGRILUX</h1>
           <p className="text-base mt-2 text-[#3f5d52] font-normal">Agricultura Inteligente del Perú</p>
         </div>
 
@@ -226,31 +222,27 @@ export default function Registro() {
             ) : (
               <>
                 <p className="text-sm text-gray-600 text-center font-semibold">Ingresa tu nueva contraseña</p>
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">Nueva contraseña</label>
-                  <div className="relative">
-                    <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
-                    <input
-                      type={showPass ? 'text' : 'password'}
-                      value={newPassword}
-                      onChange={e => setNewPassword(e.target.value)}
-                      placeholder="Mínimo 6 caracteres"
-                      className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-12 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
-                      autoComplete="new-password"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPass(!showPass)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
-                  </div>
+                <div className="relative">
+                  <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
+                  <input
+                    type={showPass ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="Mínimo 6 caracteres"
+                    className="w-full border-2 border-gray-100 rounded-2xl pl-10 pr-12 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    onClick={() => setShowPass(!showPass)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                 </div>
                 <button
                   onClick={handleUpdatePassword}
                   disabled={loading}
-                  className="w-full bg-primary text-white font-bold py-4 rounded-2xl text-base hover:bg-primary-dark transition-colors disabled:opacity-50 shadow-lg"
+                  className="w-full bg-primary text-white font-bold py-4 rounded-2xl text-base hover:bg-[#14522e] transition-colors disabled:opacity-50 shadow-lg"
                 >
                   {loading ? (
                     <span className="flex items-center justify-center gap-2">
@@ -267,13 +259,11 @@ export default function Registro() {
           <>
             {/* Tabs */}
             <div className="flex bg-gray-100 rounded-2xl p-1 mb-6">
-              {[['login', 'Iniciar sesión'], ['registro', 'Crear cuenta']].map(([m, label]) => (
+              {[['login', 'Iniciar sesión'], ['registro', 'Crear cuenta'], ['empresa', 'Empresa']].map(([m, label]) => (
                 <button
                   key={m}
                   onClick={() => cambiarModo(m)}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                    modo === m ? 'bg-white text-primary shadow-sm' : 'text-gray-500'
-                  }`}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${modo === m ? 'bg-white text-primary shadow-sm' : 'text-gray-500'}`}
                 >
                   {label}
                 </button>
@@ -305,7 +295,7 @@ export default function Registro() {
                     </div>
                   </div>
 
-                  <div>
+                  <div className="space-y-2">
                     <label className="text-xs font-semibold text-gray-700 block mb-2">WhatsApp *</label>
                     <div className="relative">
                       <Phone size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
@@ -321,7 +311,7 @@ export default function Registro() {
                     </div>
                   </div>
 
-                  <div>
+                  <div className="space-y-2">
                     <label className="text-xs font-semibold text-gray-700 block mb-2">Ubicación *</label>
                     <div className="relative">
                       <MapPin size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
@@ -349,6 +339,57 @@ export default function Registro() {
                 </>
               )}
 
+              {/* ── EMPRESA ── */}
+              {modo === 'empresa' && (
+                <>
+                  <div className="space-y-4">
+                    <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Selecciona una opción</p>
+
+                    <div className="space-y-3">
+                      <button
+                        onClick={() => navigate('/registro/empresa-nueva')}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-200 rounded-xl text-left hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Building size={18} className="text-primary" />
+                          <span className="text-sm font-semibold text-gray-800">Crear una empresa</span>
+                        </div>
+                        <span className="text-xs text-gray-400">Registrar tu empresa y tu cuenta</span>
+                      </button>
+
+                      <button
+                        onClick={() => navigate('/registro/unirse')}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-200 rounded-xl text-left hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <User size={18} className="text-primary" />
+                          <span className="text-sm font-semibold text-gray-800">Unirme a una empresa existente</span>
+                        </div>
+                        <span className="text-xs text-gray-400">Solicita incorporación a una empresa</span>
+                      </button>
+
+                      <button
+                        onClick={() => navigate('/registro/invitar')}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-200 rounded-xl text-left hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Key size={18} className="text-primary" />
+                          <span className="text-sm font-semibold text-gray-800">Tengo una invitación</span>
+                        </div>
+                        <span className="text-xs text-gray-400">Código de invitación de administrador</span>
+                      </button>
+                    </div>
+
+                    <div className="mt-4 p-4 bg-amber-50 rounded-xl border border-amber-200">
+                      <p className="text-xs text-amber-700 leading-relaxed">
+                        <span className="font-semibold">Nota:</span> El registro de empresa y la unión a una empresa existente requieren que las tablas de onboarding estén desplegadas en Supabase. Si aún no están disponibles, verás un mensaje informativo.
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Email input - shared between registro and login modes */}
               <div>
                 <label className="text-xs font-semibold text-gray-700 block mb-2">Correo electrónico</label>
                 <div className="relative">
@@ -382,7 +423,6 @@ export default function Registro() {
                     autoComplete={modo === 'login' ? 'current-password' : 'new-password'}
                   />
                   <button
-                    type="button"
                     onClick={() => setShowPass(!showPass)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
@@ -416,7 +456,7 @@ export default function Registro() {
               <button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="w-full bg-primary text-white font-bold py-4 rounded-2xl text-base hover:bg-primary-dark transition-colors disabled:opacity-50 shadow-lg mt-2"
+                className="w-full bg-primary text-white font-bold py-4 rounded-2xl text-base hover:bg-[#14522e] transition-colors disabled:opacity-50 shadow-lg mt-2"
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -425,34 +465,34 @@ export default function Registro() {
                 ) : modo === 'login' ? 'Iniciar sesión →' : 'Crear cuenta →'}
               </button>
             </div>
-
-        {/* Pie */}
-            <div className="mt-6 flex flex-col items-center justify-center text-center space-y-3">
-              <p className="text-sm text-gray-400 font-normal">
-                ¿Dificultad o dudas para ingresar? Contacta con soporte:
-              </p>
-              <a
-                href="https://wa.me/51920789045"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 bg-white border border-[#b2d8d0] text-[#0C5435] font-bold text-sm px-3.5 py-1.5 rounded-full shadow-sm hover:bg-gray-50 transition-all"
-              >
-                <span className="w-2.5 h-2.5 rounded-full bg-[#6ed4b8]" />
-                <span>Contáctanos</span>
-              </a>
-              <div className="flex items-center space-x-1.5 text-xs text-slate-400">
-                <span>Plataforma Agrícola Oficial</span>
-                <button
-                  onClick={() => navigate('/admin')}
-                  aria-label="Administración"
-                  className="text-xs text-gray-300 hover:text-gray-500 transition-colors"
-                >
-                  · · ·
-                </button>
-              </div>
-            </div>
           </>
         )}
+
+        {/* Pie */}
+        <div className="mt-6 flex flex-col items-center justify-center text-center space-y-3">
+          <p className="text-sm text-gray-400 font-normal">
+            ¿Dificultad o dudas para ingresar? Contacta con soporte:
+          </p>
+          <a
+            href="https://wa.me/51920789045"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 bg-white border border-[#b2d8d0] text-[#0C5435] font-bold text-sm px-3.5 py-1.5 rounded-full shadow-sm hover:bg-gray-50 transition-all"
+          >
+            <span className="w-2.5 h-2.5 rounded-full bg-[#6ed4b8]" />
+            <span>Contáctanos</span>
+          </a>
+          <div className="flex items-center space-x-1.5 text-xs text-slate-400">
+            <span>Plataforma Agrícola Oficial</span>
+            <button
+              onClick={() => navigate('/admin')}
+              aria-label="Administración"
+              className="text-xs text-gray-300 hover:text-gray-500 transition-colors"
+            >
+              · · ·
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

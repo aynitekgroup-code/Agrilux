@@ -7,7 +7,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../lib/AuthContext';
 import { isOnline } from '../../lib/offlineStorage';
 import {
-  DEMO, listarEmpresas, crearEmpresa, cargarTodoEmpresa,
+  DEMO, listarEmpresas, crearEmpresaConMiembro, cargarTodoEmpresa,
   crearFundo, crearLote, crearLabor, crearTarea, crearCosecha,
   crearGasto, invitarMiembro, actualizarTarea, calcularKPIs,
 } from '../../lib/empresaApi';
@@ -61,12 +61,11 @@ export default function ParcelaEmpresas() {
     cosechas: DEMO.cosechas, gastos: DEMO.gastos, miembros: DEMO.miembros, campanas: DEMO.campanas,
   } : datos), [demo, datos]);
 
-  // Rol del usuario actual en la empresa
+  // Rol del usuario actual en la empresa (proveniente de datos del backend, sujetos a RLS)
   const miRol = useMemo(() => {
     if (demo) return 'administrador';
-    if (user?.email === 'aynitek.group@gmail.com') return 'administrador';
     const m = d.miembros.find((x) => x.email === user?.email || x.user_id === uid || x.nombre === user?.nombre);
-    return m?.rol || 'administrador';
+    return m?.rol || null;
   }, [demo, d.miembros, user, uid]);
   const puedeGestionar = ['administrador', 'ingeniero'].includes(miRol);
   const puedeAsignar = ['administrador', 'ingeniero', 'supervisor'].includes(miRol);
@@ -135,8 +134,15 @@ export default function ParcelaEmpresas() {
 
   async function handleCrearEmpresa() {
     if (!nuevaEmpresa.nombre.trim()) return;
-    const emp = await crearEmpresa({ ...nuevaEmpresa, created_by: uid });
-    await invitarMiembro({ empresa_id: emp.id, user_id: uid, nombre: user?.nombre || user?.email, email: user?.email, rol: 'administrador' });
+    const emp = await crearEmpresaConMiembro({
+      nombreEmpresa: nuevaEmpresa.nombre,
+      ruc: nuevaEmpresa.ruc,
+      telefonoEmpresa: nuevaEmpresa.telefono,
+      ubicacionEmpresa: nuevaEmpresa.ubicacion,
+      usuarioId: uid,
+      usuarioNombre: user?.nombre || user?.email || '',
+      usuarioEmail: user?.email || ''
+    });
     setEmpresas([emp, ...empresas]);
     setEmpresaId(emp.id);
     setDemo(false);

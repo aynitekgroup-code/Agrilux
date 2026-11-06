@@ -12,6 +12,14 @@ export const ESTADOS_TAREA = ['pendiente', 'en_curso', 'hecha', 'atrasada'];
 export const TIPOS_LABOR = ['Siembra', 'Riego', 'Abonado', 'Fumigación', 'Deshierbo', 'Monitoreo', 'Cosecha', 'Otro'];
 export const CATEGORIAS_GASTO = ['insumos', 'mano_obra', 'riego', 'maquinaria', 'otros'];
 
+const normalizarWhatsapp = (valor) => {
+  const numeros = String(valor || '').replace(/\D/g, '');
+  if (!numeros) return '';
+  if (numeros.startsWith('51')) return numeros;
+  if (numeros.startsWith('0')) return `51${numeros.slice(1)}`;
+  return `51${numeros}`;
+};
+
 // ── Datos de ejemplo (como los mockups) cuando no hay empresa ──
 export const DEMO = {
   empresa: { id: 'demo', nombre: 'Agro Andina S.A.C.', campana_activa: '2026-A' },
@@ -75,14 +83,6 @@ export async function listarEmpresas(userId) {
     // Sin red u otro error: modo demo para no bloquear
     return { data: [], demo: true };
   }
-}
-
-export async function crearEmpresa({ nombre, ruc, telefono, ubicacion, created_by }) {
-  const { data, error } = await supabase.from('empresas')
-    .insert({ nombre, ruc, telefono, ubicacion, campana_activa: '2026-A', created_by })
-    .select().single();
-  if (error) throw error;
-  return data;
 }
 
 // ── Lectura genérica por empresa ─────────────────────────
@@ -191,3 +191,274 @@ export const colorRiesgo = {
   critico: 'bg-red-100 text-red-700',
 };
 export const iniciales = (n = '') => n.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+
+// ── Experiencia telefónica: validar códigos de invitación (token_hash) ───────
+// Nota: el token plano viaja por HTTPS; el hash se compara en el backend
+export async function validarCodigoInvitacion(token) {
+  try {
+    const { data, error } = await supabase.rpc('validar_codigo_invitacion', {
+      p_token_plano: token
+    });
+    if (error) throw error;
+    const resultado = Array.isArray(data) ? data[0] : data;
+    return { data: resultado?.data || null, ok: Boolean(resultado?.ok), error: resultado?.mensaje || null };
+  } catch (e) {
+    return { data: null, ok: false, error: e.message };
+  }
+}
+
+// ── Canje de invitación (orquestador) ─────────────────────────────────────────
+// 1. Reserva la invitación (UPDATE ... WHERE estado_reserva = 'disponible')
+// 2. Registra intento pendiente
+// 3. Crea usuario en Supabase Auth (auth.signUp)
+// 4. RPC confirmar_canje_invitacion (valida reserva, crea membresía, incrementa usos)
+// 5. Si falla Auth: libera reserva, marca intento fallido
+export async function canjearInvitacion({ token, nombre, email, password, ubicacion, whatsapp, coords }) {
+  // Paso 1: Validar token y obtener reserva
+  const { data: validacionRaw, error: valError } = await supabase.rpc('validar_codigo_invitacion', {
+    p_token_plano: token
+  });
+  const validacion = Array.isArray(validacionRaw) ? validacionRaw[0] : validacionRaw;
+  if (valError || !validacion?.ok) {
+    throw new Error(valError?.message || 'Código de invitación inválido');
+  }
+  const reserva = validacion.data;
+  if (!reserva || reserva.estado_reserva !== 'disponible') {
+    throw new Error('La invitación no está disponible');
+  }
+
+  // Paso 2: Reservar la invitación
+  const { data: reservaRaw, error: reservaError } = await supabase.rpc('reservar_codigo_invitacion', {
+    p_token_plano: token,
+    p_email_usuario: email.trim().toLowerCase()
+  });
+  const reservaData = Array.isArray(reservaRaw) ? reservaRaw[0] : reservaRaw;
+  if (reservaError || !reservaData?.ok) {
+    throw new Error(reservaError?.message || 'No se pudo reservar la invitación');
+  }
+  const reservaId = reservaData.reserva_id;
+
+  // Paso 3: Crear usuario en Supabase Auth (FUERA de transacción PostgreSQL)
+  let authUser;
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim().toLowerCase(),
+      password,
+      options: { data: { nombre: nombre.trim() } }
+    });
+    if (error) throw error;
+    authUser = data.user;
+    if (!authUser || !data.session) {
+      throw new Error('Confirma tu correo o desactiva la confirmación de correo para completar la invitación');
+    }
+    const { error: intentoError } = await supabase.from('invitacion_canjes').insert({
+      invitacion_id: reserva.invitacion_id,
+      reserva_id: reservaId,
+      usuario_id: authUser.id,
+      email_usado: email.trim().toLowerCase(),
+      estado_intento: 'pendiente'
+    });
+    if (intentoError) throw intentoError;
+  } catch (e) {
+    // Liberar reserva
+    await supabase.rpc('liberar_reserva_invitacion', { p_reserva_id: reservaId });
+    // Marcar intento fallido
+    await supabase.from('invitacion_canjes').update({
+      estado_intento: 'fallido',
+      motivo_fallo: e.message
+    }).eq('reserva_id', reservaId).eq('estado_intento', 'pendiente');
+    // Nota: Si se creó el usuario en Auth pero falló el canje, el usuario queda registrado.
+    // Puede iniciar sesión y usar el código de invitación nuevamente; el canje es idempotente.
+    throw e;
+  }
+
+  // Paso 5: RPC confirmar_canje_invitacion (transacción PostgreSQL atómica)
+  try {
+    const session = await waitForSession(5000);
+    if (!session) throw new Error('Confirma tu correo o inicia sesión para completar la invitación');
+    const { error: rpcError } = await supabase.rpc('confirmar_canje_invitacion', {
+      p_reserva_id: reservaId,
+      p_email_usado: email.trim().toLowerCase(),
+      p_nombre: nombre.trim(),
+      p_ubicacion: ubicacion || '',
+      p_whatsapp: normalizarWhatsapp(whatsapp) || null
+    });
+    if (rpcError) throw rpcError;
+  } catch (e) {
+    // Liberar reserva
+    await supabase.rpc('liberar_reserva_invitacion', { p_reserva_id: reservaId });
+    // Marcar intento fallido
+    await supabase.from('invitacion_canjes').update({
+      estado_intento: 'fallido',
+      motivo_fallo: e.message
+    }).eq('reserva_id', reservaId).eq('estado_intento', 'pendiente');
+    throw e;
+  }
+
+  return { user: authUser, empresa_id: reserva.empresa_id };
+}
+
+// ── Solicitud de incorporación a empresa ──────────────────────────────────────
+export async function solicitarUnirseEmpresa({ empresa_id, cargo_id, area_trabajo, nombre, email, whatsapp }) {
+  const { data: authData } = await supabase.auth.getUser();
+  const user = authData.user;
+  if (!user) throw new Error('Usuario no autenticado');
+
+  const { data, error } = await supabase.from('empresa_solicitudes').insert({
+    empresa_id,
+    user_id: user.id,
+    email,
+    nombre,
+    cargo_id,
+    area_trabajo,
+    estado: 'pendiente'
+  }).select().single();
+
+  if (error) throw error;
+  return data;
+}
+
+// ── Listar empresas donde el usuario es miembro activo ────────────────────────
+export async function listarEmpresasDelUsuario(userId) {
+  const { data, error } = await supabase
+    .from('empresa_miembros')
+    .select(`
+      empresa_id,
+      empresas (
+        id,
+        nombre,
+        ruc,
+        ubicacion,
+        campana_activa
+      )
+    `)
+    .eq('user_id', userId)
+    .eq('activo', true);
+
+  if (error) throw error;
+  return data.map(m => ({
+    id: m.empresa_id,
+    nombre: m.empresas.nombre,
+    ruc: m.empresas.ruc,
+    ubicacion: m.empresas.ubicacion,
+    campana_activa: m.empresas.campana_activa
+  }));
+}
+
+// ── Crear empresa y registrar administrador inicial (orquestador) ─────────────
+export async function registrarConEmpresa({ nombre, email, password, ubicacion, whatsapp, coords, nombreEmpresa, ruc, telefonoEmpresa, ubicacionEmpresa }) {
+  // Paso 1: Crear usuario en Supabase Auth
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email: email.trim().toLowerCase(),
+    password,
+    options: { data: { nombre: nombre.trim() } }
+  });
+  if (authError) throw authError;
+  const uid = authData.user?.id;
+  if (!uid) throw new Error('Supabase no devolvió el usuario creado');
+  const authUser = authData.user;
+
+  // Esperar a que la sesión esté activa (requerido si hay confirmación de correo)
+  const session = await waitForSession(5000);
+  if (!session) throw new Error('Confirma tu correo o desactiva la confirmación de correo para crear la empresa');
+
+  // Paso 2: RPC transaccional PostgreSQL para crear perfil, empresa y membresía
+  const { data, error: rpcError } = await supabase.rpc('crear_empresa_con_administrador', {
+    p_nombre: nombre.trim(),
+    p_email: email.trim().toLowerCase(),
+    p_ubicacion: ubicacion || '',
+    p_coords: coords || null,
+    p_whatsapp: normalizarWhatsapp(whatsapp) || null,
+    p_nombre_empresa: nombreEmpresa.trim(),
+    p_ruc: ruc || null,
+    p_telefono: telefonoEmpresa || null,
+    p_ubicacion_empresa: ubicacionEmpresa || ''
+  });
+
+  if (rpcError) {
+    throw rpcError;
+  }
+
+  return { user: authUser, empresa: data };
+}
+
+// ── Crear empresa para usuario autenticado existente (transaccional) ──────────
+export async function crearEmpresaConMiembro({ nombreEmpresa, ruc, telefonoEmpresa, ubicacionEmpresa, usuarioId, usuarioNombre, usuarioEmail }) {
+  const { data, error } = await supabase.rpc('crear_empresa_con_miembro_existente', {
+    p_nombre_empresa: nombreEmpresa.trim(),
+    p_ruc: ruc || null,
+    p_telefono: telefonoEmpresa || null,
+    p_ubicacion_empresa: ubicacionEmpresa || '',
+    p_usuario_id: usuarioId,
+    p_usuario_nombre: usuarioNombre.trim(),
+    p_usuario_email: usuarioEmail.trim().toLowerCase()
+  });
+  if (error) throw error;
+  return Array.isArray(data) ? data[0] : data;
+}
+
+// ── Crear empresa (legacy - solo insert, sin membresía ni plan) ───────────────
+// DEPRECADO: usar crearEmpresaConMiembro o registrarConEmpresa para evitar
+// empresas huérfanas sin administrador ni membresía.
+// Esta función se mantiene solo por compatibilidad hacia atrás. Siempre delega
+// en el flujo transaccional para garantizar que toda empresa tenga
+// administrador y plan inicial.
+export async function crearEmpresa({ nombre, ruc, telefono, ubicacion, created_by }) {
+  if (!created_by) {
+    throw new Error('created_by es obligatorio para crear una empresa');
+  }
+  return crearEmpresaConMiembro({
+    nombreEmpresa: nombre,
+    ruc,
+    telefonoEmpresa: telefono,
+    ubicacionEmpresa: ubicacion,
+    usuarioId: created_by,
+    usuarioNombre: '',
+    usuarioEmail: ''
+  });
+}
+
+export async function aprobarSolicitudEmpresa(solicitudId) {
+  const { data, error } = await supabase.rpc('aprobar_solicitud_empresa', {
+    p_solicitud_id: solicitudId
+  });
+  if (error) throw error;
+  return Array.isArray(data) ? data[0] : data;
+}
+
+export async function rechazarSolicitudEmpresa(solicitudId) {
+  const { error } = await supabase.rpc('rechazar_solicitud_empresa', {
+    p_solicitud_id: solicitudId
+  });
+  if (error) throw error;
+}
+
+// ── Cambiar empresa activa (solo validación de membresía) ─────────────────────
+export async function cambiarEmpresaActiva(empresaId, userId) {
+  // Verificar que el usuario es miembro activo de la empresa
+  const { data, error } = await supabase
+    .from('empresa_miembros')
+    .select('empresa_id, rol, activo')
+    .eq('empresa_id', empresaId)
+    .eq('user_id', userId)
+    .eq('activo', true)
+    .single();
+
+  if (error || !data) throw new Error('No eres miembro activo de esta empresa');
+
+  return { empresa_id: empresaId, rol: data.rol };
+}
+
+// ── Esperar sesión activa después de signUp ───────────────────────────────────
+// Algunos proveedores de Auth requieren confirmación de correo; la sesión puede
+// no estar disponible inmediatamente tras signUp.
+export async function waitForSession(timeoutMs = 5000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const { data } = await supabase.auth.getSession();
+    if (data.session) return data.session;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  const { data } = await supabase.auth.getSession();
+  return data.session;
+}

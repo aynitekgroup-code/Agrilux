@@ -25,6 +25,8 @@ import {
   BookOpen,
   Trash2,
   ChevronDown,
+  Users,
+  Building,
 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import OnlineStatus from '../OnlineStatus';
@@ -43,11 +45,12 @@ const ADMIN_EMAIL = 'aynitek.group@gmail.com';
 export default function WebLayout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, empresa_activa_id, empresas_disponibles, setEmpresaActiva } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mostrarUbicacion, setMostrarUbicacion] = useState(false);
   const [adminModal, setAdminModal] = useState(false);
   const [modalClave, setModalClave] = useState(false);
+  const [empresaModalOpen, setEmpresaModalOpen] = useState(false);
   const esAdmin = user?.email === ADMIN_EMAIL;
 
   const handleLogout = async () => {
@@ -112,6 +115,56 @@ export default function WebLayout({ children }) {
               <p className="text-xs text-gray-400 truncate">{user?.email || 'Sin sesión'}</p>
             </div>
           </div>
+          
+          {/* Selector de empresa */}
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <p className="text-xs font-semibold text-gray-700 uppercase mb-2">Empresa activa</p>
+            <div className="space-y-2">
+              <button
+                onClick={() => setEmpresaModalOpen(true)}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-gray-50 hover:bg-gray-100 text-sm text-gray-700 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <Building size={14} className="text-primary" />
+                  <span className="truncate w-full">
+                    {empresa_activa_id
+                      ? empresas_disponibles?.find((e) => e.id === empresa_activa_id)?.nombre || 'Cargando...'
+                      : 'Seleccionar empresa'}
+                  </span>
+                </span>
+                <ChevronDown size={14} className="text-gray-400" />
+              </button>
+              {empresas_disponibles && empresas_disponibles.length > 0 && (
+                <div className="ml-4 space-y-1">
+                  {empresas_disponibles.map((empresa) => (
+                    <button
+                      key={empresa.id}
+                      onClick={() => {
+                        setEmpresaActiva(empresa.id);
+                        setEmpresaModalOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                        empresa_activa_id === empresa.id
+                          ? 'bg-primary/10 text-primary border border-primary/20'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <span className="truncate">{empresa.nombre}</span>
+                      {empresa_activa_id === empresa.id && (
+                        <span className="text-xs font-bold text-primary">Activa</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {empresas_disponibles && empresas_disponibles.length === 0 && (
+                <div className="px-3 py-2.5 rounded-lg bg-gray-50 text-sm text-gray-500">
+                  No perteneces a ninguna empresa aún
+                </div>
+              )}
+            </div>
+          </div>
+          
           <button
             onClick={() => navigate('/descargar')}
             className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#1a6b3c] text-white rounded-lg text-xs font-bold hover:bg-[#14522e] transition-colors"
@@ -173,6 +226,32 @@ export default function WebLayout({ children }) {
                     <MapPin size={18} />
                     Cambiar ubicación
                   </button>
+                  {user && (
+                    <>
+                      <div className="border-t border-gray-100 pt-3 mb-2"></div>
+                      <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 px-4">Empresa</h3>
+                      <button
+                        onClick={() => {
+                          setMenuOpen(false);
+                          navigate('/empresa/miembros');
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg"
+                      >
+                        <Users size={18} />
+                        Miembros de empresa
+                      </button>
+                      <button
+                        onClick={() => {
+                          setMenuOpen(false);
+                          navigate('/empresa/plan');
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg"
+                      >
+                        <Shield size={18} />
+                        Mi membresía
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={() => {
                       setMenuOpen(false);

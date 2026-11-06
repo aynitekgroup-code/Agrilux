@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { AgentProvider } from './lib/AgentContext';
 import { useExperienceType } from './lib/useExperienceType';
@@ -7,7 +7,13 @@ import WebLayout from './components/layout/WebLayout';
 import MobileLayout from './components/layout/MobileLayout';
 import SelectorUbicacion from './components/SelectorUbicacion';
 import Registro from './pages/Registro';
-import { Clock, Mail, LogOut } from 'lucide-react';
+import RegistroEmpresaNueva from './pages/RegistroEmpresaNueva';
+import RegistroUnirse from './pages/RegistroUnirse';
+import RegistroInvitar from './pages/RegistroInvitar';
+import RegistroSolicitudEnviada from './pages/RegistroSolicitudEnviada';
+import EmpresaMiembros from './pages/EmpresaMiembros';
+import EmpresaPlan from './pages/EmpresaPlan';
+import { Clock, Mail, LogOut, Building } from 'lucide-react';
 
 /**
  * ExperienceLayout — elige el layout según el entorno detectado.
@@ -72,6 +78,48 @@ function PantallaPendiente() {
       </div>
     </div>
   );
+}
+
+// Guard: verifica empresa activa antes de mostrar rutas de empresa
+function EmpresaGuard({ children }) {
+  const { user, empresa_activa_id, empresas_disponibles, setEmpresaActiva } = useAuth();
+  const navigate = useNavigate();
+
+  if (!user) return <Navigate to="/registro" replace />;
+
+  if (!empresa_activa_id) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50">
+        <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 text-center">
+          <Building size={32} className="text-blue-600 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-800">Selecciona una empresa</h2>
+          <p className="text-gray-600 text-sm mt-2">Selecciona una empresa para continuar.</p>
+          {empresas_disponibles && empresas_disponibles.length > 0 ? (
+            <select
+              value={empresas_disponibles[0]?.id || ''}
+              onChange={(e) => setEmpresaActiva(e.target.value)}
+              className="w-full mt-4 px-4 py-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
+            >
+              <option value="">Seleccionar empresa</option>
+              {empresas_disponibles.map((e) => (
+                <option key={e.id} value={e.id}>{e.nombre}</option>
+              ))}
+            </select>
+          ) : (
+            <p className="mt-4 text-xs text-gray-500">No perteneces a ninguna empresa aún.</p>
+          )}
+          <button
+            onClick={() => navigate('/registro')}
+            className="mt-6 bg-primary text-white font-bold py-3 rounded-xl w-full hover:bg-[#14522e] transition-colors"
+          >
+            Ir al registro
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
 }
 
 function AppRoutes() {
@@ -159,6 +207,10 @@ function AppRoutes() {
     <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="w-8 h-8 border-4 border-green-400 border-t-transparent rounded-full animate-spin" /></div>}>
       <Routes>
         <Route path="/registro" element={<Registro />} />
+        <Route path="/registro/empresa-nueva" element={<RegistroEmpresaNueva />} />
+        <Route path="/registro/unirse" element={<RegistroUnirse />} />
+        <Route path="/registro/invitar" element={<RegistroInvitar />} />
+        <Route path="/registro/solicitud-enviada" element={<RegistroSolicitudEnviada />} />
         <Route path="/eliminar-cuenta" element={
           user ? <EliminarCuenta /> : <Navigate to="/registro" replace />
         } />
@@ -184,6 +236,16 @@ function AppRoutes() {
               user && isAprobado ? <Gestion /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />
             <Route path="/gestion/finanzas" element={<Navigate to="/gestion" replace />} />
+            <Route path="/empresa/miembros" element={
+              <EmpresaGuard>
+                <EmpresaMiembros />
+              </EmpresaGuard>
+            } />
+            <Route path="/empresa/plan" element={
+              <EmpresaGuard>
+                <EmpresaPlan />
+              </EmpresaGuard>
+            } />
 
             {/* Mercado desactivado: las rutas antiguas vuelven al diagnóstico */}
             <Route path="/mercado" element={<Navigate to="/" replace />} />
