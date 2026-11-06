@@ -3,12 +3,13 @@
 @tailwind utilities;
 
 :root {
-  --primary: #1a6b3c;
-  --primary-dark: #145530;
-  --primary-light: #2d8f55;
+  --primary: #0F4C3A;
+  --primary-dark: #0B3A2B;
+  --primary-light: #1A5E48;
   --accent: #f5a623;
   --earth: #5d4e37;
-  --bg: #f8faf8;
+  --bg: #F8F9FA;
+  --card: #FFFFFF;
 }
 
 * { box-sizing: border-box; }

@@ -1,0 +1,1252 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>AgroTrack Pomalca (Copy)</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: consola de operaciones — barra lateral fija con módulos, área de trabajo en tarjetas, mapa de lotes como pieza central */
+:root{
+  --bg:#F1F3EC; --surface:#FFFFFF; --surface-2:#F7F8F3; --line:#DADFD2; --fg:#17221A; --muted:#55625A;
+  --brand:#18412A; --brand-2:#235A39; --brand-ink:#F3F7F1; --brand-muted:#B9CDBE;
+  --accent:#2F7A3E; --accent-soft:#E1EEDD; --amber:#9A5B00; --amber-dot:#D68A12; --amber-soft:#FCEFD6;
+  --red:#B42318; --red-soft:#FCE6E3; --blue:#1F5FAD; --blue-soft:#E2ECF9; --grey:#68736C;
+  --map-bg:#E3EBD7; --field:#CFE0B9; --field-line:#8DAE73; --road:#FBF8EF; --road-edge:#C9C2A8; --zone:#2F7A3E; --planta:#E9DFC4;
+  --diagram-bg:#FFFFFF;
+  --f-display:"Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0F1511; --surface:#161E18; --surface-2:#1B241E; --line:#2B372F; --fg:#E5ECE6; --muted:#9BA9A0;
+  --brand:#0C1F13; --brand-2:#17402A; --brand-ink:#E9F2EB; --brand-muted:#93AE9B;
+  --accent:#62B872; --accent-soft:#1E3324; --amber:#EBA64A; --amber-dot:#EBA64A; --amber-soft:#3A2C13;
+  --red:#F0695E; --red-soft:#3C1B18; --blue:#79AAEA; --blue-soft:#172539; --grey:#8C968F;
+  --map-bg:#1C2620; --field:#26372A; --field-line:#3F5A43; --road:#3D3D35; --road-edge:#57554A; --zone:#62B872; --planta:#3A3428;
+  --diagram-bg:#FFFFFF; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0F1511; --surface:#161E18; --surface-2:#1B241E; --line:#2B372F; --fg:#E5ECE6; --muted:#9BA9A0;
+  --brand:#0C1F13; --brand-2:#17402A; --brand-ink:#E9F2EB; --brand-muted:#93AE9B;
+  --accent:#62B872; --accent-soft:#1E3324; --amber:#EBA64A; --amber-dot:#EBA64A; --amber-soft:#3A2C13;
+  --red:#F0695E; --red-soft:#3C1B18; --blue:#79AAEA; --blue-soft:#172539; --grey:#8C968F;
+  --map-bg:#1C2620; --field:#26372A; --field-line:#3F5A43; --road:#3D3D35; --road-edge:#57554A; --zone:#62B872; --planta:#3A3428;
+  --diagram-bg:#FFFFFF; color-scheme:dark }
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+td.mono,td .mono,td.num{white-space:nowrap}
+html,body{background:var(--bg); color:var(--fg)}
+body{font-family:var(--f-body); font-size:14px; line-height:1.45}
+h1,h2,h3{font-family:var(--f-display); margin:0; text-wrap:balance; letter-spacing:-0.01em}
+h1{font-size:22px; font-weight:700}
+h2{font-size:15px; font-weight:700}
+button,select,input{font:inherit; color:inherit}
+:focus-visible{outline:2px solid var(--blue); outline-offset:2px}
+.num,.mono{font-family:var(--f-mono); font-variant-numeric:tabular-nums}
+
+.app{display:grid; grid-template-columns:232px minmax(0,1fr); min-height:100vh}
+.side{background:var(--brand); color:var(--brand-ink); position:sticky; top:env(safe-area-inset-top,0px); height:100vh; display:flex; flex-direction:column; padding-block:18px; padding-left:max(14px, env(safe-area-inset-left,0px)); padding-right:14px; gap:18px}
+.logo{display:flex; align-items:center; gap:10px; padding:0 6px}
+.logo b{font-family:var(--f-display); font-size:20px; font-weight:800; letter-spacing:-0.02em}
+.logo small{display:block; font-size:11px; color:var(--brand-muted); letter-spacing:0.04em; text-transform:uppercase}
+.nav{display:flex; flex-direction:column; gap:2px}
+.nav a{display:flex; align-items:center; gap:10px; padding:10px 10px; border-radius:8px; color:var(--brand-ink); text-decoration:none; font-weight:500; min-height:40px}
+.nav a:hover{background:var(--brand-2)}
+.nav a.on{background:var(--brand-2); box-shadow:inset 3px 0 0 var(--amber-dot)}
+.nav svg{width:18px; height:18px; flex:none; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round}
+.nav .count{margin-left:auto; background:var(--red); color:#fff; font-size:11px; font-weight:600; padding:1px 7px; border-radius:999px}
+.side-foot{margin-top:auto; font-size:12px; color:var(--brand-muted); padding:0 6px}
+
+.main{min-width:0; position:relative; overflow-x:clip}
+.topbar{position:sticky; top:env(safe-area-inset-top,0px); z-index:5; background:var(--surface); border-bottom:1px solid var(--line); display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px; padding-block:10px; padding-left:24px; padding-right:max(24px, env(safe-area-inset-right,0px))}
+body::before{content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top,0px); z-index:10; background:var(--surface)}
+.clock{display:flex; align-items:baseline; gap:8px}
+.clock .num{font-size:20px; font-weight:500}
+.clock span{color:var(--muted); font-size:12px}
+.demo{font-size:12px; color:var(--amber); background:var(--amber-soft); padding:4px 10px; border-radius:999px}
+.top-actions{margin-left:auto; display:flex; gap:8px; align-items:center}
+
+.content{padding-block:20px 40px; padding-left:24px; padding-right:max(24px, env(safe-area-inset-right,0px)); display:flex; flex-direction:column; gap:16px}
+.view{display:none}
+.view.active{display:flex; flex-direction:column; gap:16px}
+#view-uml:not(.active){display:flex; flex-direction:column; position:absolute; left:-400vw; top:0; width:1100px; visibility:hidden; pointer-events:none}
+.head{display:flex; flex-wrap:wrap; gap:10px 16px; align-items:flex-end}
+.head p{margin:4px 0 0; color:var(--muted); max-width:70ch}
+.head .tools{margin-left:auto; display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+
+.card{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:14px 16px; min-width:0}
+.card > h2{margin-bottom:10px}
+.card-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px}
+.card-head h2{margin:0}
+.card-head .sub{color:var(--muted); font-size:12px}
+.grid{display:grid; gap:16px}
+.g-kpi{grid-template-columns:repeat(auto-fit, minmax(160px,1fr))}
+.g-2{grid-template-columns:minmax(0,1.65fr) minmax(0,1fr)}
+.g-2b{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.g-map{grid-template-columns:minmax(0,1fr) 300px}
+.g-rec{grid-template-columns:360px minmax(0,1fr)}
+@media (max-width:1100px){ .g-2,.g-map,.g-rec{grid-template-columns:minmax(0,1fr)} }
+@media (max-width:760px){ .g-2b{grid-template-columns:minmax(0,1fr)} }
+
+.kpi{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:12px 14px; display:flex; flex-direction:column; gap:4px}
+.kpi .lbl{font-size:12px; color:var(--muted)}
+.kpi .val{font-family:var(--f-display); font-size:28px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.02em}
+.kpi .val small{font-family:var(--f-body); font-size:13px; font-weight:500; color:var(--muted); margin-left:4px}
+.kpi.warn{border-color:var(--amber-dot)} .kpi.warn .val{color:var(--amber)}
+.kpi.crit{border-color:var(--red); background:var(--red-soft)} .kpi.crit .val{color:var(--red)}
+
+.btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:38px; padding:0 14px; border-radius:8px; border:1px solid var(--line); background:var(--surface); cursor:pointer; font-weight:500; text-decoration:none; color:var(--fg); white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.danger{background:var(--red); border-color:var(--red); color:#fff}
+.btn.ghost-danger{color:var(--red); border-color:var(--red)}
+.btn.sm{min-height:32px; padding:0 10px; font-size:13px}
+.btn[disabled]{opacity:.55; cursor:not-allowed}
+.btn svg{width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+.field{display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted)}
+.field select,.field input{min-height:38px; border:1px solid var(--line); border-radius:8px; background:var(--surface); padding:0 10px; color:var(--fg); font-size:14px}
+.inline{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+
+.pill{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:3px 9px; border-radius:999px; white-space:nowrap}
+.pill::before{content:""; width:8px; height:8px; border-radius:50%; background:currentColor}
+.p-conduciendo{color:var(--accent); background:var(--accent-soft)}
+.p-ralenti{color:var(--amber); background:var(--amber-soft)}
+.p-apagado{color:var(--grey); background:var(--surface-2)}
+.p-bloqueado{color:var(--red); background:var(--red-soft)}
+.p-pendiente{color:var(--red); background:var(--red-soft)}
+.tag{font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; letter-spacing:.02em}
+.t-critica{background:var(--red); color:#fff}
+.t-alta{background:var(--red-soft); color:var(--red)}
+.t-media{background:var(--amber-soft); color:var(--amber)}
+.t-info{background:var(--blue-soft); color:var(--blue)}
+.t-ok{background:var(--accent-soft); color:var(--accent)}
+
+.tbl-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:var(--r); background:var(--surface)}
+table{width:100%; border-collapse:collapse; font-size:13px}
+th{background:var(--surface-2); text-align:left; font-weight:600; color:var(--muted); font-size:12px; padding:9px 12px; border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td.r,th.r{text-align:right}
+tr.hl td{background:var(--red-soft)}
+tr.sel td{background:var(--accent-soft)}
+
+/* Mapa */
+.map{width:100%; height:auto; display:block; border-radius:8px; background:var(--map-bg)}
+.map-wrap{position:relative; overflow-x:auto}
+.map-wrap .map{min-width:560px}
+.m-bg{fill:var(--map-bg)}
+.m-zone{fill:none; stroke:var(--zone); stroke-width:2; stroke-dasharray:8 6}
+.m-lote{fill:var(--field); stroke:var(--field-line); stroke-width:1.5}
+.m-planta{fill:var(--planta); stroke:var(--road-edge); stroke-width:1.5}
+.m-road{fill:none; stroke:var(--road-edge); stroke-width:13; stroke-linecap:round; stroke-linejoin:round}
+.m-road-in{fill:none; stroke:var(--road); stroke-width:9; stroke-linecap:round; stroke-linejoin:round}
+.m-label{font-family:var(--f-body); font-size:14px; font-weight:600; fill:var(--fg); opacity:.75}
+.m-label-out{fill:var(--red); opacity:1; font-size:13px}
+.m-unit{cursor:pointer; transition:transform 1.9s linear}
+.m-unit circle.dot{fill:var(--u); stroke:var(--surface); stroke-width:3}
+.m-unit circle.halo{fill:none; stroke:var(--u); stroke-width:2; opacity:0}
+.m-unit[data-estado="conduciendo"]{--u:var(--accent)}
+.m-unit[data-estado="ralenti"]{--u:var(--amber-dot)}
+.m-unit[data-estado="apagado"]{--u:var(--grey)}
+.m-unit[data-estado="bloqueado"]{--u:var(--red)}
+.m-unit[data-corte="pendiente"] circle.halo{opacity:1; animation:pulse 1.2s ease-out infinite}
+.m-unit.sel circle.halo{opacity:1; stroke:var(--blue); stroke-width:3}
+.m-unit rect{fill:var(--surface); stroke:var(--line)}
+.m-unit text{font-family:var(--f-mono); font-size:12px; font-weight:500; fill:var(--fg)}
+@keyframes pulse{from{r:10; opacity:1} to{r:22; opacity:0}}
+.m-track polyline{fill:none; stroke:var(--blue); stroke-width:3; opacity:.8}
+.m-pt rect{stroke:none}
+.m-pt text{font-family:var(--f-mono); font-size:10px; font-weight:600; fill:#fff}
+.m-cursor circle{fill:var(--blue); stroke:var(--surface); stroke-width:3}
+.m-cursor rect{fill:var(--surface); stroke:var(--blue)}
+.m-cursor text{font-family:var(--f-mono); font-size:12px; fill:var(--fg)}
+.legend{display:flex; flex-wrap:wrap; gap:6px 14px; font-size:12px; color:var(--muted)}
+.legend i{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:-1px}
+
+/* Listas */
+.alist{display:flex; flex-direction:column}
+.aitem{display:grid; grid-template-columns:4px 52px minmax(0,1fr) auto; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid var(--line)}
+.aitem:last-child{border-bottom:0}
+.aitem .stripe{align-self:stretch; border-radius:2px; background:var(--line)}
+.aitem.s-critica .stripe,.aitem.s-alta .stripe{background:var(--red)}
+.aitem.s-media .stripe{background:var(--amber-dot)}
+.aitem.s-info .stripe{background:var(--blue)}
+.aitem .t{color:var(--muted); font-family:var(--f-mono); font-size:12px}
+.aitem.done{opacity:.55}
+.bars{display:flex; flex-direction:column; gap:9px}
+.bar{display:grid; grid-template-columns:118px minmax(0,1fr) 44px; gap:10px; align-items:center; font-size:12px}
+.bar .track{height:12px; background:var(--surface-2); border-radius:3px; overflow:hidden; border:1px solid var(--line)}
+.bar .fill{height:100%; background:var(--accent)}
+.bar .fill.hi{background:var(--amber-dot)}
+.gauge{height:10px; background:var(--surface-2); border:1px solid var(--line); border-radius:999px; overflow:hidden}
+.gauge > div{height:100%; background:var(--accent)}
+.gauge.low > div{background:var(--red)}
+.ulist{display:flex; flex-direction:column; max-height:520px; overflow:auto}
+.uitem{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:2px 8px; padding:10px; border-radius:8px; cursor:pointer; border:1px solid transparent; text-align:left; background:none}
+.uitem:hover{background:var(--surface-2)}
+.uitem.sel{border-color:var(--blue); background:var(--blue-soft)}
+.uitem b{font-family:var(--f-mono)}
+.uitem small{color:var(--muted); grid-column:1/-1}
+.dl{display:grid; grid-template-columns:auto minmax(0,1fr); gap:6px 12px; font-size:13px; margin:0}
+.dl dt{color:var(--muted)} .dl dd{margin:0; text-align:right; font-weight:600}
+.stats{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:1px solid var(--line); border-radius:8px; overflow:hidden}
+.stats div{display:flex; justify-content:space-between; gap:8px; padding:7px 10px; border-bottom:1px solid var(--line); font-size:13px}
+.stats div:nth-child(odd){border-right:1px solid var(--line)}
+.stats span{color:var(--muted)}
+.stats .fuel{background:var(--accent-soft)}
+.player{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.player input[type=range]{flex:1; min-width:160px; accent-color:var(--accent)}
+.chips{display:flex; flex-wrap:wrap; gap:6px}
+.chip{min-height:32px; padding:0 12px; border-radius:999px; border:1px solid var(--line); background:var(--surface); cursor:pointer; font-size:13px}
+.chip.on{background:var(--fg); color:var(--bg); border-color:var(--fg)}
+.rule{display:flex; gap:10px; align-items:flex-start; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px}
+.rule:last-child{border-bottom:0}
+.rule input{width:18px; height:18px; margin-top:1px; accent-color:var(--accent)}
+.rule small{display:block; color:var(--muted)}
+.chart text{font-family:var(--f-mono); font-size:11px; fill:var(--muted)}
+.chart .grid-l{stroke:var(--line)}
+.chart .lvl{fill:none; stroke:var(--accent); stroke-width:2.5}
+.chart .area{fill:var(--accent-soft)}
+.chart .band{fill:var(--surface-2)}
+.chart .ev-fill{fill:var(--accent)} .chart .ev-robo{fill:var(--red)}
+.chart .ev-t{fill:#fff; font-weight:600}
+
+.uml{background:var(--diagram-bg); border:1px solid var(--line); border-radius:8px; padding:12px; overflow-x:auto; color:#17221A}
+.uml pre.mermaid{margin:0; background:transparent; min-width:640px}
+.uml-nav{display:flex; flex-wrap:wrap; gap:6px}
+.uml-nav a{font-size:13px; text-decoration:none; color:var(--fg); border:1px solid var(--line); background:var(--surface); padding:6px 12px; border-radius:999px}
+.uml-nav a:hover{background:var(--surface-2)}
+.note{font-size:12px; color:var(--muted)}
+
+.modal{position:fixed; inset:0; z-index:20; background:rgba(10,18,12,.5); display:flex; align-items:center; justify-content:center; padding:16px}
+.dialog{background:var(--surface); color:var(--fg); border-radius:14px; width:min(520px,100%); padding:22px; display:flex; flex-direction:column; gap:12px; box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.dialog p{margin:0; color:var(--muted)}
+.dialog .err{color:var(--red); font-size:13px; min-height:18px}
+.dialog .act{display:flex; justify-content:flex-end; gap:8px}
+.toast{position:fixed; right:max(20px, env(safe-area-inset-right,0px)); bottom:calc(20px + env(safe-area-inset-bottom,0px)); z-index:30; background:var(--fg); color:var(--bg); padding:10px 16px; border-radius:10px; font-size:13px; box-shadow:0 8px 24px rgba(0,0,0,.25)}
+
+@media (max-width:860px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .side{position:static; height:auto; flex-direction:row; align-items:center; padding-block:10px; padding-left:max(16px, env(safe-area-inset-left,0px)); padding-right:max(16px, env(safe-area-inset-right,0px)); gap:12px; overflow:hidden}
+  .logo small,.side-foot{display:none}
+  .nav{flex-direction:row; overflow-x:auto; gap:2px; min-width:0}
+  .nav a{white-space:nowrap; padding:8px 10px}
+  .nav a.on{box-shadow:inset 0 -3px 0 var(--amber-dot)}
+  .topbar,.content{padding-left:max(16px, env(safe-area-inset-left,0px)); padding-right:max(16px, env(safe-area-inset-right,0px))}
+  .top-actions{margin-left:0}
+}
+@media (prefers-reduced-motion: reduce){ .m-unit{transition:none} .m-unit[data-corte="pendiente"] circle.halo{animation:none} }
+</style>
+
+<div class="app">
+  <aside class="side">
+    <div class="logo">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#9BD27A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>
+      <div><b>AgroTrack</b><small>Flota agrícola · Pomalca</small></div>
+    </div>
+    <nav class="nav" aria-label="Módulos">
+      <a href="#consola" data-v="consola"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Consola</a>
+      <a href="#mapa" data-v="mapa"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>Mapa en vivo</a>
+      <a href="#recorridos" data-v="recorridos"><svg viewBox="0 0 24 24"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/></svg>Recorridos</a>
+      <a href="#combustible" data-v="combustible"><svg viewBox="0 0 24 24"><path d="M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M3 21h12M4 10h10M14 8l3 3v6a1.5 1.5 0 0 0 3 0V9l-3-3"/></svg>Combustible</a>
+      <a href="#corte" data-v="corte"><svg viewBox="0 0 24 24"><path d="M12 2v8"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/></svg>Corte de motor</a>
+      <a href="#alertas" data-v="alertas"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>Alertas<span class="count" id="nav-count" hidden>0</span></a>
+      <a href="#reportes" data-v="reportes"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Reportes</a>
+      <a href="#configuracion" data-v="configuracion"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Configuración</a>
+      <a href="#uml" data-v="uml"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="6"/><rect x="14" y="15" width="7" height="6"/><rect x="14" y="3" width="7" height="6"/><path d="M10 6h4M17.5 9v6"/></svg>Diagramas UML</a>
+    </nav>
+    <div class="side-foot">Prototipo de interfaz · datos de ejemplo</div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="clock"><span>Hora de la flota</span><b class="num" id="clock">06:00</b></div>
+      <span class="demo">Simulación: cada 2 s equivale a un reporte GPS de 60 s</span>
+      <div class="top-actions">
+        <button class="btn sm" id="btn-sim" type="button"><svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg><span>Pausar</span></button>
+        <a class="btn sm" href="#alertas" id="top-alerts">0 alertas abiertas</a>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- CONSOLA -->
+      <section class="view" id="view-consola" aria-labelledby="h-consola">
+        <div class="head"><div><h1 id="h-consola">Consola de flota</h1><p>Estado general de los camiones y maquinaria en campo, actualizado con cada reporte.</p></div></div>
+        <div class="grid g-kpi" id="kpis"></div>
+        <div class="grid g-2">
+          <div class="card">
+            <div class="card-head"><h2>Mapa de lotes</h2><span class="sub">Zona autorizada en línea discontinua</span>
+              <div class="legend" style="margin-left:auto"><span><i style="background:var(--accent)"></i>Conduciendo</span><span><i style="background:var(--amber-dot)"></i>Ralentí</span><span><i style="background:var(--grey)"></i>Apagado</span><span><i style="background:var(--red)"></i>Bloqueado</span></div>
+            </div>
+            <div class="map-wrap"><svg class="map" id="map-mini" role="img" aria-label="Mapa de lotes con la posición de cada unidad"></svg></div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:16px; min-width:0">
+            <div class="card"><div class="card-head"><h2>Rendimiento por unidad</h2><span class="sub">galones por hora de motor</span></div><div class="bars" id="bars"></div></div>
+            <div class="card"><div class="card-head"><h2>Alertas recientes</h2><a href="#alertas" class="sub" style="margin-left:auto">Ver todas</a></div><div class="alist" id="alerts-mini"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- MAPA -->
+      <section class="view" id="view-mapa" aria-labelledby="h-mapa">
+        <div class="head"><div><h1 id="h-mapa">Mapa en vivo</h1><p>Selecciona una unidad para ver su detalle y actuar sobre ella.</p></div></div>
+        <div class="grid g-map">
+          <div class="card"><div class="map-wrap"><svg class="map" id="map-live" role="img" aria-label="Mapa en vivo de la flota"></svg></div></div>
+          <div class="card" style="display:flex; flex-direction:column; gap:12px">
+            <div class="ulist" id="ulist"></div>
+            <div id="udetail"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RECORRIDOS -->
+      <section class="view" id="view-recorridos" aria-labelledby="h-rec">
+        <div class="head"><div><h1 id="h-rec">Recorridos</h1><p>Historial punto por punto con la velocidad de cada reporte. Reproduce el viaje o guárdalo como ruta permitida.</p></div>
+          <div class="tools">
+            <label class="field">Unidad<select id="rec-unit"></select></label>
+            <label class="field">Día<select id="rec-day"><option value="0">Hoy, 04/11/2026</option><option value="1">03/11/2026</option><option value="2">02/11/2026</option></select></label>
+            <label class="field">Etiqueta en puntos<select id="rec-label"><option value="v">Velocidad (km/h)</option><option value="f">Combustible (gal)</option><option value="t">Hora</option></select></label>
+          </div>
+        </div>
+        <div class="grid g-rec">
+          <div class="card" style="display:flex; flex-direction:column; gap:12px">
+            <h2 id="rec-title">Detalle del recorrido</h2>
+            <div class="stats" id="rec-stats"></div>
+            <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px">
+              <button class="btn" type="button" id="rec-start">Punto de inicio</button>
+              <button class="btn" type="button" id="rec-end">Punto final</button>
+              <button class="btn" type="button" id="rec-geo">Guardar como geocerca-ruta</button>
+              <button class="btn" type="button" id="rec-copy">Copiar puntos (CSV)</button>
+            </div>
+          </div>
+          <div class="card" style="display:flex; flex-direction:column; gap:10px">
+            <div class="map-wrap"><svg class="map" id="map-rec" role="img" aria-label="Mapa del recorrido seleccionado"></svg></div>
+            <div class="player">
+              <button class="btn primary sm" id="rec-play" type="button" aria-label="Reproducir viaje"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg><span>Reproducir</span></button>
+              <span class="num" id="rec-time">05:30</span>
+              <input type="range" id="rec-range" min="0" max="149" value="0" aria-label="Posición en el recorrido">
+              <label class="inline note" for="rec-speed">Velocidad <select id="rec-speed" class="btn sm"><option value="400">x1</option><option value="100">x4</option><option value="25">x16</option></select></label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- COMBUSTIBLE -->
+      <section class="view" id="view-combustible" aria-labelledby="h-fuel">
+        <div class="head"><div><h1 id="h-fuel">Control de combustible</h1><p>Nivel del tanque leído por el sensor capacitivo y el CAN bus, cruzado con las horas de motor. Una caída con el motor apagado se marca como posible robo.</p></div>
+          <div class="tools">
+            <label class="field">Unidad<select id="fuel-unit"></select></label>
+            <label class="field">Día<select id="fuel-day"><option value="0">03/11/2026</option><option value="1">02/11/2026</option><option value="2">01/11/2026</option></select></label>
+          </div>
+        </div>
+        <div class="grid g-kpi" id="fuel-kpis"></div>
+        <div class="card">
+          <div class="card-head"><h2>Nivel del tanque en el día</h2>
+            <div class="legend" style="margin-left:auto"><span><i style="background:var(--accent);border-radius:2px"></i>Nivel</span><span><i style="background:var(--surface-2);border:1px solid var(--line);border-radius:2px"></i>Motor encendido</span><span><i style="background:var(--accent);border-radius:2px"></i>Carga</span><span><i style="background:var(--red);border-radius:2px"></i>Caída sospechosa</span></div>
+          </div>
+          <div class="map-wrap"><svg class="chart" id="fuel-chart" viewBox="0 0 1000 300" style="width:100%; min-width:560px; height:auto" role="img" aria-label="Gráfico de nivel de combustible durante el día"></svg></div>
+        </div>
+        <div class="tbl-wrap"><table id="fuel-events"></table></div>
+      </section>
+
+      <!-- CORTE -->
+      <section class="view" id="view-corte" aria-labelledby="h-corte">
+        <div class="head"><div><h1 id="h-corte">Corte de motor remoto</h1><p>El relé corta la bomba de combustible solo cuando la unidad va a menos de 5 km/h. Si está en marcha, la orden queda pendiente hasta que se detenga. Toda orden queda registrada.</p></div></div>
+        <div class="tbl-wrap"><table id="corte-table"></table></div>
+        <div class="grid g-2b">
+          <div class="card"><h2>Reglas automáticas</h2><div id="rules"></div></div>
+          <div class="card"><h2>Bitácora de órdenes</h2><div class="tbl-wrap" style="border:0"><table id="orders"></table></div></div>
+        </div>
+      </section>
+
+      <!-- ALERTAS -->
+      <section class="view" id="view-alertas" aria-labelledby="h-alertas">
+        <div class="head"><div><h1 id="h-alertas">Alertas</h1><p>Eventos detectados por el motor de reglas en cada reporte del GPS.</p></div>
+          <div class="tools chips" id="alert-filter"></div>
+        </div>
+        <div class="card"><div class="alist" id="alerts-all"></div></div>
+      </section>
+
+      <!-- REPORTES -->
+      <section class="view" id="view-reportes" aria-labelledby="h-rep">
+        <div class="head"><div><h1 id="h-rep">Reportes</h1><p>Resúmenes listos para revisar o pegar en Excel.</p></div>
+          <div class="tools">
+            <label class="field">Reporte<select id="rep-type"><option value="resumen">Resumen por unidad (hoy)</option><option value="combustible">Eventos de combustible</option><option value="cortes">Órdenes de corte</option><option value="alertas">Alertas</option></select></label>
+            <button class="btn" type="button" id="rep-copy" style="align-self:flex-end">Copiar como CSV</button>
+          </div>
+        </div>
+        <div class="tbl-wrap"><table id="rep-table"></table></div>
+      </section>
+
+      <!-- CONFIGURACION -->
+      <section class="view" id="view-configuracion" aria-labelledby="h-conf">
+        <div class="head"><div><h1 id="h-conf">Configuración</h1><p>Unidades, equipos GPS, conductores, geocercas y permisos. Un reporte más frecuente da más detalle pero consume más datos.</p></div></div>
+        <div class="card"><h2>Unidades y equipos GPS</h2><div class="tbl-wrap" style="border:0"><table id="conf-units"></table></div></div>
+        <div class="grid g-2b">
+          <div class="card"><h2>Conductores (tarjeta RFID)</h2><div class="tbl-wrap" style="border:0"><table id="conf-drivers"></table></div></div>
+          <div class="card"><h2>Geocercas</h2><div class="tbl-wrap" style="border:0"><table id="conf-geo"></table></div></div>
+        </div>
+        <div class="card"><h2>Usuarios y permisos</h2><div class="tbl-wrap" style="border:0"><table id="conf-users"></table></div></div>
+      </section>
+
+      <!-- UML -->
+      <section class="view" id="view-uml" aria-labelledby="h-uml">
+        <div class="head"><div><h1 id="h-uml">Diagramas UML</h1><p>Modelo del sistema GPS/GPRS y del frontend. Cada pantalla de este prototipo corresponde a los casos de uso y clases de abajo.</p></div></div>
+        <nav class="uml-nav" aria-label="Diagramas">
+          <a href="#uml-casos">Casos de uso</a><a href="#uml-clases">Clases</a><a href="#uml-secuencia">Secuencia: corte de motor</a><a href="#uml-estados">Estados de la orden</a><a href="#uml-despliegue">Despliegue</a><a href="#uml-navegacion">Navegación del frontend</a><a href="#uml-front">Arquitectura del frontend</a>
+        </nav>
+
+        <div class="card" id="uml-casos"><h2>1. Casos de uso</h2>
+<div class="uml"><pre class="mermaid">
+flowchart LR
+  SUP["Supervisor de flota"]
+  subgraph S["Sistema AgroTrack GPS/GPRS"]
+    UC1(["Ver ubicación en tiempo real"])
+    UC2(["Reproducir recorridos"])
+    UC3(["Controlar combustible"])
+    UC6(["Recibir alertas"])
+    UC4(["Ordenar corte de motor"])
+    UC7(["Generar reportes"])
+    UC9(["Enviar posición y sensores"])
+    UC8(["Identificarse con tarjeta RFID"])
+    UC5(["Configurar reglas y geocercas"])
+    UC10(["Gestionar unidades y usuarios"])
+  end
+  GPS["Equipo GPS"]
+  CON["Conductor"]
+  ADM["Administrador"]
+  SUP --- UC1
+  SUP --- UC2
+  SUP --- UC3
+  SUP --- UC6
+  SUP --- UC4
+  SUP --- UC7
+  UC9 --- GPS
+  UC8 --- CON
+  UC5 --- ADM
+  UC10 --- ADM
+  UC3 -. "«extend»" .-> UC6
+  UC4 -. "«include» velocidad &lt; 5 km/h" .-> UC9
+</pre></div></div>
+
+        <div class="card" id="uml-clases"><h2>2. Clases</h2>
+<div class="uml"><pre class="mermaid">
+classDiagram
+  direction LR
+  class Unidad {
+    +String placa
+    +String grupo
+    +String tipo
+    +float capacidadTanqueGal
+    +EstadoMotor estado
+    +bloquear()
+    +desbloquear()
+  }
+  class EquipoGPS {
+    +String imei
+    +String modelo
+    +String simICCID
+    +int intervaloReporteSeg
+    +enviarComando(cmd)
+  }
+  class Sensor {
+    +String tipo
+    +String puerto
+    +float calibracion
+  }
+  class Posicion {
+    +DateTime fechaHora
+    +float lat
+    +float lon
+    +float velocidadKmh
+    +bool ignicion
+    +float nivelCombustible
+  }
+  class Conductor {
+    +String dni
+    +String nombre
+    +String tarjetaRFID
+  }
+  class Geocerca {
+    +String nombre
+    +String tipo
+    +contiene(Posicion) bool
+  }
+  class Regla {
+    +String condicion
+    +String accion
+    +bool activa
+    +evaluar(Posicion) bool
+  }
+  class Alerta {
+    +DateTime fechaHora
+    +String tipo
+    +String severidad
+    +bool atendida
+  }
+  class OrdenCorte {
+    +DateTime fechaHora
+    +String motivo
+    +String estado
+    +confirmar()
+  }
+  class Usuario {
+    +String nombre
+    +String rol
+    +bool puedeCortar
+  }
+  class Viaje {
+    +DateTime inicio
+    +DateTime fin
+    +float distanciaKm
+    +float combustibleGal
+    +calcularRendimiento() float
+  }
+  Unidad "1" -- "1" EquipoGPS : tiene
+  EquipoGPS "1" o-- "*" Sensor : conecta
+  EquipoGPS "1" --> "*" Posicion : reporta
+  Unidad "1" --> "*" Viaje : realiza
+  Viaje "1" o-- "*" Posicion : agrupa
+  Conductor "1" --> "*" Viaje : maneja
+  Regla "*" --> "0..1" Geocerca : usa
+  Regla "1" --> "*" Alerta : genera
+  Alerta "0..1" --> "0..1" OrdenCorte : dispara
+  Usuario "1" --> "*" OrdenCorte : autoriza
+  OrdenCorte "*" --> "1" Unidad : bloquea
+</pre></div></div>
+
+        <div class="card" id="uml-secuencia"><h2>3. Secuencia: alerta de robo y corte de motor</h2>
+<div class="uml"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor S as Supervisor
+  participant W as Frontend web / app
+  participant SV as Servidor (API + reglas)
+  participant BD as Base de datos
+  participant R as Red 4G / GPRS
+  participant G as Equipo GPS
+  participant RL as Relé de corte
+  G->>R: Posición + combustible (cada 60 s)
+  R->>SV: Trama TCP
+  SV->>BD: Guardar posición
+  SV->>SV: Evaluar reglas (caída de combustible)
+  SV-->>W: Alerta "posible robo"
+  S->>W: Pulsa "Bloquear motor" + clave
+  W->>SV: POST /ordenes-corte
+  SV->>BD: Registrar orden (usuario, motivo)
+  SV->>R: Comando de corte
+  R->>G: Comando
+  alt velocidad &lt; 5 km/h
+    G->>RL: Activar salida digital
+    RL-->>G: Bomba de combustible cortada
+    G->>R: Confirmación
+    R->>SV: ACK
+    SV->>BD: Orden = Confirmada
+    SV-->>W: Motor bloqueado
+  else en movimiento
+    G->>G: Espera a que se detenga
+    G->>R: Pendiente
+    R->>SV: Estado pendiente
+    SV-->>W: Bloqueo programado
+  end
+</pre></div></div>
+
+        <div class="card" id="uml-estados"><h2>4. Estados de la orden de corte</h2>
+<div class="uml"><pre class="mermaid">
+stateDiagram-v2
+  [*] --> Enviada : supervisor o regla crea la orden
+  Enviada --> Confirmada : velocidad menor a 5 km/h
+  Enviada --> Pendiente : unidad en movimiento
+  Pendiente --> Confirmada : la unidad se detiene
+  Pendiente --> Cancelada : supervisor cancela
+  Confirmada --> Desbloqueada : orden de desbloqueo con clave
+  Desbloqueada --> [*]
+  Cancelada --> [*]
+</pre></div></div>
+
+        <div class="card" id="uml-despliegue"><h2>5. Despliegue (arquitectura física)</h2>
+<div class="uml"><pre class="mermaid">
+flowchart LR
+  subgraph N1["«device» Camión agrícola"]
+    G["Equipo GPS 4G: GNSS, módem, memoria"]
+    CAN["CAN bus / J1939"]
+    FS["Sensor capacitivo de nivel"]
+    RF["Lector RFID"]
+    RL["Relé de corte"]
+    CAN --> G
+    FS -- "RS-485" --> G
+    RF --> G
+    G -- "salida digital" --> RL
+  end
+  subgraph N2["«network» Comunicaciones"]
+    CEL["Red celular 4G / GPRS"]
+    SAT["Red satelital (opcional)"]
+  end
+  subgraph N3["«server» Nube"]
+    GW["Gateway TCP/UDP"]
+    RE["Motor de reglas y alertas"]
+    DB[("Base de datos histórica")]
+    API["API REST"]
+    GW --> DB
+    GW --> RE
+    RE --> DB
+    RE --> API
+    API --> DB
+  end
+  subgraph N4["«client» Usuarios"]
+    WEB["Frontend web"]
+    APP["App móvil"]
+    ERP["ERP Pomalca"]
+  end
+  G <--> CEL
+  G -.-> SAT
+  CEL <--> GW
+  SAT --> GW
+  API <--> WEB
+  API <--> APP
+  API --> ERP
+</pre></div></div>
+
+        <div class="card" id="uml-navegacion"><h2>6. Navegación del frontend</h2>
+<div class="uml"><pre class="mermaid">
+flowchart LR
+  L["Inicio de sesión"] --> C["Consola"]
+  C --> M["Mapa en vivo"]
+  C --> A["Alertas"]
+  C --> P["Reportes"]
+  C --> G["Configuración"]
+  M --> R["Recorridos"]
+  M --> F["Combustible"]
+  M --> K["Corte de motor"]
+  A --> K
+  F --> K
+  G --> G1["Unidades y equipos GPS"]
+  G --> G2["Conductores RFID"]
+  G --> G3["Geocercas y reglas"]
+  G --> G4["Usuarios y permisos"]
+</pre></div></div>
+
+        <div class="card" id="uml-front"><h2>7. Arquitectura del frontend (componentes)</h2>
+<div class="uml"><pre class="mermaid">
+flowchart TB
+  subgraph UI["Vistas"]
+    V1["Consola"]
+    V2["Mapa en vivo"]
+    V3["Recorridos"]
+    V4["Combustible"]
+    V5["Corte de motor"]
+    V6["Alertas"]
+    V7["Reportes"]
+    V8["Configuración"]
+  end
+  subgraph CMP["Componentes compartidos"]
+    MAP["Mapa SVG de lotes"]
+    KPI["Tarjetas de indicadores"]
+    TBL["Tablas"]
+    MOD["Modal de confirmación con clave"]
+    CH["Gráfico de nivel"]
+  end
+  RT["Router por hash"] --> UI
+  UI --> CMP
+  UI --> ST["Estado de la flota (store)"]
+  ST --> API2["Cliente API REST"]
+  WS["Canal en vivo (WebSocket)"] --> ST
+  API2 --> SRV["Servidor AgroTrack"]
+  WS --- SRV
+</pre></div></div>
+        <p class="note">En este prototipo, el “canal en vivo” es un simulador dentro de la página. En producción se conecta al servidor por WebSocket y a la API REST.</p>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="modal" hidden>
+  <form class="dialog" id="modal-form" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <h2 id="modal-title">Confirmar corte de motor</h2>
+    <p id="modal-text"></p>
+    <label class="field" for="modal-motivo">Motivo
+      <select id="modal-motivo"><option>Sospecha de robo de combustible</option><option>Uso no autorizado</option><option>Fuera de geocerca</option><option>Fuera de turno</option><option>Otro</option></select>
+    </label>
+    <label class="field" for="modal-clave">Clave de supervisor
+      <input id="modal-clave" type="password" autocomplete="off" placeholder="Clave de demostración: 1234">
+    </label>
+    <div class="err" id="modal-err" role="alert"></div>
+    <div class="act">
+      <button type="button" class="btn" id="modal-cancel">Cancelar</button>
+      <button type="submit" class="btn danger" id="modal-ok">Bloquear motor</button>
+    </div>
+  </form>
+</div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+(function(){
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const f1 = n => n.toLocaleString('es-PE', {minimumFractionDigits:1, maximumFractionDigits:1});
+const f0 = n => Math.round(n).toLocaleString('es-PE');
+function rng(seed){ let s = seed >>> 0 || 1; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; }
+function hash(str){ let h = 2166136261; for (const c of str) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+const hhmm = m => { m = ((Math.round(m) % 1440) + 1440) % 1440; return String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0'); };
+
+/* ---------- Mapa base (1 unidad de mapa = 10 m) ---------- */
+const ZONE = {x0:20, y0:20, x1:850, y1:600};
+const PLANTA = {x:720, y:60, w:120, h:90};
+const LOTES = [
+  {id:'L12', nombre:'Lote 12 · Caña', pts:[[60,50],[340,45],[350,270],[70,275]]},
+  {id:'L07', nombre:'Lote 07 · Cosecha', pts:[[400,50],[690,55],[695,270],[405,272]]},
+  {id:'L15', nombre:'Lote 15 · Caña', pts:[[60,308],[360,312],[365,568],[65,565]]},
+  {id:'L21', nombre:'Lote 21 · Soca', pts:[[400,310],[690,306],[695,565],[405,570]]},
+];
+const ROADS = ['380,30 380,585','710,30 710,585','20,290 990,290','380,30 710,30','40,290 40,585','40,585 710,585','710,105 720,105'];
+const ROUTES = {
+  R1:[[710,170],[710,290],[380,290],[380,585],[710,585],[710,290],[710,170]],
+  R2:[[710,170],[710,290],[990,290],[710,290],[380,290],[380,30],[710,30],[710,170]],
+  R3:[[380,290],[40,290],[40,585],[380,585],[380,290]],
+  R4:[[435,345],[660,345],[660,540],[440,540],[435,345]],
+  R5:[[520,150],[600,110],[650,180],[560,230],[520,150]],
+};
+const RLEN = {};
+for (const k in ROUTES){ const r = ROUTES[k]; let L = 0; const segs = []; for (let i=1;i<r.length;i++){ const d = Math.hypot(r[i][0]-r[i-1][0], r[i][1]-r[i-1][1]); segs.push(d); L += d; } RLEN[k] = {L, segs}; }
+function posAt(k, s){ const r = ROUTES[k], {L, segs} = RLEN[k]; s = ((s % L) + L) % L; for (let i=0;i<segs.length;i++){ if (s <= segs[i]){ const t = segs[i] ? s/segs[i] : 0; return [r[i][0] + (r[i+1][0]-r[i][0])*t, r[i][1] + (r[i+1][1]-r[i][1])*t]; } s -= segs[i]; } return r[r.length-1].slice(); }
+function inPoly(p, pts){ let c = false; for (let i=0, j=pts.length-1; i<pts.length; j=i++){ const [xi,yi]=pts[i], [xj,yj]=pts[j]; if (((yi>p[1])!==(yj>p[1])) && (p[0] < (xj-xi)*(p[1]-yi)/(yj-yi)+xi)) c = !c; } return c; }
+const inZone = p => p[0]>=ZONE.x0 && p[0]<=ZONE.x1 && p[1]>=ZONE.y0 && p[1]<=ZONE.y1;
+function lugar(p){ if (p[0]>=PLANTA.x-12 && p[0]<=PLANTA.x+PLANTA.w && p[1]>=PLANTA.y && p[1]<=PLANTA.y+PLANTA.h+30) return 'Planta / grifo'; for (const l of LOTES) if (inPoly(p,l.pts)) return l.nombre; return inZone(p) ? 'Vía interna' : 'Fuera de zona autorizada'; }
+
+/* ---------- Datos de ejemplo (clases del UML) ---------- */
+const CONDUCTORES = [
+  {dni:'4•••••12', nombre:'Conductor A. Ramos', rfid:'RF-0041'},
+  {dni:'4•••••87', nombre:'Conductor B. Quispe', rfid:'RF-0042'},
+  {dni:'1•••••30', nombre:'Conductor C. Sánchez', rfid:'RF-0043'},
+  {dni:'7•••••56', nombre:'Conductor D. Vílchez', rfid:'RF-0044'},
+  {dni:'4•••••09', nombre:'Operador E. Chapoñán', rfid:'RF-0045'},
+  {dni:'1•••••71', nombre:'Operador F. Díaz', rfid:'RF-0046'},
+];
+const units = [
+  {id:'CAM-104', grupo:'Cosecha', tipo:'Camión cañero', con:0, imei:'358480081290104', modelo:'GPS 4G con CAN', mode:'parado', fixed:[350,290], hroute:'R3', vBase:0, fuel:92, rate:5.6},
+  {id:'CAM-111', grupo:'Transporte de caña', tipo:'Camión cañero', con:1, imei:'358480081290111', modelo:'GPS 4G con CAN', mode:'ruta', route:'R1', s:120, vBase:33, fuel:71, rate:4.3},
+  {id:'CAM-118', grupo:'Transporte de caña', tipo:'Camión cañero', con:2, imei:'358480081290118', modelo:'GPS 4G con CAN', mode:'ruta', route:'R2', s:70, vBase:30, fuel:58, rate:3.9},
+  {id:'CAM-125', grupo:'Cosecha', tipo:'Camión cañero', con:3, imei:'358480081290125', modelo:'GPS 4G con CAN', mode:'ruta', route:'R3', s:420, vBase:24, fuel:103, rate:3.4},
+  {id:'TRC-022', grupo:'Riego', tipo:'Tractor', con:4, imei:'358480081290022', modelo:'GPS 4G con CAN', mode:'ralenti', fixed:[520,150], hroute:'R5', vBase:0, fuel:55, rate:2.9},
+  {id:'RET-03', grupo:'Maquinaria', tipo:'Retroexcavadora', con:5, imei:'358480081290003', modelo:'GPS 4G con CAN', mode:'ruta', route:'R4', s:0, vBase:9, fuel:64, rate:3.2},
+];
+for (const u of units){
+  u.cap = 150; u.corte = 'normal'; u.intervalo = 60; u.v = 0; u.ign = u.mode !== 'parado';
+  u.pos = u.fixed ? u.fixed.slice() : posAt(u.route, u.s);
+  u.km = 0; u.consumo = u.rate * 0.9; u.motorMin = 54; u.ralentiMin = 0; u.alertas = 0; u.outside = false; u.lastSpeedAlert = -99; u.robo = 0;
+  u.estado = u.mode === 'ruta' ? 'conduciendo' : (u.ign ? 'ralenti' : 'apagado');
+  if (!u.hroute) u.hroute = u.route;
+}
+const get = id => units.find(u => u.id === id);
+const sim = {t:0, running:true, timer:null};
+const alerts = [];
+const orders = [];
+const fuelEvents = [{t:-30, unidad:'CAM-111', tipo:'Carga', delta:80, motor:'Apagado', lugar:'Planta / grifo', nota:'Vale de grifo N.º [—]'}];
+const rules = {
+  geocerca:{on:true, label:'Salida de la zona autorizada', sub:'Bloquea el motor automáticamente'},
+  robo:{on:true, label:'Caída de combustible mayor a 15 gal con motor apagado', sub:'Bloquea el motor automáticamente'},
+  velocidad:{on:true, label:'Exceso de velocidad mayor a 40 km/h en vías internas', sub:'Solo alerta'},
+  ralenti:{on:false, label:'Ralentí continuo mayor a 30 min', sub:'Bloquea el motor automáticamente'},
+  turno:{on:true, label:'Uso fuera de turno (22:00 – 05:00)', sub:'Bloquea el motor automáticamente'},
+  rfid:{on:false, label:'Conductor no identificado con tarjeta RFID', sub:'Impide el arranque'},
+};
+
+function addAlert(tipo, u, texto, sev){ alerts.unshift({id:alerts.length+1, t:sim.t, tipo, unidad:u.id, texto, sev, done:false}); u.alertas++; }
+function createOrder(u, accion, motivo, origen){
+  orders.unshift({id:orders.length+1, t:sim.t, unidad:u.id, accion, motivo, origen, estado:'Enviada', tconf:null});
+  if (accion === 'Bloqueo') addAlert('Corte', u, `Orden de bloqueo enviada · ${motivo}`, 'info');
+}
+
+/* ---------- Simulación (canal en vivo) ---------- */
+function tick(){
+  sim.t++;
+  // 1. Procesar órdenes enviadas (respuesta del equipo GPS)
+  for (const o of orders){
+    if (o.estado === 'Confirmada' || o.estado === 'Cancelada') continue;
+    const u = get(o.unidad);
+    if (o.accion === 'Bloqueo'){
+      if (u.v < 5){ o.estado = 'Confirmada'; o.tconf = sim.t; u.corte = 'bloqueado'; u.v = 0; u.ign = false; addAlert('Corte', u, 'Motor bloqueado · confirmado por el equipo', 'alta'); }
+      else { o.estado = 'Pendiente'; u.corte = 'pendiente'; }
+    } else { o.estado = 'Confirmada'; o.tconf = sim.t; u.corte = 'normal'; u.ign = u.mode !== 'parado'; addAlert('Corte', u, 'Motor desbloqueado', 'info'); }
+  }
+  // 2. Mover unidades y leer sensores
+  for (const u of units){
+    const r = Math.random();
+    if (u.corte === 'bloqueado'){ u.v = 0; u.ign = false; }
+    else if (u.mode === 'ruta'){
+      if (u.corte === 'pendiente') u.v = Math.max(0, u.v - 14);
+      else u.v = clamp(u.vBase + (r - 0.5) * (u.vBase > 20 ? 18 : 6), 0, 60);
+      u.ign = true;
+      u.s += u.v / 60 * 100;
+      u.pos = posAt(u.route, u.s);
+    } else if (u.mode === 'ralenti'){ u.v = 0; u.ign = true; }
+    else { u.v = 0; u.ign = false; }
+    u.estado = u.corte === 'bloqueado' ? 'bloqueado' : (u.v >= 3 ? 'conduciendo' : (u.ign ? 'ralenti' : 'apagado'));
+    const use = u.estado === 'conduciendo' ? u.rate * (0.75 + u.v/120) / 60 : (u.estado === 'ralenti' ? 1.2/60 : 0);
+    u.fuel = Math.max(0, u.fuel - use); u.consumo += use; u.km += u.v / 60;
+    if (u.ign) u.motorMin++;
+    if (u.estado === 'ralenti') u.ralentiMin++;
+    // 3. Motor de reglas
+    const out = !inZone(u.pos);
+    if (out && !u.outside){
+      addAlert('Geocerca', u, 'Salió de la zona autorizada', 'alta');
+      if (rules.geocerca.on && u.corte === 'normal') createOrder(u, 'Bloqueo', 'Salida de geocerca', 'Automático · regla');
+    }
+    u.outside = out;
+    if (rules.velocidad.on && u.v > 40 && sim.t - u.lastSpeedAlert > 8){ u.lastSpeedAlert = sim.t; addAlert('Velocidad', u, `Exceso de velocidad: ${Math.round(u.v)} km/h`, 'media'); }
+    if (u.estado === 'ralenti' && u.ralentiMin === 20) addAlert('Ralentí', u, '20 min de ralentí continuo', 'media');
+    if (rules.ralenti.on && u.estado === 'ralenti' && u.ralentiMin >= 30 && u.corte === 'normal'){ createOrder(u, 'Bloqueo', 'Ralentí prolongado', 'Automático · regla'); }
+  }
+  // Evento de ejemplo: caída de combustible con motor apagado
+  if (sim.t === 6){
+    const u = get('CAM-104'); u.fuel -= 38; u.robo += 38;
+    fuelEvents.unshift({t:sim.t, unidad:u.id, tipo:'Caída sospechosa', delta:-38, motor:'Apagado', lugar:lugar(u.pos), nota:'Posible robo'});
+    addAlert('Robo', u, 'Caída de nivel −38 gal con motor apagado', 'critica');
+    if (rules.robo.on && u.corte === 'normal') createOrder(u, 'Bloqueo', 'Sospecha de robo de combustible', 'Automático · regla');
+  }
+  renderLive();
+}
+function startSim(){ stopSim(); sim.timer = setInterval(tick, 2000); sim.running = true; syncSimBtn(); }
+function stopSim(){ if (sim.timer) clearInterval(sim.timer); sim.timer = null; sim.running = false; syncSimBtn(); }
+function syncSimBtn(){ const b = $('#btn-sim'); b.querySelector('span').textContent = sim.running ? 'Pausar' : 'Reanudar'; b.querySelector('svg').innerHTML = sim.running ? '<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>' : '<path d="M7 4l13 8-13 8z" fill="currentColor"/>'; }
+
+/* ---------- Componente: mapa SVG ---------- */
+const SVGNS = 'http://www.w3.org/2000/svg';
+function buildMap(svg, onPick){
+  svg.setAttribute('viewBox', '0 0 1000 620');
+  svg.innerHTML = `<rect class="m-bg" x="0" y="0" width="1000" height="620"/>
+    ${LOTES.map(l => `<polygon class="m-lote" points="${l.pts.map(p=>p.join(',')).join(' ')}"/>`).join('')}
+    <rect class="m-planta" x="${PLANTA.x}" y="${PLANTA.y}" width="${PLANTA.w}" height="${PLANTA.h}" rx="4"/>
+    ${ROADS.map(r => `<polyline class="m-road" points="${r}"/>`).join('')}
+    ${ROADS.map(r => `<polyline class="m-road-in" points="${r}"/>`).join('')}
+    <rect class="m-zone" x="${ZONE.x0}" y="${ZONE.y0}" width="${ZONE.x1-ZONE.x0}" height="${ZONE.y1-ZONE.y0}" rx="6"/>
+    ${LOTES.map(l => `<text class="m-label" x="${l.pts[0][0]+14}" y="${l.pts[0][1]+26}">${l.nombre}</text>`).join('')}
+    <text class="m-label" x="${PLANTA.x+10}" y="${PLANTA.y+24}">Planta / grifo</text>
+    <text class="m-label m-label-out" x="868" y="276">Fuera de zona</text>
+    <text class="m-label m-label-out" x="868" y="316">→ Carretera</text>
+    <g class="m-track"></g><g class="m-units"></g>`;
+  if (onPick){
+    const layer = svg.querySelector('.m-units');
+    for (const u of units){
+      const g = document.createElementNS(SVGNS, 'g');
+      g.setAttribute('class', 'm-unit'); g.dataset.id = u.id; g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button'); g.setAttribute('aria-label', `Unidad ${u.id}`);
+      g.innerHTML = `<circle class="halo" r="12"/><circle class="dot" r="9"/><rect x="12" y="-24" width="70" height="20" rx="5"/><text x="18" y="-9">${u.id}</text>`;
+      g.addEventListener('click', () => onPick(u.id));
+      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); onPick(u.id); } });
+      layer.appendChild(g);
+    }
+    updateMap(svg);
+  }
+}
+function updateMap(svg, selId){
+  for (const g of svg.querySelectorAll('.m-unit')){
+    const u = get(g.dataset.id);
+    g.style.transform = `translate(${u.pos[0]}px, ${u.pos[1]}px)`;
+    g.dataset.estado = u.estado; g.dataset.corte = u.corte;
+    g.classList.toggle('sel', g.dataset.id === selId);
+  }
+}
+
+/* ---------- Router ---------- */
+const VIEWS = ['consola','mapa','recorridos','combustible','corte','alertas','reportes','configuracion','uml'];
+let current = 'consola';
+function route(){
+  let h = (location.hash || '').slice(1);
+  if (h.startsWith('uml-')) h = 'uml';
+  if (!VIEWS.includes(h)) h = 'consola';
+  current = h;
+  for (const v of VIEWS) $('#view-' + v).classList.toggle('active', v === h);
+  for (const a of $$('.nav a')) { a.classList.toggle('on', a.dataset.v === h); if (a.dataset.v === h) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); }
+  if (h === 'recorridos') renderRec();
+  if (h === 'combustible') renderFuel();
+  if (h === 'reportes') renderRep();
+  if (h === 'configuracion') renderConf();
+  renderLive();
+  const target = (location.hash || '').slice(1);
+  if (target.startsWith('uml-')) { const el = document.getElementById(target); if (el) el.scrollIntoView({block:'start'}); }
+  else window.scrollTo(0, 0);
+}
+
+/* ---------- Render en vivo ---------- */
+const ESTADO_TXT = {conduciendo:'Conduciendo', ralenti:'Ralentí', apagado:'Apagado', bloqueado:'Bloqueado', pendiente:'Bloqueo pendiente'};
+const pill = u => { const k = u.corte === 'pendiente' ? 'pendiente' : u.estado; return `<span class="pill p-${k}">${ESTADO_TXT[k]}</span>`; };
+const SEV_TXT = {critica:'Crítica', alta:'Alta', media:'Media', info:'Info'};
+function alertRow(a, withBtn){
+  return `<div class="aitem s-${a.sev}${a.done?' done':''}"><span class="stripe"></span><span class="t">${hhmm(360+a.t)}</span>
+    <span><b class="mono">${esc(a.unidad)}</b> · ${esc(a.texto)}</span>
+    <span class="inline"><span class="tag t-${a.sev}">${esc(a.tipo)}</span>${withBtn && !a.done && a.tipo !== 'Corte' ? `<button class="btn sm" data-ack="${a.id}" type="button">Marcar atendida</button>` : ''}</span></div>`;
+}
+const openAlerts = () => alerts.filter(a => !a.done && a.tipo !== 'Corte').length;
+
+function renderLive(){
+  $('#clock').textContent = hhmm(360 + sim.t);
+  const n = openAlerts();
+  $('#top-alerts').textContent = `${n} ${n === 1 ? 'alerta abierta' : 'alertas abiertas'}`;
+  const nc = $('#nav-count'); nc.hidden = n === 0; nc.textContent = n;
+  if (current === 'consola') renderConsola();
+  if (current === 'mapa') renderMapa();
+  if (current === 'corte') renderCorte();
+  if (current === 'alertas') renderAlertas();
+  if (current === 'combustible') renderFuelLive();
+}
+
+function renderConsola(){
+  const enRuta = units.filter(u => u.estado === 'conduciendo').length;
+  const consumo = units.reduce((a,u) => a + u.consumo, 0);
+  const motorH = units.reduce((a,u) => a + u.motorMin, 0) / 60;
+  const ral = units.reduce((a,u) => a + u.ralentiMin, 0);
+  const robos = units.reduce((a,u) => a + u.robo, 0);
+  const bloq = units.filter(u => u.corte !== 'normal').length;
+  $('#kpis').innerHTML = `
+    <div class="kpi"><span class="lbl">Unidades en ruta</span><span class="val">${enRuta}<small>de ${units.length}</small></span></div>
+    <div class="kpi"><span class="lbl">Combustible consumido hoy</span><span class="val">${f1(consumo)}<small>gal</small></span></div>
+    <div class="kpi"><span class="lbl">Rendimiento promedio</span><span class="val">${f1(consumo / Math.max(motorH, .1))}<small>gal/h</small></span></div>
+    <div class="kpi${ral > 30 ? ' warn' : ''}"><span class="lbl">Ralentí acumulado</span><span class="val">${f0(ral)}<small>min</small></span></div>
+    <div class="kpi${robos ? ' crit' : ''}"><span class="lbl">Combustible no justificado</span><span class="val">${f0(robos)}<small>gal</small></span></div>
+    <div class="kpi${bloq ? ' crit' : ''}"><span class="lbl">Motores bloqueados o pendientes</span><span class="val">${bloq}</span></div>`;
+  updateMap($('#map-mini'));
+  const rows = units.map(u => ({id:u.id, g:u.consumo / Math.max(u.motorMin/60, .1)})).sort((a,b) => b.g - a.g);
+  const max = Math.max(...rows.map(r => r.g), 1);
+  $('#bars').innerHTML = rows.map(r => `<div class="bar"><span class="mono">${r.id}</span><span class="track"><span class="fill${r.g > 4.5 ? ' hi' : ''}" style="display:block;width:${(r.g/max*100).toFixed(0)}%"></span></span><span class="num" style="text-align:right">${f1(r.g)}</span></div>`).join('');
+  const list = alerts.slice(0, 5);
+  $('#alerts-mini').innerHTML = list.length ? list.map(a => alertRow(a, false)).join('') : '<p class="note">Sin alertas por ahora. Aparecerán aquí en cuanto una regla se cumpla.</p>';
+}
+
+let selUnit = 'CAM-111';
+function renderMapa(){
+  updateMap($('#map-live'), selUnit);
+  $('#ulist').innerHTML = units.map(u => `<button type="button" class="uitem${u.id === selUnit ? ' sel' : ''}" data-pick="${u.id}"><b>${u.id}</b>${pill(u)}<small>${esc(u.grupo)} · ${Math.round(u.v)} km/h · ${esc(lugar(u.pos))}</small></button>`).join('');
+  const u = get(selUnit), c = CONDUCTORES[u.con], pct = u.fuel / u.cap * 100;
+  $('#udetail').innerHTML = `<div style="border-top:1px solid var(--line); padding-top:12px; display:flex; flex-direction:column; gap:10px">
+    <div class="inline"><h2 class="mono">${u.id}</h2>${pill(u)}</div>
+    <dl class="dl"><dt>Tipo</dt><dd>${esc(u.tipo)}</dd><dt>Conductor</dt><dd>${esc(c.nombre)}</dd><dt>Velocidad</dt><dd class="num">${Math.round(u.v)} km/h</dd><dt>Ubicación</dt><dd>${esc(lugar(u.pos))}</dd><dt>Último reporte</dt><dd class="num">${hhmm(360+sim.t)} · cada ${u.intervalo} s</dd><dt>Combustible</dt><dd class="num">${f1(u.fuel)} gal (${f0(pct)} %)</dd></dl>
+    <div class="gauge${pct < 20 ? ' low' : ''}"><div style="width:${pct.toFixed(0)}%"></div></div>
+    <div class="inline">${corteBtn(u)}<a class="btn sm" href="#recorridos" data-rec="${u.id}">Ver recorrido</a><a class="btn sm" href="#combustible" data-fuel="${u.id}">Ver combustible</a></div></div>`;
+}
+function corteBtn(u){
+  if (u.corte === 'bloqueado') return `<button class="btn sm ghost-danger" type="button" data-unblock="${u.id}">Desbloquear</button>`;
+  if (u.corte === 'pendiente') return `<button class="btn sm" type="button" disabled>Esperando que se detenga</button>`;
+  return `<button class="btn sm danger" type="button" data-block="${u.id}">${u.v >= 5 ? 'Bloquear al detenerse' : 'Bloquear motor'}</button>`;
+}
+
+function renderCorte(){
+  $('#corte-table').innerHTML = `<thead><tr><th>Unidad</th><th>Grupo</th><th>Estado</th><th class="r">Velocidad</th><th>Ubicación</th><th class="r">Combustible</th><th>Acción</th></tr></thead><tbody>${
+    units.map(u => `<tr class="${u.corte !== 'normal' ? 'hl' : ''}"><td><b class="mono">${u.id}</b></td><td>${esc(u.grupo)}</td><td>${pill(u)}</td><td class="r num">${Math.round(u.v)} km/h</td><td>${esc(lugar(u.pos))}</td><td class="r num">${f1(u.fuel)} gal</td><td>${corteBtn(u)}</td></tr>`).join('')}</tbody>`;
+  if (!$('#rules').childElementCount) $('#rules').innerHTML = Object.entries(rules).map(([k, r]) => `<label class="rule" for="rule-${k}"><input type="checkbox" id="rule-${k}" data-rule="${k}"${r.on ? ' checked' : ''}><span>${esc(r.label)}<small>${esc(r.sub)}</small></span></label>`).join('');
+  const st = {Enviada:'t-info', Pendiente:'t-media', Confirmada:'t-ok', Cancelada:'t-info'};
+  $('#orders').innerHTML = orders.length ? `<thead><tr><th>Hora</th><th>Unidad</th><th>Acción</th><th>Origen</th><th>Estado</th></tr></thead><tbody>${
+    orders.map(o => `<tr><td class="num">${hhmm(360+o.t)}</td><td class="mono">${o.unidad}</td><td>${o.accion}<br><small class="note">${esc(o.motivo)}</small></td><td>${esc(o.origen)}</td><td><span class="tag ${st[o.estado]}">${o.estado}</span></td></tr>`).join('')}</tbody>` : '<tbody><tr><td class="note">Aún no hay órdenes. Las reglas activas o un supervisor pueden crearlas.</td></tr></tbody>';
+}
+
+let alertFilter = 'Todas';
+function renderAlertas(){
+  const tipos = ['Todas','Robo','Geocerca','Velocidad','Ralentí','Corte'];
+  $('#alert-filter').innerHTML = tipos.map(t => `<button type="button" class="chip${t === alertFilter ? ' on' : ''}" data-af="${t}">${t}</button>`).join('');
+  const list = alerts.filter(a => alertFilter === 'Todas' || a.tipo === alertFilter);
+  $('#alerts-all').innerHTML = list.length ? list.map(a => alertRow(a, true)).join('') : '<p class="note">No hay alertas de este tipo en el turno.</p>';
+}
+
+/* ---------- Recorridos ---------- */
+let rec = {pts:[], idx:0, timer:null};
+function genHistory(id, day){
+  const u = get(id), r = rng(hash(id) + day * 7919), k = u.hroute, pts = [];
+  let s = r() * RLEN[k].L, t = 330;
+  const base = u.id === 'TRC-022' ? 8 : (u.vBase || 22);
+  const stopsEvery = 25 + Math.floor(r() * 15);
+  for (let i = 0; i < 150; i++){
+    const stop = (i % stopsEvery) >= stopsEvery - 6;
+    let v = stop ? 0 : clamp(base + (r() - 0.5) * (base > 20 ? 18 : 6), 4, 46);
+    s += v / 60 * 100;
+    const p = posAt(k, s);
+    pts.push({t:t + i, x:p[0], y:p[1], v:Math.round(v), ign: stop ? r() < 0.5 : true});
+  }
+  let fuel = 60 + r() * 50; for (const p of pts){ fuel -= p.v > 0 ? u.rate*(0.75+p.v/120)/60 : (p.ign ? 1.2/60 : 0); p.f = fuel; }
+  return pts;
+}
+function renderRec(){
+  const sel = $('#rec-unit');
+  if (!sel.options.length) sel.innerHTML = units.map(u => `<option value="${u.id}">${u.id} · ${esc(u.grupo)}</option>`).join('');
+  sel.value = selUnit;
+  if (!$('#map-rec').childElementCount) buildMap($('#map-rec'));
+  rec.pts = genHistory(selUnit, +$('#rec-day').value); rec.idx = 0;
+  $('#rec-range').max = rec.pts.length - 1; $('#rec-range').value = 0;
+  const P = rec.pts, mov = P.filter(p => p.v > 0), stop = P.filter(p => p.v === 0);
+  const dist = P.reduce((a,p) => a + p.v/60, 0), idle = stop.filter(p => p.ign).length;
+  const fuelUsed = P[0].f - P[P.length-1].f, motorMin = mov.length + idle;
+  const u = get(selUnit), c = CONDUCTORES[u.con];
+  $('#rec-title').textContent = `Detalle del recorrido · ${selUnit}`;
+  $('#rec-stats').innerHTML = [
+    ['Inicio', hhmm(P[0].t)], ['Fin', hhmm(P[P.length-1].t)], ['Distancia', f1(dist) + ' km'], ['Conductor', c.nombre.replace(/^(Conductor|Operador) /,'')],
+    ['Vel. máxima', Math.max(...P.map(p=>p.v)) + ' km/h'], ['Vel. promedio', f1(mov.reduce((a,p)=>a+p.v,0)/Math.max(mov.length,1)) + ' km/h'],
+    ['En movimiento', mov.length + ' min'], ['Detenido', stop.length + ' min'], ['Ralentí', idle + ' min'], ['Horas de motor', hhmm(motorMin).replace(':',' h ') + ' min'],
+  ].map(([a,b]) => `<div><span>${a}</span><b class="num">${esc(b)}</b></div>`).join('') +
+  `<div class="fuel"><span>Combustible usado</span><b class="num">${f1(fuelUsed)} gal</b></div><div class="fuel"><span>Rendimiento</span><b class="num">${f1(fuelUsed / Math.max(motorMin/60, .1))} gal/h</b></div>`;
+  drawTrack();
+}
+function labelFor(p){ const m = $('#rec-label').value; return m === 'v' ? String(p.v) : m === 'f' ? f0(p.f) : hhmm(p.t); }
+function drawTrack(){
+  const g = $('#map-rec .m-track'), P = rec.pts, mode = $('#rec-label').value;
+  const w = mode === 't' ? 40 : 24;
+  let html = `<polyline points="${P.map(p => p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ')}"/>`;
+  P.forEach((p, i) => { if (i % 4) return; const col = p.v === 0 ? 'var(--amber-dot)' : (p.v > 40 ? 'var(--red)' : 'var(--accent)'); html += `<g class="m-pt" transform="translate(${(p.x - w/2).toFixed(1)},${(p.y - 22).toFixed(1)})"><rect width="${w}" height="16" rx="3" fill="${col}"/><text x="${w/2}" y="12" text-anchor="middle">${labelFor(p)}</text></g>`; });
+  html += `<g class="m-cursor" id="rec-cursor"><circle r="9"/><rect x="12" y="-12" width="120" height="22" rx="5"/><text x="18" y="4" id="rec-cursor-t"></text></g>`;
+  g.innerHTML = html; moveCursor();
+}
+function moveCursor(){
+  const p = rec.pts[rec.idx]; if (!p) return;
+  $('#rec-cursor').setAttribute('transform', `translate(${p.x.toFixed(1)},${p.y.toFixed(1)})`);
+  $('#rec-cursor-t').textContent = `${hhmm(p.t)} · ${p.v} km/h`;
+  $('#rec-time').textContent = hhmm(p.t); $('#rec-range').value = rec.idx;
+}
+function playRec(){
+  if (rec.timer){ clearInterval(rec.timer); rec.timer = null; setPlay(false); return; }
+  if (rec.idx >= rec.pts.length - 1) rec.idx = 0;
+  setPlay(true);
+  rec.timer = setInterval(() => { rec.idx++; moveCursor(); if (rec.idx >= rec.pts.length - 1){ clearInterval(rec.timer); rec.timer = null; setPlay(false); } }, +$('#rec-speed').value);
+}
+function setPlay(on){ const b = $('#rec-play'); b.querySelector('span').textContent = on ? 'Pausar' : 'Reproducir'; b.setAttribute('aria-label', on ? 'Pausar viaje' : 'Reproducir viaje'); b.querySelector('svg').innerHTML = on ? '<rect x="6" y="5" width="4" height="14" fill="currentColor"/><rect x="14" y="5" width="4" height="14" fill="currentColor"/>' : '<path d="M7 4l13 8-13 8z" fill="currentColor"/>'; }
+function stopRec(){ if (rec.timer){ clearInterval(rec.timer); rec.timer = null; setPlay(false); } }
+
+/* ---------- Combustible ---------- */
+function genFuel(id, day){
+  const u = get(id), r = rng(hash(id) * 31 + day * 104729), pts = [], ev = [];
+  let lvl = 35 + r() * 35;
+  const tractor = u.id === 'TRC-022';
+  const fillAt = day === 2 && r() < .5 ? 750 : 330;
+  const theftAt = (id === 'CAM-104' && day === 0) ? 400 : null;
+  const minorAt = (id === 'CAM-125' && day === 1) ? 1140 : null;
+  let eng = 0, cons = 0, carg = 0, robo = 0;
+  for (let m = 0; m <= 1440; m += 10){
+    const on = tractor ? (m >= 360 && m < 1080) : ((m >= 360 && m < 720) || (m >= 780 && m < 1080));
+    if (on){ const d = u.rate * 10/60 * (0.85 + r() * 0.3); lvl -= d; cons += d; eng += 10; }
+    if (m === fillAt){ const add = Math.min(80, u.cap - lvl); lvl += add; carg += add; ev.push({m, tipo:'Carga', delta:add, motor:'Apagado', lugar:'Planta / grifo', nota:'Validada con vale de grifo'}); }
+    if (m === theftAt){ lvl -= 38; robo += 38; ev.push({m, tipo:'Caída sospechosa', delta:-38, motor:'Apagado', lugar:'Vía interna, junto a Lote 12', nota:'Posible robo · motor bloqueado por regla'}); }
+    if (m === minorAt){ lvl -= 6; ev.push({m, tipo:'Variación menor', delta:-6, motor:'Apagado', lugar:'Lote 15', nota:'Bajo el umbral de 15 gal: sin alerta'}); }
+    lvl = clamp(lvl, 0, u.cap); pts.push([m, lvl, on]);
+  }
+  return {pts, ev, eng, cons, carg, robo, cap:u.cap};
+}
+function renderFuel(){
+  const sel = $('#fuel-unit');
+  if (!sel.options.length) sel.innerHTML = units.map(u => `<option value="${u.id}">${u.id} · ${esc(u.grupo)}</option>`).join('');
+  sel.value = selUnit;
+  const d = genFuel(selUnit, +$('#fuel-day').value);
+  const W = 1000, H = 300, L = 48, R = 16, T = 14, B = 34, x = m => L + m / 1440 * (W - L - R), y = v => T + (1 - v / d.cap) * (H - T - B);
+  let s = '';
+  let bandStart = null;
+  d.pts.forEach(([m,,on], i) => { if (on && bandStart === null) bandStart = m; if ((!on || i === d.pts.length - 1) && bandStart !== null){ s += `<rect class="band" x="${x(bandStart)}" y="${T}" width="${x(m) - x(bandStart)}" height="${H-T-B}"/>`; bandStart = null; } });
+  for (const v of [0, 50, 100, 150]) s += `<line class="grid-l" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-8}" y="${y(v)+4}" text-anchor="end">${v}</text>`;
+  for (let h = 0; h <= 24; h += 3) s += `<text x="${x(h*60)}" y="${H-12}" text-anchor="middle">${String(h).padStart(2,'0')}:00</text>`;
+  s += `<text x="${L}" y="${T-2}" text-anchor="start" style="font-size:10px">gal</text>`;
+  const line = d.pts.map(([m,v]) => `${x(m).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  s += `<polygon class="area" points="${x(0)},${y(0)} ${line} ${x(1440)},${y(0)}"/><polyline class="lvl" points="${line}"/>`;
+  for (const e of d.ev){ const p = d.pts.find(q => q[0] === e.m); const cls = e.delta > 0 ? 'ev-fill' : 'ev-robo'; const txt = (e.delta > 0 ? '+' : '−') + Math.abs(Math.round(e.delta)); s += `<rect class="${cls}" x="${x(e.m)-22}" y="${y(p[1])-30}" width="44" height="20" rx="4"/><text class="ev-t" x="${x(e.m)}" y="${y(p[1])-16}" text-anchor="middle">${txt}</text>`; }
+  $('#fuel-chart').innerHTML = s;
+  $('#fuel-events').innerHTML = `<thead><tr><th>Hora</th><th>Evento</th><th>Ubicación</th><th class="r">Variación</th><th>Motor</th><th>Observación</th></tr></thead><tbody>${
+    d.ev.length ? d.ev.map(e => `<tr${e.tipo === 'Caída sospechosa' ? ' class="hl"' : ''}><td class="num">${hhmm(e.m)}</td><td>${e.tipo}</td><td>${esc(e.lugar)}</td><td class="r num">${e.delta > 0 ? '+' : '−'}${f0(Math.abs(e.delta))} gal</td><td>${e.motor}</td><td>${esc(e.nota)}</td></tr>`).join('') : '<tr><td colspan="6" class="note">Sin cargas ni caídas en el día.</td></tr>'}</tbody>`;
+  rec.fuelDay = d;
+  renderFuelLive();
+}
+function renderFuelLive(){
+  const d = rec.fuelDay; if (!d) return;
+  const u = get(selUnit), pct = u.fuel / u.cap * 100;
+  $('#fuel-kpis').innerHTML = `
+    <div class="kpi"><span class="lbl">Nivel ahora (en vivo)</span><span class="val">${f0(u.fuel)}<small>gal · ${f0(pct)} %</small></span><div class="gauge${pct < 20 ? ' low' : ''}"><div style="width:${pct.toFixed(0)}%"></div></div></div>
+    <div class="kpi"><span class="lbl">Cargado en el día</span><span class="val">${f0(d.carg)}<small>gal</small></span></div>
+    <div class="kpi"><span class="lbl">Consumido por el motor</span><span class="val">${f0(d.cons)}<small>gal · ${f1(d.eng/60)} h</small></span></div>
+    <div class="kpi"><span class="lbl">Rendimiento</span><span class="val">${f1(d.cons / Math.max(d.eng/60, .1))}<small>gal/h</small></span></div>
+    <div class="kpi${d.robo ? ' crit' : ''}"><span class="lbl">Diferencia no justificada</span><span class="val">${d.robo ? '−' + f0(d.robo) : '0'}<small>gal</small></span></div>`;
+}
+
+/* ---------- Reportes ---------- */
+function repData(){
+  const t = $('#rep-type').value;
+  if (t === 'resumen') return {h:['Unidad','Grupo','Km hoy','Horas motor','Ralentí (min)','Consumo (gal)','Rendimiento (gal/h)','Alertas','Corte'], r:units.map(u => [u.id, u.grupo, f1(u.km), f1(u.motorMin/60), f0(u.ralentiMin), f1(u.consumo), f1(u.consumo/Math.max(u.motorMin/60,.1)), u.alertas, u.corte])};
+  if (t === 'combustible') return {h:['Hora','Unidad','Evento','Variación (gal)','Motor','Ubicación','Observación'], r:fuelEvents.map(e => [hhmm(360+e.t), e.unidad, e.tipo, (e.delta>0?'+':'')+e.delta, e.motor, e.lugar, e.nota])};
+  if (t === 'cortes') return {h:['Hora','Unidad','Acción','Motivo','Origen','Estado','Confirmada'], r:orders.map(o => [hhmm(360+o.t), o.unidad, o.accion, o.motivo, o.origen, o.estado, o.tconf != null ? hhmm(360+o.tconf) : '—'])};
+  return {h:['Hora','Unidad','Tipo','Detalle','Severidad','Atendida'], r:alerts.map(a => [hhmm(360+a.t), a.unidad, a.tipo, a.texto, SEV_TXT[a.sev], a.done ? 'Sí' : 'No'])};
+}
+function renderRep(){
+  const d = repData();
+  $('#rep-table').innerHTML = `<thead><tr>${d.h.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${d.r.length ? d.r.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${d.h.length}" class="note">Todavía no hay registros. La simulación los irá generando.</td></tr>`}</tbody>`;
+}
+async function copyText(txt, ok){
+  try { await navigator.clipboard.writeText(txt); toast(ok); }
+  catch(e){ const ta = document.createElement('textarea'); ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast(ok); } catch(_) { toast('No se pudo copiar. Selecciona la tabla y cópiala manualmente.'); } ta.remove(); }
+}
+const toCSV = d => [d.h, ...d.r].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+
+/* ---------- Configuración ---------- */
+function renderConf(){
+  $('#conf-units').innerHTML = `<thead><tr><th>Unidad</th><th>Tipo</th><th>Grupo</th><th>Equipo</th><th>IMEI</th><th>Sensores</th><th>Reporte en marcha</th></tr></thead><tbody>${
+    units.map(u => `<tr><td><b class="mono">${u.id}</b></td><td>${esc(u.tipo)}</td><td>${esc(u.grupo)}</td><td>${esc(u.modelo)}</td><td class="mono">${u.imei}</td><td>CAN · nivel · relé · RFID</td><td><select class="btn sm" id="int-${u.id}" data-int="${u.id}" aria-label="Intervalo de reporte de ${u.id}">${[30,60,120].map(s => `<option value="${s}"${u.intervalo === s ? ' selected' : ''}>cada ${s} s</option>`).join('')}</select></td></tr>`).join('')}</tbody>`;
+  $('#conf-drivers').innerHTML = `<thead><tr><th>Nombre</th><th>DNI</th><th>Tarjeta</th><th>Unidad habitual</th></tr></thead><tbody>${
+    CONDUCTORES.map((c,i) => `<tr><td>${esc(c.nombre)}</td><td class="mono">${c.dni}</td><td class="mono">${c.rfid}</td><td class="mono">${units.find(u => u.con === i).id}</td></tr>`).join('')}</tbody>`;
+  $('#conf-geo').innerHTML = `<thead><tr><th>Geocerca</th><th>Tipo</th><th>Regla</th></tr></thead><tbody>
+    <tr><td>Zona autorizada Pomalca</td><td>Polígono</td><td>Salida → corte de motor</td></tr>
+    ${LOTES.map(l => `<tr><td>${esc(l.nombre)}</td><td>Lote</td><td>Entrada y salida → registro</td></tr>`).join('')}
+    <tr><td>Planta / grifo</td><td>Punto de carga</td><td>Carga fuera de aquí → alerta</td></tr></tbody>`;
+  $('#conf-users').innerHTML = `<thead><tr><th>Usuario</th><th>Rol</th><th>Puede ordenar corte</th><th>Puede editar reglas</th></tr></thead><tbody>
+    <tr><td>[ADMINISTRADOR]</td><td>Administrador</td><td><span class="tag t-ok">Sí</span></td><td><span class="tag t-ok">Sí</span></td></tr>
+    <tr><td>[SUPERVISOR DE CAMPO]</td><td>Supervisor</td><td><span class="tag t-ok">Sí, con clave</span></td><td><span class="tag t-info">No</span></td></tr>
+    <tr><td>[ANALISTA]</td><td>Consulta</td><td><span class="tag t-info">No</span></td><td><span class="tag t-info">No</span></td></tr></tbody>`;
+}
+
+/* ---------- Modal de corte ---------- */
+let modalUnit = null, modalMode = 'block';
+function openModal(id, mode){
+  modalUnit = id; modalMode = mode; const u = get(id);
+  $('#modal-title').textContent = mode === 'block' ? `Confirmar corte de motor · ${id}` : `Desbloquear motor · ${id}`;
+  $('#modal-text').textContent = mode === 'block'
+    ? (u.v >= 5 ? `La unidad va a ${Math.round(u.v)} km/h. La orden quedará pendiente y el relé cortará la bomba de combustible cuando baje de 5 km/h.` : `Unidad detenida. El relé cortará la bomba de combustible y el motor no podrá encenderse hasta que se desbloquee.`)
+    : 'El motor podrá volver a encenderse. Confirma con tu clave de supervisor.';
+  $('#modal-motivo').closest('label').hidden = mode !== 'block';
+  $('#modal-ok').textContent = mode === 'block' ? 'Bloquear motor' : 'Desbloquear';
+  $('#modal-ok').className = mode === 'block' ? 'btn danger' : 'btn primary';
+  $('#modal-clave').value = ''; $('#modal-err').textContent = '';
+  $('#modal').hidden = false; $('#modal-clave').focus();
+}
+function closeModal(){ $('#modal').hidden = true; modalUnit = null; }
+$('#modal-form').addEventListener('submit', e => {
+  e.preventDefault();
+  if ($('#modal-clave').value !== '1234'){ $('#modal-err').textContent = 'Clave incorrecta. En esta demostración la clave es 1234.'; return; }
+  const u = get(modalUnit);
+  if (modalMode === 'block'){ createOrder(u, 'Bloqueo', $('#modal-motivo').value, 'Manual · supervisor'); toast(`Orden de bloqueo enviada a ${u.id}`); }
+  else { createOrder(u, 'Desbloqueo', 'Liberado por supervisor', 'Manual · supervisor'); toast(`Orden de desbloqueo enviada a ${u.id}`); }
+  closeModal(); renderLive();
+});
+$('#modal-cancel').addEventListener('click', closeModal);
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+$('#modal').addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+let toastT = null;
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
+
+/* ---------- Eventos ---------- */
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-block],[data-unblock],[data-pick],[data-ack],[data-af],[data-rec],[data-fuel]');
+  if (!b) return;
+  if (b.dataset.block) openModal(b.dataset.block, 'block');
+  else if (b.dataset.unblock) openModal(b.dataset.unblock, 'unblock');
+  else if (b.dataset.pick){ selUnit = b.dataset.pick; renderMapa(); }
+  else if (b.dataset.ack){ const a = alerts.find(x => x.id === +b.dataset.ack); if (a) a.done = true; renderLive(); }
+  else if (b.dataset.af){ alertFilter = b.dataset.af; renderAlertas(); }
+  else if (b.dataset.rec) selUnit = b.dataset.rec;
+  else if (b.dataset.fuel) selUnit = b.dataset.fuel;
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.dataset.rule){ rules[t.dataset.rule].on = t.checked; toast(`Regla ${t.checked ? 'activada' : 'desactivada'}: ${rules[t.dataset.rule].label}`); }
+  if (t.dataset.int){ get(t.dataset.int).intervalo = +t.value; toast(`${t.dataset.int} reportará cada ${t.value} s en marcha`); }
+});
+$('#btn-sim').addEventListener('click', () => sim.running ? stopSim() : startSim());
+$('#rec-unit').addEventListener('change', e => { selUnit = e.target.value; stopRec(); renderRec(); });
+$('#rec-day').addEventListener('change', () => { stopRec(); renderRec(); });
+$('#rec-label').addEventListener('change', drawTrack);
+$('#rec-range').addEventListener('input', e => { rec.idx = +e.target.value; moveCursor(); });
+$('#rec-play').addEventListener('click', playRec);
+$('#rec-speed').addEventListener('change', () => { if (rec.timer){ playRec(); playRec(); } });
+$('#rec-start').addEventListener('click', () => { stopRec(); rec.idx = 0; moveCursor(); });
+$('#rec-end').addEventListener('click', () => { stopRec(); rec.idx = rec.pts.length - 1; moveCursor(); });
+$('#rec-geo').addEventListener('click', () => toast(`Ruta de ${selUnit} guardada como geocerca. Salirse de ella generará una alerta.`));
+$('#rec-copy').addEventListener('click', () => copyText(toCSV({h:['Hora','X','Y','Velocidad (km/h)','Combustible (gal)'], r:rec.pts.map(p => [hhmm(p.t), p.x.toFixed(0), p.y.toFixed(0), p.v, f1(p.f)])}), 'Puntos copiados. Pégalos en Excel.'));
+$('#fuel-unit').addEventListener('change', e => { selUnit = e.target.value; renderFuel(); });
+$('#fuel-day').addEventListener('change', renderFuel);
+$('#rep-type').addEventListener('change', renderRep);
+$('#rep-copy').addEventListener('click', () => copyText(toCSV(repData()), 'Reporte copiado. Pégalo en Excel.'));
+window.addEventListener('hashchange', () => { stopRec(); route(); });
+
+/* ---------- Inicio ---------- */
+buildMap($('#map-mini'), id => { selUnit = id; location.hash = 'mapa'; });
+buildMap($('#map-live'), id => { selUnit = id; renderMapa(); });
+for (let i = 0; i < 3; i++) tick();
+route();
+if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { syncSimBtn(); }
+startSim();
+})();
+</script>
+
+<!--claude-mermaid-runtime-begin:3477-->
+<style>.mermaid-diagram{margin-block:4px}.mermaid-diagram svg{display:block;margin:0 auto;max-width:100%;height:auto}</style>
+<script src="/_runtime/mermaid-11.16.1.min.js"></script>
+<script>(function(){
+var CFG={"palettes":{"light":{"surface":"#f4efe4","text":"#42392e","line":"#8a7f6d","border":"#7a6c52","bg":"#fffdf8"},"dark":{"surface":"#262b34","text":"#f2f3f5","line":"#a8adb8","border":"#9aa4b8","bg":"#1f232b"}}};
+if(typeof mermaid==='undefined')return;
+var pres=Array.prototype.slice.call(document.querySelectorAll('pre.mermaid')).filter(function(p){if(p.hasAttribute('data-claude-mermaid-claimed'))return false;p.setAttribute('data-claude-mermaid-claimed','1');return true;});
+if(!pres.length)return;
+var mq=window.matchMedia?window.matchMedia('(prefers-color-scheme: dark)'):null;
+var root=document.documentElement;
+var items=pres.map(function(pre){
+var mount=document.createElement('div');mount.className='mermaid-diagram';
+return {pre:pre,mount:mount,src:pre.textContent||''};
+});
+var seq=0;
+var renderGen=0;
+var lastKey='';
+function pageBg(fallback){
+var els=[document.body,document.documentElement];
+for(var i=0;i<els.length;i++){
+var c=els[i]&&getComputedStyle(els[i]).backgroundColor;
+if(c&&c!=='transparent'&&c!=='rgba(0, 0, 0, 0)')return c;
+}
+return fallback;
+}
+function render(){
+var theme=root.getAttribute('data-theme');
+var dark=theme==='dark'||(!!(mq&&mq.matches)&&theme!=='light');
+var pal=dark?CFG.palettes.dark:CFG.palettes.light;
+var bg=pageBg(pal.bg);
+var key=(dark?'d':'l')+'|'+bg;
+if(key===lastKey)return;
+lastKey=key;
+var gen=++renderGen;
+var font=getComputedStyle(document.body).fontFamily||'sans-serif';
+var nat={useMaxWidth:false};
+mermaid.initialize({
+startOnLoad:false,securityLevel:'strict',theme:'base',
+flowchart:nat,sequence:nat,er:nat,state:nat,class:nat,pie:nat,
+gantt:nat,journey:nat,timeline:nat,gitGraph:nat,mindmap:nat,xyChart:nat,
+quadrantChart:nat,sankey:nat,c4:nat,requirement:nat,block:nat,
+packet:nat,kanban:nat,architecture:nat,radar:nat,
+themeVariables:{background:bg,mainBkg:pal.surface,primaryColor:pal.surface,
+primaryTextColor:pal.text,lineColor:pal.line,primaryBorderColor:pal.border,
+nodeBorder:pal.border,clusterBorder:pal.border,edgeLabelBackground:bg,
+clusterBkg:'rgba(127,127,127,0.07)',titleColor:pal.text,
+darkMode:dark,rowOdd:bg,rowEven:'rgba(127,127,127,0.07)',
+attributeBackgroundColorOdd:bg,attributeBackgroundColorEven:'rgba(127,127,127,0.07)',
+fontSize:'16px',fontFamily:font},
+themeCSS:'.node rect, .node circle, .node polygon, .node path, .cluster rect { stroke-width: 2px; }'
+});
+items.forEach(function(it){
+var id='claude-mermaid-'+seq++;
+mermaid.render(id,it.src).then(function(r){
+if(gen!==renderGen)return;
+var prev=it.pre.previousElementSibling;
+if(prev&&prev.className==='mermaid-diagram'&&prev!==it.mount)return;
+it.mount.innerHTML=r.svg;
+if(!it.mount.parentNode)it.pre.parentNode.insertBefore(it.mount,it.pre);
+it.pre.style.display='none';
+},function(){
+var scratch=document.getElementById(id);
+if(scratch)scratch.parentNode.removeChild(scratch);
+scratch=document.getElementById('d'+id);
+if(scratch)scratch.parentNode.removeChild(scratch);
+if(gen!==renderGen)return;
+if(it.mount.parentNode)it.mount.parentNode.removeChild(it.mount);
+it.pre.style.display='';
+});
+});
+}
+render();
+if(mq&&mq.addEventListener)mq.addEventListener('change',render);
+if(typeof MutationObserver!=='undefined')new MutationObserver(render).observe(root,{attributes:true,attributeFilter:['data-theme']});
+})();</script>
+<!--claude-mermaid-runtime-end-->
+
+</body></html>

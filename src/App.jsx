@@ -33,6 +33,7 @@ const Diagnostico = lazy(() => import('./modules/diagnostico/DiagnosticoPage'));
 const MiParcela = lazy(() => import('./modules/parcela/ParcelaPage'));
 const CicloCultivo = lazy(() => import('./modules/ciclo/CicloPage'));
 const Gestion = lazy(() => import('./modules/gestion/GestionPage'));
+const AgroTrackPomalca = lazy(() => import('./modules/gestion/AgroTrackPomalcaPage'));
 const Admin = lazy(() => import('./pages/admin/Admin'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
 const Descargar = lazy(() => import('./pages/Descargar'));
@@ -234,6 +235,12 @@ function AppRoutes() {
             {/* Gestión — requiere login + aprobación */}
             <Route path="/gestion" element={
               user && isAprobado ? <Gestion /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
+            } />
+            <Route path="/gestion/sensores-agricolas" element={
+              user && isAprobado ? <AgroTrackPomalca /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
+            } />
+            <Route path="/gestion/vehiculos-flota" element={
+              user && isAprobado ? <AgroTrackPomalca /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />
             <Route path="/gestion/finanzas" element={<Navigate to="/gestion" replace />} />
             <Route path="/empresa/miembros" element={
