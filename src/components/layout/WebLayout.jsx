@@ -27,6 +27,8 @@ import {
   ChevronDown,
   Users,
   Building,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import OnlineStatus from '../OnlineStatus';
@@ -51,6 +53,7 @@ export default function WebLayout({ children }) {
   const [adminModal, setAdminModal] = useState(false);
   const [modalClave, setModalClave] = useState(false);
   const [empresaModalOpen, setEmpresaModalOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const esAdmin = user?.email === ADMIN_EMAIL;
 
   const handleLogout = async () => {
@@ -65,18 +68,35 @@ export default function WebLayout({ children }) {
 
       <div className="flex flex-1 min-h-0">
         {/* ── Sidebar ─────────────────────────────────────────────── */}
-        <aside className="w-64 shrink-0 bg-white border-r border-gray-200 flex flex-col sticky top-0 h-screen">
+        <aside
+          className={`hidden md:flex shrink-0 bg-white border-r border-gray-200 flex-col sticky top-0 h-screen transition-[width] duration-300 ease-in-out ${
+            sidebarOpen ? 'w-64' : 'w-20'
+          }`}
+        >
         {/* Identidad */}
-        <div className="px-5 py-5 border-b border-gray-100">
-          <img
-            src="/icons/Agrilux.logo.sinfondo.png"
-            alt="Logo Agrilux"
-            className="w-28 h-10 object-contain"
-          />
+        <div className={`py-5 border-b border-gray-100 flex items-center ${sidebarOpen ? 'px-5 justify-between' : 'px-4 justify-center'}`}>
+          {sidebarOpen && (
+            <img
+              src="/icons/Agrilux.logo.sinfondo.png"
+              alt="Logo Agrilux"
+              className="w-28 h-10 object-contain"
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => setSidebarOpen((open) => !open)}
+            aria-label={sidebarOpen ? 'Colapsar menú lateral' : 'Expandir menú lateral'}
+            aria-expanded={sidebarOpen}
+            title={sidebarOpen ? 'Colapsar menú lateral' : 'Expandir menú lateral'}
+            className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <span className="absolute inset-1 rounded-full border border-primary/20" aria-hidden="true" />
+            {sidebarOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}
+          </button>
         </div>
 
         {/* Navegación */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className={`flex-1 py-4 space-y-1 overflow-y-auto ${sidebarOpen ? 'px-3' : 'px-2'}`}>
           {navItems.map(({ path, icon: Icon, label }) => {
             const active = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
             return (
@@ -89,88 +109,101 @@ export default function WebLayout({ children }) {
                     navigate(path);
                   }
                 }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                title={!sidebarOpen ? label : undefined}
+                className={`w-full flex items-center rounded-lg text-sm font-medium transition-colors ${
+                  sidebarOpen ? 'gap-3 px-3' : 'justify-center px-2'
+                } py-2.5 ${
                   active
                     ? 'bg-primary/10 text-primary'
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
               >
                 <Icon size={18} strokeWidth={active ? 2.5 : 1.8} />
-                {label}
+                {sidebarOpen && label}
               </button>
             );
           })}
         </nav>
 
         {/* Usuario en sidebar */}
-        <div className="px-4 py-4 border-t border-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
-              <User size={16} className="text-primary" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-gray-800 truncate">
-                {user?.nombre || 'Invitado'}
-              </p>
-              <p className="text-xs text-gray-400 truncate">{user?.email || 'Sin sesión'}</p>
-            </div>
-          </div>
-          
-          {/* Selector de empresa */}
-          <div className="mt-4 pt-4 border-t border-gray-100">
-            <p className="text-xs font-semibold text-gray-700 uppercase mb-2">Empresa activa</p>
-            <div className="space-y-2">
+        <div className={`py-4 border-t border-gray-100 ${sidebarOpen ? 'px-4' : 'px-2'}`}>
+          {sidebarOpen ? (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
+                  <User size={16} className="text-primary" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-gray-800 truncate">
+                    {user?.nombre || 'Invitado'}
+                  </p>
+                  <p className="text-xs text-gray-400 truncate">{user?.email || 'Sin sesión'}</p>
+                </div>
+              </div>
+
+              {/* Selector de empresa */}
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-700 uppercase mb-2">Empresa activa</p>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setEmpresaModalOpen(true)}
+                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-gray-50 hover:bg-gray-100 text-sm text-gray-700 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Building size={14} className="text-primary" />
+                      <span className="truncate w-full">
+                        {empresa_activa_id
+                          ? empresas_disponibles?.find((e) => e.id === empresa_activa_id)?.nombre || 'Cargando...'
+                          : 'Seleccionar empresa'}
+                      </span>
+                    </span>
+                    <ChevronDown size={14} className="text-gray-400" />
+                  </button>
+                  {empresas_disponibles && empresas_disponibles.length > 0 && (
+                    <div className="ml-4 space-y-1">
+                      {empresas_disponibles.map((empresa) => (
+                        <button
+                          key={empresa.id}
+                          onClick={() => {
+                            setEmpresaActiva(empresa.id);
+                            setEmpresaModalOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                            empresa_activa_id === empresa.id
+                              ? 'bg-primary/10 text-primary border border-primary/20'
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          <span className="truncate">{empresa.nombre}</span>
+                          {empresa_activa_id === empresa.id && (
+                            <span className="text-xs font-bold text-primary">Activa</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {empresas_disponibles && empresas_disponibles.length === 0 && (
+                    <div className="px-3 py-2.5 rounded-lg bg-gray-50 text-sm text-gray-500">
+                      No perteneces a ninguna empresa aún
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <button
-                onClick={() => setEmpresaModalOpen(true)}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-gray-50 hover:bg-gray-100 text-sm text-gray-700 transition-colors"
+                onClick={() => navigate('/descargar')}
+                className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#1a6b3c] text-white rounded-lg text-xs font-bold hover:bg-[#14522e] transition-colors"
               >
-                <span className="flex items-center gap-2">
-                  <Building size={14} className="text-primary" />
-                  <span className="truncate w-full">
-                    {empresa_activa_id
-                      ? empresas_disponibles?.find((e) => e.id === empresa_activa_id)?.nombre || 'Cargando...'
-                      : 'Seleccionar empresa'}
-                  </span>
-                </span>
-                <ChevronDown size={14} className="text-gray-400" />
+                <Download size={14} /> Descargar app
               </button>
-              {empresas_disponibles && empresas_disponibles.length > 0 && (
-                <div className="ml-4 space-y-1">
-                  {empresas_disponibles.map((empresa) => (
-                    <button
-                      key={empresa.id}
-                      onClick={() => {
-                        setEmpresaActiva(empresa.id);
-                        setEmpresaModalOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
-                        empresa_activa_id === empresa.id
-                          ? 'bg-primary/10 text-primary border border-primary/20'
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      <span className="truncate">{empresa.nombre}</span>
-                      {empresa_activa_id === empresa.id && (
-                        <span className="text-xs font-bold text-primary">Activa</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {empresas_disponibles && empresas_disponibles.length === 0 && (
-                <div className="px-3 py-2.5 rounded-lg bg-gray-50 text-sm text-gray-500">
-                  No perteneces a ninguna empresa aún
-                </div>
-              )}
+            </>
+          ) : (
+            <div className="flex justify-center">
+              <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center" title={user?.nombre || 'Invitado'}>
+                <User size={16} className="text-primary" />
+              </div>
             </div>
-          </div>
-          
-          <button
-            onClick={() => navigate('/descargar')}
-            className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#1a6b3c] text-white rounded-lg text-xs font-bold hover:bg-[#14522e] transition-colors"
-          >
-            <Download size={14} /> Descargar app
-          </button>
+          )}
         </div>
       </aside>
 
