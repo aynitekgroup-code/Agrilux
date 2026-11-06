@@ -12,6 +12,7 @@ import {
   Shield,
   Truck,
   Wrench,
+  X,
   Zap,
 } from 'lucide-react';
 
@@ -541,7 +542,15 @@ export default function Gestion() {
               aria-labelledby="proximamente-title"
               className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
             >
-              <div className="w-full max-w-sm rounded-2xl border border-slate-200/80 bg-white p-6 text-center shadow-xl">
+              <div className="relative w-full max-w-sm rounded-2xl border border-slate-200/80 bg-white p-6 text-center shadow-xl">
+                <button
+                  type="button"
+                  onClick={() => setProximamente(false)}
+                  aria-label="Cerrar"
+                  className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                >
+                  <X size={18} />
+                </button>
                 <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">
                   <Radio size={24} />
                 </div>

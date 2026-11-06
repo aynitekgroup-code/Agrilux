@@ -42,7 +42,7 @@ function CheckLine({ ok, label, detail }) {
   );
 }
 
-export default function RemoteCutModal({ vehicles = [], initialVehicleId, responsable, onClose }) {
+export default function RemoteCutModal({ vehicles = [], initialVehicleId, responsable, onClose, onComplete }) {
   const preselected = vehicles.find((v) => v.id === initialVehicleId);
   const [step, setStep] = useState(preselected ? 2 : 1);
   const [vehicleId, setVehicleId] = useState(preselected ? preselected.id : '');
@@ -82,14 +82,16 @@ export default function RemoteCutModal({ vehicles = [], initialVehicleId, respon
       return;
     }
     setError('');
-    setResultado({
+    const resultado = {
       placa: vehicle.placa,
       modelo: vehicle.modelo,
       motivo: motivo.trim(),
       hora: new Date().toLocaleString('es-PE'),
       responsable: responsable || 'Supervisor de flota',
-    });
+    };
+    setResultado(resultado);
     setStep(4);
+    onComplete?.({ vehiculo_id: vehicle.id, ...resultado });
   };
 
   return (

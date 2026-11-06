@@ -77,9 +77,9 @@ export default function WebLayout({ children }) {
         <div className={`py-5 border-b border-gray-100 flex items-center ${sidebarOpen ? 'px-5 justify-between' : 'px-4 justify-center'}`}>
           {sidebarOpen && (
             <img
-              src="/icons/Agrilux.logo.sinfondo.png"
+              src="/icons/Agrilux.logo.web.png"
               alt="Logo Agrilux"
-              className="w-28 h-10 object-contain"
+              className="h-16 w-auto shrink-0 object-contain"
             />
           )}
           <button
