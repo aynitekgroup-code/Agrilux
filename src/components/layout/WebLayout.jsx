@@ -33,7 +33,7 @@ import {
 import { useAuth } from '../../lib/AuthContext';
 import OnlineStatus from '../OnlineStatus';
 import AgentStatus from '../AgentStatus';
-import { AdminAccessModal, ChangePasswordModal, LocationSelectorModal } from './SharedModals';
+import { AdminAccessModal, ChangePasswordModal, EmpresaSelectorModal, LocationSelectorModal, UserProfileModal } from './SharedModals';
 
 const navItems = [
   { path: '/', icon: Camera, label: 'Diagnóstico' },
@@ -54,6 +54,7 @@ export default function WebLayout({ children }) {
   const [modalClave, setModalClave] = useState(false);
   const [empresaModalOpen, setEmpresaModalOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [userProfileModalOpen, setUserProfileModalOpen] = useState(false);
   const esAdmin = user?.email === ADMIN_EMAIL;
 
   const handleLogout = async () => {
@@ -129,7 +130,14 @@ export default function WebLayout({ children }) {
         <div className={`py-4 border-t border-gray-100 ${sidebarOpen ? 'px-4' : 'px-2'}`}>
           {sidebarOpen ? (
             <>
-              <div className="flex items-center gap-3">
+              <div
+                onClick={() => setUserProfileModalOpen(true)}
+                className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 rounded-lg p-2 transition-colors"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && setUserProfileModalOpen(true)}
+                aria-label="Ver información de tu cuenta"
+              >
                 <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
                   <User size={16} className="text-primary" />
                 </div>
@@ -159,34 +167,7 @@ export default function WebLayout({ children }) {
                     </span>
                     <ChevronDown size={14} className="text-gray-400" />
                   </button>
-                  {empresas_disponibles && empresas_disponibles.length > 0 && (
-                    <div className="ml-4 space-y-1">
-                      {empresas_disponibles.map((empresa) => (
-                        <button
-                          key={empresa.id}
-                          onClick={() => {
-                            setEmpresaActiva(empresa.id);
-                            setEmpresaModalOpen(false);
-                          }}
-                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
-                            empresa_activa_id === empresa.id
-                              ? 'bg-primary/10 text-primary border border-primary/20'
-                              : 'text-gray-600 hover:bg-gray-100'
-                          }`}
-                        >
-                          <span className="truncate">{empresa.nombre}</span>
-                          {empresa_activa_id === empresa.id && (
-                            <span className="text-xs font-bold text-primary">Activa</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {empresas_disponibles && empresas_disponibles.length === 0 && (
-                    <div className="px-3 py-2.5 rounded-lg bg-gray-50 text-sm text-gray-500">
-                      No perteneces a ninguna empresa aún
-                    </div>
-                  )}
+                  {/* Lista de empresas gestionada por el modal EmpresaSelectorModal */}
                 </div>
               </div>
 
@@ -382,9 +363,17 @@ export default function WebLayout({ children }) {
       </div>
 
       {/* ── Modales compartidos ─────────────────────────────────── */}
+      <EmpresaSelectorModal
+        open={empresaModalOpen}
+        onClose={() => setEmpresaModalOpen(false)}
+        empresas={empresas_disponibles}
+        empresaActivaId={empresa_activa_id}
+        onSelectEmpresa={setEmpresaActiva}
+      />
       <LocationSelectorModal open={mostrarUbicacion} onClose={() => setMostrarUbicacion(false)} />
       <AdminAccessModal open={adminModal} onClose={() => setAdminModal(false)} />
       <ChangePasswordModal open={modalClave} onClose={() => setModalClave(false)} initialEmail={user?.email || ''} />
+      <UserProfileModal open={userProfileModalOpen} onClose={() => setUserProfileModalOpen(false)} user={user} />
     </div>
   );
 }

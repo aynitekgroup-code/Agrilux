@@ -110,7 +110,7 @@ function EmpresaGuard({ children }) {
             <p className="mt-4 text-xs text-gray-500">No perteneces a ninguna empresa aún.</p>
           )}
           <button
-            onClick={() => navigate('/registro')}
+            onClick={() => navigate('/registro/empresa-nueva')}
             className="mt-6 bg-primary text-white font-bold py-3 rounded-xl w-full hover:bg-[#14522e] transition-colors"
           >
             Ir al registro

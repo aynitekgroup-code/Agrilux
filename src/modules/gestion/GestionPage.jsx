@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext';
 import {
@@ -68,19 +68,56 @@ const infraestructuras = [
 
 export default function Gestion() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, checkConnection } = useAuth();
   const [conectando, setConectando] = useState('');
   const [mensaje, setMensaje] = useState('');
   const [proximamente, setProximamente] = useState(false);
+
+  // ── Estados de conexión independientes ──────────────────────────────
+  const [supabaseStatus, setSupabaseStatus] = useState('sin_verificar');
+  const [supabaseError, setSupabaseError] = useState(null);
+  const [authStatus, setAuthStatus] = useState('sin_sesion');
+  const [gpsStatus, setGpsStatus] = useState('sin_dispositivos');
+  const [probandoConexion, setProbandoConexion] = useState(false);
 
   const nombreUsuario = (user?.nombre || '').trim();
   const nombreVisible = nombreUsuario || (user?.email ? user.email.split('@')[0] : 'Usuario Agrilux');
   const primerNombre = nombreVisible.split(' ')[0];
   const emailUsuario = user?.email || 'Sin correo configurado';
 
+  // ── Estado de autenticación ─────────────────────────────────────────
+  useEffect(() => {
+    setAuthStatus(user ? 'autenticado' : 'sin_sesion');
+  }, [user]);
+
   const mostrarMensaje = (texto) => {
     setMensaje(texto);
     window.setTimeout(() => setMensaje(''), 3500);
+  };
+
+  // ── Prueba de conexión a Supabase ───────────────────────────────────
+  const handleTestConnection = async () => {
+    setProbandoConexion(true);
+    setSupabaseStatus('sin_verificar');
+    setSupabaseError(null);
+    try {
+      const resultado = await checkConnection();
+      if (resultado.connected) {
+        setSupabaseStatus('conectado');
+        setSupabaseError(null);
+        mostrarMensaje('Conexión a Supabase establecida correctamente.');
+      } else {
+        setSupabaseStatus('error');
+        setSupabaseError(resultado.error || 'Error desconocido.');
+        mostrarMensaje(`Error de conexión: ${resultado.error}`);
+      }
+    } catch (e) {
+      setSupabaseStatus('error');
+      setSupabaseError(String(e.message || 'Error inesperado.'));
+      mostrarMensaje(`Error de conexión: ${e.message || 'Error inesperado.'}`);
+    } finally {
+      setProbandoConexion(false);
+    }
   };
 
   const conectar = (id) => {
@@ -285,6 +322,127 @@ export default function Gestion() {
               <span className="self-start sm:self-auto px-2.5 py-1 rounded-md text-[11px] font-bold text-slate-500 bg-slate-100 tracking-wide border border-slate-200">
                 SIN DISPOSITIVOS AÚN
               </span>
+            </div>
+          </div>
+
+          {/* ── Estado de Conexión: Supabase, Autenticación y GPS ───────── */}
+          <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-subtle space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
+                <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-900">
+                  Configuración de Infraestructura
+                </h2>
+              </div>
+              <span className="px-2.5 py-1 text-[11px] font-bold text-emerald-800 bg-emerald-100/80 rounded-full border border-emerald-200 tracking-wide">
+                TELEMETRÍA
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Tarjeta: Supabase Cloud */}
+              <div className="rounded-xl border p-4 flex flex-col gap-3 min-h-[120px]">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-100 text-slate-600">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Supabase Cloud</p>
+                      <p className="text-sm font-semibold text-slate-900">Base de datos y Auth</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleTestConnection}
+                    disabled={probandoConexion}
+                    className="px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors disabled:opacity-60 border"
+                    style={{
+                      borderColor: supabaseStatus === 'conectado' ? '#10b981' : supabaseStatus === 'error' ? '#ef4444' : '#cbd5e1',
+                      color: supabaseStatus === 'conectado' ? '#10b981' : supabaseStatus === 'error' ? '#ef4444' : '#64748b',
+                    }}
+                  >
+                    {probandoConexion ? 'Probando...' : supabaseStatus === 'conectado' ? 'Conectado' : supabaseStatus === 'error' ? 'Error' : 'Probar'}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${supabaseStatus === 'conectado' ? 'bg-emerald-500' : supabaseStatus === 'error' ? 'bg-rose-500' : 'bg-amber-500'}`}></span>
+                  <span className={`text-[11px] font-semibold ${supabaseStatus === 'conectado' ? 'text-emerald-800' : supabaseStatus === 'error' ? 'text-rose-800' : 'text-amber-800'}`}>
+                    {supabaseStatus === 'conectado' ? 'Conectado' : supabaseStatus === 'error' ? 'Desconectado' : 'Sin verificar'}
+                  </span>
+                </div>
+                {supabaseError && (
+                  <p className="text-[10px] text-rose-600 bg-rose-50 border border-rose-100 rounded px-2.5 py-1.5 leading-relaxed">
+                    {supabaseError}
+                  </p>
+                )}
+              </div>
+
+              {/* Tarjeta: Autenticación */}
+              <div className="rounded-xl border p-4 flex flex-col gap-3 min-h-[120px]">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-100 text-slate-600">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 4.266a8 8 0 110 16 8 8 0 010-16zm-3.707 7.293a1 1 0 10-1.414 1.414L9 11.586l1.293 1.293a1 1 0 001.414-1.414L10.414 11zm5 1.414L15 10.414l-1.293-1.293a1 1 0 00-1.414 1.414L11 12.586l-1.293 1.293a1 1 0 101.414 1.414L12.293 12zm-3.586 3a1 1 0 101.414-1.414L14 9.586l1.293 1.293a1 1 0 001.414-1.414L13 9.586l-1.293-1.293a1 1 0 00-1.414 1.414L11.586 9zm7 0a1 1 0 101.414-1.414L17 9.586l1.293 1.293a1 1 0 001.414-1.414L18.586 9z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Autenticación</p>
+                      <p className="text-sm font-semibold text-slate-900">Usuario y sesión</p>
+                    </div>
+                  </div>
+                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
+                    authStatus === 'autenticado' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-rose-100 text-rose-800 border border-rose-200'
+                  }`}>
+                    {authStatus === 'autenticado' ? 'Autenticado' : 'Sin sesión'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${authStatus === 'autenticado' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                  <span className={`text-[11px] font-semibold ${authStatus === 'autenticado' ? 'text-emerald-800' : 'text-rose-800'}`}>
+                    {authStatus === 'autenticado' ? `Usuario: ${emailUsuario}` : 'No hay sesión activa'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Tarjeta: Dispositivos GPS */}
+              <div className="rounded-xl border p-4 flex flex-col gap-3 min-h-[120px]">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-100 text-slate-600">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                        <path d="M12 6v6m0 0v6m0-6h6m-6 0H6" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Dispositivos GPS</p>
+                      <p className="text-sm font-semibold text-slate-900">Telemetría de campo</p>
+                    </div>
+                  </div>
+                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
+                    gpsStatus === 'conectados' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'
+                  }`}>
+                    {gpsStatus === 'conectados' ? 'Conectados' : 'Sin dispositivos'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${gpsStatus === 'conectados' ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+                  <span className={`text-[11px] font-semibold ${gpsStatus === 'conectados' ? 'text-emerald-800' : 'text-slate-600'}`}>
+                    {gpsStatus === 'conectados' ? 'Datos en tiempo real' : 'Sin integración GPS activa'}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  La conexión exitosa con Supabase no implica que los dispositivos GPS estén conectados.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 text-xs text-slate-500 text-center">
+              Los tres indicadores son independientes: Supabase (base de datos y autenticación), Autenticación (sesión de usuario) y GPS (hardware de campo).
             </div>
           </div>
 

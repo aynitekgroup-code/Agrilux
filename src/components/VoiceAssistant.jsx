@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Mic, MicOff, Loader2 } from 'lucide-react';
+import { Mic, MicOff, Loader2, MessageCircle, X } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { useAgentes } from '../lib/AgentContext';
 import { guardarConversacion } from '../lib/learningSystem';
@@ -37,6 +37,7 @@ export default function VoiceAssistant({
   const [error, setError]                 = useState('');
   const [coordenadas, setCoordenadas]     = useState(null);
   const [historial, setHistorial] = useState([]);
+  const [mostrarHistorial, setMostrarHistorial] = useState(false);
   const [started, setStarted] = useState(false);
   const [textoManual, setTextoManual] = useState('');
   const soportaVoz = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
@@ -115,6 +116,7 @@ export default function VoiceAssistant({
       const data = await r.json();
       const resp = data.respuesta || 'No pude procesar tu pregunta. Intenta de nuevo.';
       setRespuesta(resp);
+      setHistorial((prev) => [...prev, { rol: 'ia', texto: resp }]);
       leerTexto(resp);
       return resp;
     } catch {
@@ -499,33 +501,98 @@ export default function VoiceAssistant({
 
   // ── Floating mode (default) ──
   return (
-    <div className="fixed bottom-24 right-4 z-50 flex flex-col items-end gap-2">
-      <button
-        onClick={escuchando ? detenerEscucha : iniciarEscucha}
-        disabled={procesando && !escuchandoRef.current}
-        className={`
-          w-16 h-16 rounded-full shadow-xl flex items-center justify-center
-          transition-all duration-200 active:scale-95
-          ${escuchando
-            ? 'bg-red-500 text-white animate-pulse'
-            : procesando
-              ? 'bg-amber-500 text-white'
-              : 'bg-primary text-white hover:bg-primary/90'
-          }
-        `}
-      >
-        {procesando ? (
-          <Loader2 size={28} className="animate-spin" />
-        ) : escuchando ? (
-          <MicOff size={28} />
-        ) : (
-          <Mic size={28} />
-        )}
-      </button>
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
+      <div className="flex flex-col items-end gap-1">
+        <button
+          onClick={escuchando ? detenerEscucha : iniciarEscucha}
+          disabled={procesando && !escuchandoRef.current}
+          className={`
+            w-16 h-16 rounded-full shadow-xl flex items-center justify-center
+            transition-all duration-200 active:scale-95
+            ${escuchando
+              ? 'bg-red-500 text-white animate-pulse'
+              : procesando
+                ? 'bg-amber-500 text-white'
+                : 'bg-primary text-white hover:bg-primary/90'
+            }
+          `}
+        >
+          {procesando ? (
+            <Loader2 size={28} className="animate-spin" />
+          ) : escuchando ? (
+            <MicOff size={28} />
+          ) : (
+            <Mic size={28} />
+          )}
+        </button>
+        <button
+          onClick={() => setMostrarHistorial((prev) => !prev)}
+          disabled={procesando && !escuchandoRef.current}
+          className={`
+            w-10 h-10 rounded-full shadow-xl flex items-center justify-center
+            transition-all duration-200 active:scale-95
+            ${mostrarHistorial ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
+          `}
+          title="Ver historial de conversación"
+        >
+          <MessageCircle size={16} />
+        </button>
+      </div>
 
       <span className="text-[10px] text-gray-400 text-center">
         {escuchando ? '🔴 Hablando...' : procesando ? '⏳' : 'Hablar'}
       </span>
+
+      {/* Panel de historial de conversación */}
+      {mostrarHistorial && (
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-3 max-w-[320px] w-[320px] flex flex-col gap-2">
+          <div className="flex items-center justify-between px-2 mb-1">
+            <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">Historial</h4>
+            <button
+              onClick={() => setHistorial([])}
+              className="text-[10px] text-gray-400 hover:text-red-500"
+              title="Limpiar historial"
+            >
+              <X size={12} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto max-h-[400px] space-y-2 px-2">
+            {historial.length === 0 ? (
+              <div className="text-center py-4">
+                <p className="text-xs text-gray-400">Sin conversaciones todavía.</p>
+              </div>
+            ) : (
+              historial.map((item, i) => (
+                <div
+                  key={i}
+                  className={`flex gap-2 ${
+                    item.rol === 'usuario' ? 'flex-row-reverse' : ''
+                  }`}
+                >
+                  <div
+                    className={`rounded-xl p-2 text-xs max-w-[80%] ${
+                      item.rol === 'usuario'
+                        ? 'bg-primary text-white ml-auto'
+                        : 'bg-gray-100 text-gray-800 mr-auto'
+                    }`}
+                  >
+                    <p className="leading-relaxed">{item.texto}</p>
+                    <span className="block text-[9px] text-gray-400 mt-1 text-right">
+                      {item.rol === 'usuario' ? 'Tú' : 'Plagia'}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <button
+            onClick={() => setMostrarHistorial(false)}
+            className="w-full py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50"
+          >
+            Cerrar historial
+          </button>
+        </div>
+      )}
 
       {/* Transcripción flotante */}
       {escuchando && transcripcion && (

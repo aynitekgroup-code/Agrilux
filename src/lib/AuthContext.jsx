@@ -6,7 +6,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from './supabase';
+import { supabase, checkConnection } from './supabase';
 import { listarEmpresasDelUsuario, cambiarEmpresaActiva } from './empresaApi';
 
 const AuthContext = createContext();
@@ -303,7 +303,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, register, login, logout, resendConfirmation, updateUbicacion, updatePerfil, isAprobado, empresa_activa_id, empresas_disponibles, setEmpresaActiva }}>
+    <AuthContext.Provider value={{ user, loading, register, login, logout, resendConfirmation, updateUbicacion, updatePerfil, isAprobado, empresa_activa_id, empresas_disponibles, setEmpresaActiva, checkConnection }}>
       {children}
     </AuthContext.Provider>
   );

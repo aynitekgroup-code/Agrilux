@@ -78,8 +78,8 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-          <ContextChip icon={Building2} title="Empresa activa" subtitle={empresaNombre} tone={empresaActiva ? '#22C55E' : '#F59E0B'} />
-          <ContextChip icon={MapPin} title={DEMO_FUNDO.fundo} subtitle={`${ubicacion} · ${campana}`} />
+          <ContextChip icon={Building2} title="Empresa activa" subtitle={empresaActiva ? empresaNombre : `${empresaNombre} (Demo)`} tone={empresaActiva ? '#22C55E' : '#F59E0B'} />
+          <ContextChip icon={MapPin} title={DEMO_FUNDO.fundo} subtitle={`${ubicacion} · ${campana} · Demo`} />
           <ContextChip
             icon={Database}
             title="Supabase Sync"
