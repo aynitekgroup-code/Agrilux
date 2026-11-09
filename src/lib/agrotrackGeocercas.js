@@ -1,10 +1,11 @@
-import { cleanGeofence, splitForExport } from './geofenceCleaner';
 import shp from 'shpjs';
 import { supabase } from './supabase';
+import { cleanGeofence, splitForExport } from './geofenceCleaner';
 
 const GEOCERCAS_TABLE = 'agrotrack_geocercas';
 const EXPECTED_FEATURE_COUNT = 129;
 const IMPORT_BATCH_SIZE = 25;
+const ZONAR_MAX_VERTICES = 200; // Valor supuesto: confirmar el límite real con el ingeniero.
 
 function collectionEntries(parsed) {
   if (parsed?.type === 'FeatureCollection') {
@@ -60,6 +61,21 @@ function isValidCoordinates(coordinates) {
   return coordinates.every(isValidCoordinates);
 }
 
+// Diagnóstico para Zonar. Nunca debe hacer fallar la importación.
+function zonarDiagnostico(geometry) {
+  try {
+    const { report } = cleanGeofence(geometry);
+    const requiereLimpieza =
+      report.huecosRellenados > 0 ||
+      report.partesOriginales > 1 ||
+      report.verticesAntes > ZONAR_MAX_VERTICES ||
+      report.autointersecciones > 0;
+    return { ...report, requiereLimpieza };
+  } catch {
+    return null;
+  }
+}
+
 function toRow(feature, empresaId) {
   const geometry = feature?.geometry;
   const properties = feature?.properties || {};
@@ -81,23 +97,22 @@ function toRow(feature, empresaId) {
 
   const sourceKey = [division, anexo, nombre].map(normalizedKey).filter(Boolean).join('|');
   if (!sourceKey) throw new Error(`No se pudo identificar el polígono "${nombre}".`);
-const { report } = cleanGeofence(geometry);
-const requiereLimpieza =
-  report.huecosRellenados > 0 || report.partesOriginales > 1 ||
-  report.verticesAntes > 200 || report.autointersecciones > 0;
+
+  const zonar = zonarDiagnostico(geometry);
+
   return {
     empresa_id: empresaId,
     source_key: sourceKey,
     nombre,
     tipo: 'poligono',
     forma: geometry.type === 'MultiPolygon' ? 'multipoligono' : 'irregular',
-    poligono: geometry,
+    geometria: geometry,
     division: division || null,
     anexo: anexo || null,
     distrito: distrito || null,
     provincia: provincia || null,
     area_declarada: areaDeclarada,
-    atributos_fuente: properties,
+    atributos_fuente: zonar ? { ...properties, _zonar: zonar } : properties,
     activa: true,
     updated_at: new Date().toISOString(),
   };
@@ -108,7 +123,7 @@ export async function listarGeocercas(empresaId) {
 
   const { data, error } = await supabase
     .from(GEOCERCAS_TABLE)
-    .select('id, empresa_id, nombre, division, anexo, distrito, provincia, poligono, activa')
+    .select('id, empresa_id, nombre, division, anexo, distrito, provincia, geometria, activa')
     .eq('empresa_id', empresaId)
     .eq('activa', true)
     .order('division', { ascending: true })
@@ -120,10 +135,7 @@ export async function listarGeocercas(empresaId) {
     }
     throw error;
   }
-  return (data || []).map((row) => ({
-    ...row,
-    geometria: row.poligono,
-  }));
+  return data || [];
 }
 
 export async function importarGeocercasZip(file, empresaId, userId) {
@@ -178,18 +190,28 @@ export async function importarGeocercasZip(file, empresaId, userId) {
 
   return saved;
 }
+
+// Exporta las geocercas limpias para Zonar: sin huecos, sin vértices excesivos
+// y con cada parte de un MultiPolygon como polígono independiente.
 export async function exportarGeocercasZonar(empresaId) {
   const { data, error } = await supabase
     .from(GEOCERCAS_TABLE)
-    .select('nombre, division, anexo, poligono')
+    .select('nombre, division, anexo, geometria')
     .eq('empresa_id', empresaId)
     .eq('activa', true);
   if (error) throw error;
 
+  const rows = data || [];
   const features = [];
-  const resumen = { geocercas: data.length, poligonosExportados: 0, huecosRellenados: 0, partesDescartadas: 0, conAdvertencia: [] };
-  for (const row of data) {
-    const { items, report } = splitForExport(row.nombre, row.poligono);
+  const resumen = {
+    geocercas: rows.length,
+    poligonosExportados: 0,
+    huecosRellenados: 0,
+    partesDescartadas: 0,
+    conAdvertencia: [],
+  };
+  for (const row of rows) {
+    const { items, report } = splitForExport(row.nombre, row.geometria);
     resumen.huecosRellenados += report.huecosRellenados;
     resumen.partesDescartadas += report.partesDescartadas;
     if (report.advertencias.length) resumen.conAdvertencia.push(row.nombre);
