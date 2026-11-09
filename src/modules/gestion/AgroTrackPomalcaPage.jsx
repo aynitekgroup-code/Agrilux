@@ -107,6 +107,13 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
 
       {section === 'consola' ? (
         <div className="space-y-4">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+            <span className="flex shrink-0 items-center justify-center w-8 h-8 rounded-full bg-amber-200 text-amber-700 font-bold text-xs">!</span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-amber-800">Datos de demostración</p>
+              <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">Estás viendo datos de ejemplo (vehículos, conductores, telemetría y combustible). Configura tu propia empresa y flota desde Ajustes para usar información real.</p>
+            </div>
+          </div>
           <FleetKpis vehicles={vehicles} alerts={alertList} fuelTotal={consumoTotal} />
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
             <div className="xl:col-span-2 min-w-0">

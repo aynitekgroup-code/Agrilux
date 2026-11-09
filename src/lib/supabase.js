@@ -43,3 +43,69 @@ try {
 
 export const supabase = client;
 export default supabase;
+
+// ── Comprobación de conexión a Supabase ─────────────────────────────────────
+// Realiza una consulta ligera sin exponer datos de otros usuarios.
+// Diferencia errores de red, autenticación y permisos RLS.
+export async function checkConnection() {
+  const resultado = {
+    connected: false,
+    error: null,
+    type: null, // 'network' | 'auth' | 'rls' | 'unknown'
+  };
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    const { data, error } = await supabase
+      .from('usuarios')
+      .select('id')
+      .limit(1)
+      .abortSignal(controller.signal);
+
+    clearTimeout(timeout);
+
+    if (error) {
+      const msg = String(error.message || '').toLowerCase();
+      const code = String(error.code || '').toLowerCase();
+
+      if (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('timeout')) {
+        resultado.type = 'network';
+        resultado.error = 'No se pudo alcanzar el servidor de Supabase. Revisa tu conexión a internet.';
+      } else if (msg.includes('invalid api key') || msg.includes('unauthorized') || code === '401') {
+        resultado.type = 'auth';
+        resultado.error = 'Credenciales de Supabase inválidas o expiradas.';
+      } else if (msg.includes('row level security') || msg.includes('rls') || code === '42501') {
+        resultado.type = 'rls';
+        resultado.error = 'Supabase respondió, pero las políticas RLS bloquean la consulta.';
+      } else {
+        resultado.type = 'unknown';
+        resultado.error = error.message || 'Error desconocido de Supabase.';
+      }
+      resultado.connected = false;
+      return resultado;
+    }
+
+    resultado.connected = true;
+    resultado.error = null;
+    resultado.type = null;
+    return resultado;
+  } catch (e) {
+    clearTimeout(timeout);
+    const msg = String(e.message || '').toLowerCase();
+
+    if (e.name === 'AbortError' || msg.includes('timeout')) {
+      resultado.type = 'network';
+      resultado.error = 'La conexión a Supabase excedió el tiempo de espera.';
+    } else if (msg.includes('failed to fetch') || msg.includes('network')) {
+      resultado.type = 'network';
+      resultado.error = 'No se pudo alcanzar el servidor de Supabase. Revisa tu conexión a internet.';
+    } else {
+      resultado.type = 'unknown';
+      resultado.error = e.message || 'Error inesperado al comprobar la conexión.';
+    }
+    resultado.connected = false;
+    return resultado;
+  }
+}
