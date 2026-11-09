@@ -1,14 +1,105 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CircleMarker, GeoJSON, MapContainer, TileLayer, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { AlertCircle, ChevronDown, ChevronUp, Info, LoaderCircle, MapPin, RefreshCw, Search, Upload } from 'lucide-react';
+import {
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  Info,
+  LoaderCircle,
+  MapPin,
+  Mic,
+  MicOff,
+  RefreshCw,
+  Search,
+  Upload,
+  X,
+} from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { importarGeocercasZip, listarGeocercas } from '../../../lib/agrotrackGeocercas';
 import { STATUS_META } from './fleetTokens';
 
-function FitMapToGeofences({ geoJson, selectedGeofence }) {
+const SpeechRecognitionCtor =
+  typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
+
+/* ---------- Utilidades ---------- */
+
+function normalizeText(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+// Acepta la geometría como objeto GeoJSON, como texto JSON o como Feature.
+// Soporta tanto la columna `geometria` como `poligono` (o `geom`).
+function parseGeometry(value) {
+  if (!value) return null;
+  let geometry = value;
+  if (typeof value === 'string') {
+    try {
+      geometry = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (geometry?.type === 'Feature') geometry = geometry.geometry;
+  return geometry?.type && geometry.coordinates ? geometry : null;
+}
+
+function normalizeGeofence(row) {
+  return { ...row, geometria: parseGeometry(row.geometria ?? row.poligono ?? row.geom) };
+}
+
+// Busca por todas las palabras (en cualquier orden) y ordena: nombre exacto,
+// nombre que empieza con la consulta, nombre que la contiene, otros campos.
+function searchGeofences(list, rawQuery) {
+  const query = normalizeText(rawQuery);
+  if (!query) return list;
+  const tokens = query.split(/\s+/).filter(Boolean);
+  const scored = [];
+  list.forEach((geofence) => {
+    const name = normalizeText(geofence.nombre);
+    const haystack = normalizeText(
+      [geofence.nombre, geofence.division, geofence.anexo, geofence.distrito, geofence.provincia]
+        .filter(Boolean)
+        .join(' '),
+    );
+    if (!tokens.every((token) => haystack.includes(token))) return;
+    let score = 3;
+    if (name === query) score = 0;
+    else if (name.startsWith(query)) score = 1;
+    else if (name.includes(query)) score = 2;
+    scored.push({ geofence, score });
+  });
+  return scored
+    .sort(
+      (a, b) =>
+        a.score - b.score ||
+        String(a.geofence.nombre).localeCompare(String(b.geofence.nombre), 'es'),
+    )
+    .map((item) => item.geofence);
+}
+
+// Quita frases de comando al inicio: "busca la geocerca Gregorio" -> "gregorio".
+function stripVoiceCommand(transcript) {
+  const text = normalizeText(transcript).replace(/[.,;:!?¿¡]/g, ' ').replace(/\s+/g, ' ').trim();
+  const cleaned = text
+    .replace(
+      /^(?:(?:busca|buscar|buscame|llevame|muestrame|muestra|mostrar|ubica|ubicame|quiero ver|ir|ve|vamos)\s+)?(?:(?:a|al|a la|hacia|en)\s+)?(?:(?:la|el)\s+)?(?:(?:geocerca|zona|lote|division)\s+)?/,
+      '',
+    )
+    .trim();
+  return cleaned || text;
+}
+
+/* ---------- Mapa ---------- */
+
+function FitMapToGeofences({ geoJson, focusRequest }) {
   const map = useMap();
 
+  // Encuadra todas las geocercas cuando cambian los datos.
   useEffect(() => {
     const bounds = L.geoJSON(geoJson).getBounds();
     if (bounds.isValid()) {
@@ -18,13 +109,15 @@ function FitMapToGeofences({ geoJson, selectedGeofence }) {
     }
   }, [geoJson, map]);
 
+  // Hace zoom a la geocerca elegida cada vez que el usuario la selecciona
+  // (aunque sea la misma que ya estaba seleccionada).
   useEffect(() => {
-    if (!selectedGeofence) return;
-    const bounds = L.geoJSON(selectedGeofence.geometria).getBounds();
+    if (!focusRequest?.geometry) return;
+    const bounds = L.geoJSON(focusRequest.geometry).getBounds();
     if (bounds.isValid()) {
       map.fitBounds(bounds.pad(0.2), { maxZoom: 16, animate: true });
     }
-  }, [map, selectedGeofence]);
+  }, [map, focusRequest]);
 
   return null;
 }
@@ -40,8 +133,10 @@ function featureTooltip(feature, layer) {
   }
 }
 
+/* ---------- Componente ---------- */
+
 export default function FleetMap({ empresaId, userId, canImport = false, vehicles = [], selectedId, onSelect }) {
-  const [geofences, setGeofences] = useState([]);
+  const [rawGeofences, setRawGeofences] = useState([]);
   const [loading, setLoading] = useState(Boolean(empresaId));
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
@@ -49,21 +144,37 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
   const [mapRevision, setMapRevision] = useState(0);
   const [showGeofenceList, setShowGeofenceList] = useState(false);
   const [geofenceSearch, setGeofenceSearch] = useState('');
+  const [resultsOpen, setResultsOpen] = useState(false);
   const [selectedGeofenceId, setSelectedGeofenceId] = useState('');
+  const [focusRequest, setFocusRequest] = useState(null);
+  const [listening, setListening] = useState(false);
+  const [voiceMessage, setVoiceMessage] = useState('');
   const fileInputRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const applyVoiceRef = useRef(null);
   const activeCompanyRef = useRef(empresaId);
   activeCompanyRef.current = empresaId;
+
+  const geofences = useMemo(() => rawGeofences.map(normalizeGeofence), [rawGeofences]);
+  const withoutGeometry = useMemo(
+    () => geofences.filter((geofence) => !geofence.geometria).length,
+    [geofences],
+  );
+
   const geoJson = useMemo(
     () => ({
       type: 'FeatureCollection',
-      features: geofences.map((geofence) => ({
-        type: 'Feature',
-        geometry: geofence.geometria,
-        properties: geofence,
-      })),
+      features: geofences
+        .filter((geofence) => geofence.geometria)
+        .map((geofence) => ({
+          type: 'Feature',
+          geometry: geofence.geometria,
+          properties: geofence,
+        })),
     }),
     [geofences],
   );
+
   const geofenceSummary = useMemo(() => {
     const divisions = new Map();
     geofences.forEach((geofence) => {
@@ -72,30 +183,19 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
     });
     return [...divisions.entries()].sort(([a], [b]) => a.localeCompare(b, 'es'));
   }, [geofences]);
-  const filteredGeofences = useMemo(() => {
-    const query = geofenceSearch
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .trim()
-      .toLowerCase();
-    if (!query) return geofences;
-    return geofences.filter((geofence) =>
-      [geofence.nombre, geofence.division, geofence.anexo, geofence.distrito, geofence.provincia]
-        .filter(Boolean)
-        .join(' ')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .includes(query),
-    );
-  }, [geofenceSearch, geofences]);
+
+  const filteredGeofences = useMemo(
+    () => searchGeofences(geofences, geofenceSearch),
+    [geofenceSearch, geofences],
+  );
   const selectedGeofence = geofences.find((geofence) => geofence.id === selectedGeofenceId);
   const searchResults = geofenceSearch.trim() ? filteredGeofences.slice(0, 8) : [];
+  const showResults = Boolean(geofenceSearch.trim()) && resultsOpen;
 
   const refreshGeofences = useCallback(async (targetCompanyId = empresaId) => {
     if (targetCompanyId !== activeCompanyRef.current) return;
     if (!targetCompanyId) {
-      setGeofences([]);
+      setRawGeofences([]);
       setLoading(false);
       return;
     }
@@ -105,12 +205,12 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
     try {
       const rows = await listarGeocercas(targetCompanyId);
       if (targetCompanyId === activeCompanyRef.current) {
-        setGeofences(rows);
+        setRawGeofences(rows);
         setMapRevision((revision) => revision + 1);
       }
     } catch (loadError) {
       if (targetCompanyId === activeCompanyRef.current) {
-        setGeofences([]);
+        setRawGeofences([]);
         setError(loadError.message || 'No se pudieron cargar las geocercas.');
       }
     } finally {
@@ -121,15 +221,148 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
   useEffect(() => {
     setNotice('');
     setError('');
-    setGeofences([]);
+    setRawGeofences([]);
     setSelectedGeofenceId('');
+    setFocusRequest(null);
+    setGeofenceSearch('');
+    setResultsOpen(false);
     refreshGeofences();
   }, [empresaId, refreshGeofences]);
 
-  const handleSelectGeofence = (geofence) => {
+  // Avisa en consola si hay geocercas sin geometría legible (ayuda a diagnosticar
+  // si la columna es `geometria` o `poligono`).
+  useEffect(() => {
+    if (rawGeofences.length && withoutGeometry) {
+      console.warn(
+        `[FleetMap] ${withoutGeometry} de ${rawGeofences.length} geocercas no tienen geometría legible. Campos de la primera fila:`,
+        Object.keys(rawGeofences[0] || {}),
+      );
+    }
+  }, [rawGeofences, withoutGeometry]);
+
+  const focusGeofence = useCallback((geofence) => {
     setSelectedGeofenceId(geofence.id);
-    setShowGeofenceList(true);
+    if (geofence.geometria) {
+      setFocusRequest({ geometry: geofence.geometria, token: Date.now() });
+    }
+  }, []);
+
+  const handleSelectGeofence = (geofence) => {
+    focusGeofence(geofence);
+    setGeofenceSearch(geofence.nombre || '');
+    setResultsOpen(false);
   };
+
+  const handleSearchChange = (event) => {
+    setGeofenceSearch(event.target.value);
+    setResultsOpen(true);
+    setVoiceMessage('');
+  };
+
+  const handleSearchKeyDown = (event) => {
+    if (event.key === 'Enter' && searchResults[0]) {
+      event.preventDefault();
+      handleSelectGeofence(searchResults[0]);
+    }
+    if (event.key === 'Escape') setResultsOpen(false);
+  };
+
+  const clearSelection = () => {
+    setSelectedGeofenceId('');
+    setGeofenceSearch('');
+    setResultsOpen(false);
+    setVoiceMessage('');
+  };
+
+  /* ----- Búsqueda por voz ----- */
+
+  const applyVoiceResult = (transcript) => {
+    const cleaned = stripVoiceCommand(transcript);
+    let matches = searchGeofences(geofences, cleaned);
+    let usedQuery = cleaned;
+    if (!matches.length) {
+      matches = searchGeofences(geofences, transcript);
+      usedQuery = transcript;
+    }
+    setGeofenceSearch(usedQuery);
+    if (!matches.length) {
+      setResultsOpen(true);
+      setVoiceMessage(`No encontré geocercas para "${transcript}". Intenta decir solo el nombre.`);
+      return;
+    }
+    const [best] = matches;
+    focusGeofence(best);
+    if (matches.length > 1) {
+      setResultsOpen(true);
+      setVoiceMessage(`Seleccioné "${best.nombre}". Hay ${matches.length - 1} coincidencias más en la lista.`);
+    } else {
+      setResultsOpen(false);
+      setVoiceMessage(`Seleccioné "${best.nombre}".`);
+    }
+  };
+  applyVoiceRef.current = applyVoiceResult;
+
+  const toggleVoiceSearch = () => {
+    if (!SpeechRecognitionCtor) {
+      setVoiceMessage('Tu navegador no soporta búsqueda por voz. Usa Chrome o Edge.');
+      return;
+    }
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = 'es-PE';
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setListening(true);
+      setVoiceMessage('Escuchando… di el nombre de la geocerca.');
+    };
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0]?.transcript || '')
+        .join(' ')
+        .trim();
+      if (!transcript) return;
+      const isFinal = event.results[event.results.length - 1]?.isFinal;
+      if (isFinal) {
+        applyVoiceRef.current?.(transcript);
+      } else {
+        setGeofenceSearch(transcript);
+        setResultsOpen(false);
+      }
+    };
+    recognition.onerror = (event) => {
+      const messages = {
+        'not-allowed': 'Permite el acceso al micrófono en el navegador para usar la voz.',
+        'service-not-allowed': 'Permite el acceso al micrófono en el navegador para usar la voz.',
+        'no-speech': 'No te escuché. Toca el micrófono e inténtalo de nuevo.',
+        'audio-capture': 'No se detectó ningún micrófono.',
+        network: 'La búsqueda por voz necesita conexión a internet.',
+      };
+      setVoiceMessage(messages[event.error] || 'No se pudo reconocer la voz. Inténtalo de nuevo.');
+    };
+    recognition.onend = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
+
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch {
+      setListening(false);
+      recognitionRef.current = null;
+    }
+  };
+
+  useEffect(() => () => recognitionRef.current?.abort?.(), []);
+
+  /* ----- Importación ----- */
 
   const handleImport = async (event) => {
     const file = event.target.files?.[0];
@@ -158,7 +391,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
         <div className="min-w-0">
           <h2 className="text-base font-bold text-slate-900">Geocercas de la empresa</h2>
           <p className="text-xs text-slate-500">
-            {loading ? 'Cargando límites reales…' : `${geofences.length} polígonos reales · WGS84`}
+            {loading ? 'Cargando límites reales…' : `${geoJson.features.length} polígonos reales · WGS84`}
           </p>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -221,24 +454,76 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
           Esta empresa aún no tiene geocercas cargadas.
         </p>
       ) : null}
+      {!loading && geofences.length > 0 && withoutGeometry > 0 ? (
+        <p className="mx-4 sm:mx-5 mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status">
+          <AlertCircle size={15} className="mt-0.5 shrink-0" />
+          <span>
+            {withoutGeometry} de {geofences.length} geocercas no tienen una geometría legible y no se
+            pueden dibujar. Revisa en Supabase que el polígono esté guardado en la columna
+            <code className="mx-1">geometria</code> o <code className="mx-1">poligono</code>.
+          </span>
+        </p>
+      ) : null}
 
       {geofences.length > 0 ? (
         <div className="px-4 sm:px-5 pb-3">
-          <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-100">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-100">
             <Search size={17} className="shrink-0 text-slate-400" />
             <input
-              type="search"
+              type="text"
               value={geofenceSearch}
-              onChange={(event) => setGeofenceSearch(event.target.value)}
-              placeholder="Buscar geocerca por nombre…"
+              onChange={handleSearchChange}
+              onFocus={() => setResultsOpen(true)}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Buscar geocerca por nombre o decirlo con voz…"
               className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
               aria-label="Buscar geocercas por nombre"
               aria-controls="geofence-search-results"
-              aria-expanded={searchResults.length > 0}
+              aria-expanded={showResults}
+              autoComplete="off"
             />
-            <span className="shrink-0 text-[11px] text-slate-400">{geofences.length} geocercas</span>
-          </label>
-          {geofenceSearch.trim() ? (
+            {geofenceSearch || selectedGeofenceId ? (
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Limpiar búsqueda"
+              >
+                <X size={15} />
+              </button>
+            ) : (
+              <span className="shrink-0 text-[11px] text-slate-400">{geofences.length} geocercas</span>
+            )}
+            <button
+              type="button"
+              onClick={toggleVoiceSearch}
+              className={`shrink-0 rounded-full p-1.5 transition-colors ${
+                listening
+                  ? 'animate-pulse bg-red-100 text-red-700'
+                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+              }`}
+              aria-label={listening ? 'Detener búsqueda por voz' : 'Buscar geocerca por voz'}
+              aria-pressed={listening}
+              title={SpeechRecognitionCtor ? 'Buscar por voz' : 'Tu navegador no soporta voz'}
+            >
+              {SpeechRecognitionCtor ? <Mic size={16} /> : <MicOff size={16} />}
+            </button>
+          </div>
+
+          {voiceMessage ? (
+            <p className="mt-1.5 px-1 text-[11px] text-slate-500" role="status" aria-live="polite">
+              {voiceMessage}
+            </p>
+          ) : null}
+
+          {selectedGeofence && !selectedGeofence.geometria ? (
+            <p className="mt-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status">
+              La geocerca «{selectedGeofence.nombre}» no tiene geometría guardada, por eso el mapa no puede
+              llevarte hasta ella.
+            </p>
+          ) : null}
+
+          {showResults ? (
             <div id="geofence-search-results" className="mt-1 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg" role="listbox" aria-label="Resultados de geocercas">
               {searchResults.length ? (
                 <>
@@ -306,7 +591,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
             }}
           />
           {geoJson.features.length > 0 ? (
-            <FitMapToGeofences geoJson={geoJson} selectedGeofence={selectedGeofence} />
+            <FitMapToGeofences geoJson={geoJson} focusRequest={focusRequest} />
           ) : null}
           {vehicles.filter((vehicle) => Number.isFinite(vehicle.lat) && Number.isFinite(vehicle.lng)).map((vehicle) => {
             const meta = STATUS_META[vehicle.estado] || STATUS_META.offline;
@@ -353,26 +638,35 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
               <label className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
                 <Search size={15} className="shrink-0 text-slate-400" />
                 <input
-                  type="search"
+                  type="text"
                   value={geofenceSearch}
-                  onChange={(event) => setGeofenceSearch(event.target.value)}
+                  onChange={handleSearchChange}
                   placeholder="Buscar por nombre, división, anexo o distrito"
                   className="w-full bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400"
                   aria-label="Buscar geocercas"
+                  autoComplete="off"
                 />
               </label>
               <div className="max-h-80 overflow-y-auto">
                 {filteredGeofences.length ? (
                   <ol className="divide-y divide-slate-100">
                     {filteredGeofences.map((geofence, index) => (
-                      <li key={geofence.id} className="flex items-start gap-3 px-3 py-2 text-xs">
-                        <span className="w-7 shrink-0 text-right tabular-nums text-slate-400">
-                          {index + 1}.
-                        </span>
-                        <span className="min-w-0 flex-1 font-semibold text-slate-800">{geofence.nombre}</span>
-                        <span className="max-w-[48%] text-right text-slate-500">
-                          {[geofence.division, geofence.anexo, geofence.distrito].filter(Boolean).join(' · ')}
-                        </span>
+                      <li key={geofence.id}>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectGeofence(geofence)}
+                          className={`flex w-full items-start gap-3 px-3 py-2 text-left text-xs hover:bg-emerald-50 ${
+                            selectedGeofenceId === geofence.id ? 'bg-emerald-50' : ''
+                          }`}
+                        >
+                          <span className="w-7 shrink-0 text-right tabular-nums text-slate-400">
+                            {index + 1}.
+                          </span>
+                          <span className="min-w-0 flex-1 font-semibold text-slate-800">{geofence.nombre}</span>
+                          <span className="max-w-[48%] text-right text-slate-500">
+                            {[geofence.division, geofence.anexo, geofence.distrito].filter(Boolean).join(' · ')}
+                          </span>
+                        </button>
                       </li>
                     ))}
                   </ol>
