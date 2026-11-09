@@ -5,29 +5,43 @@
 CREATE TABLE IF NOT EXISTS public.agrotrack_geocercas (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
-  source_key TEXT NOT NULL CHECK (btrim(source_key) <> ''),
+  fundo_id UUID,
+  lote_id UUID,
   nombre TEXT NOT NULL CHECK (btrim(nombre) <> ''),
+  tipo TEXT NOT NULL DEFAULT 'poligono',
+  forma TEXT NOT NULL DEFAULT 'irregular',
+  centro_lat DOUBLE PRECISION,
+  centro_lon DOUBLE PRECISION,
+  radio_m NUMERIC,
+  poligono JSONB,
+  velocidad_max_kmh NUMERIC,
+  color TEXT,
+  activa BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  source_key TEXT CHECK (source_key IS NULL OR btrim(source_key) <> ''),
   division TEXT,
   anexo TEXT,
   distrito TEXT,
   provincia TEXT,
   area_declarada NUMERIC,
-  geometria JSONB NOT NULL CHECK (
-    COALESCE(
-      jsonb_typeof(geometria) = 'object'
-      AND geometria->>'type' IN ('Polygon', 'MultiPolygon')
-      AND jsonb_typeof(geometria->'coordinates') = 'array',
-      FALSE
-    )
-  ),
   atributos_fuente JSONB NOT NULL DEFAULT '{}'::jsonb
-    CHECK (jsonb_typeof(atributos_fuente) = 'object'),
-  activa BOOLEAN NOT NULL DEFAULT TRUE,
-  creado_por UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (empresa_id, source_key)
+    CHECK (jsonb_typeof(atributos_fuente) = 'object')
 );
+
+-- Compatible with the original AgroTrack schema, which stores geometry in
+-- `poligono` and requires `tipo` and `forma`.
+ALTER TABLE public.agrotrack_geocercas
+  ADD COLUMN IF NOT EXISTS source_key TEXT,
+  ADD COLUMN IF NOT EXISTS division TEXT,
+  ADD COLUMN IF NOT EXISTS anexo TEXT,
+  ADD COLUMN IF NOT EXISTS distrito TEXT,
+  ADD COLUMN IF NOT EXISTS provincia TEXT,
+  ADD COLUMN IF NOT EXISTS area_declarada NUMERIC,
+  ADD COLUMN IF NOT EXISTS atributos_fuente JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agrotrack_geocercas_empresa_source
+  ON public.agrotrack_geocercas (empresa_id, source_key);
 
 CREATE INDEX IF NOT EXISTS idx_agrotrack_geocercas_empresa
   ON public.agrotrack_geocercas (empresa_id, division, nombre);
@@ -55,26 +69,41 @@ GRANT EXECUTE ON FUNCTION public.agrotrack_puede_editar_geocercas(UUID) TO authe
 
 ALTER TABLE public.agrotrack_geocercas ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS agrotrack_geocercas_select_member ON public.agrotrack_geocercas;
+-- Remove legacy/permissive policies too: PostgreSQL combines permissive
+-- policies with OR, so an older ALL policy could otherwise bypass these rules.
+DO $$
+DECLARE existing_policy RECORD;
+BEGIN
+  FOR existing_policy IN
+    SELECT policyname
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'agrotrack_geocercas'
+  LOOP
+    EXECUTE format(
+      'DROP POLICY %I ON public.agrotrack_geocercas',
+      existing_policy.policyname
+    );
+  END LOOP;
+END;
+$$;
+
 CREATE POLICY agrotrack_geocercas_select_member
   ON public.agrotrack_geocercas
   FOR SELECT TO authenticated
   USING (public.onboarding_es_miembro(empresa_id));
 
-DROP POLICY IF EXISTS agrotrack_geocercas_insert_engineer ON public.agrotrack_geocercas;
 CREATE POLICY agrotrack_geocercas_insert_engineer
   ON public.agrotrack_geocercas
   FOR INSERT TO authenticated
   WITH CHECK (public.agrotrack_puede_editar_geocercas(empresa_id));
 
-DROP POLICY IF EXISTS agrotrack_geocercas_update_engineer ON public.agrotrack_geocercas;
 CREATE POLICY agrotrack_geocercas_update_engineer
   ON public.agrotrack_geocercas
   FOR UPDATE TO authenticated
   USING (public.agrotrack_puede_editar_geocercas(empresa_id))
   WITH CHECK (public.agrotrack_puede_editar_geocercas(empresa_id));
 
-DROP POLICY IF EXISTS agrotrack_geocercas_delete_admin ON public.agrotrack_geocercas;
 CREATE POLICY agrotrack_geocercas_delete_admin
   ON public.agrotrack_geocercas
   FOR DELETE TO authenticated

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CircleMarker, GeoJSON, MapContainer, TileLayer, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { AlertCircle, Info, LoaderCircle, MapPin, RefreshCw, Upload } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Info, LoaderCircle, MapPin, RefreshCw, Search, Upload } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { importarGeocercasZip, listarGeocercas } from '../../../lib/agrotrackGeocercas';
 import { STATUS_META } from './fleetTokens';
@@ -39,6 +39,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [mapRevision, setMapRevision] = useState(0);
+  const [showGeofenceList, setShowGeofenceList] = useState(false);
+  const [geofenceSearch, setGeofenceSearch] = useState('');
   const fileInputRef = useRef(null);
   const activeCompanyRef = useRef(empresaId);
   activeCompanyRef.current = empresaId;
@@ -53,6 +55,31 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
     }),
     [geofences],
   );
+  const geofenceSummary = useMemo(() => {
+    const divisions = new Map();
+    geofences.forEach((geofence) => {
+      const division = geofence.division || 'Sin división';
+      divisions.set(division, (divisions.get(division) || 0) + 1);
+    });
+    return [...divisions.entries()].sort(([a], [b]) => a.localeCompare(b, 'es'));
+  }, [geofences]);
+  const filteredGeofences = useMemo(() => {
+    const query = geofenceSearch
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+    if (!query) return geofences;
+    return geofences.filter((geofence) =>
+      [geofence.nombre, geofence.division, geofence.anexo, geofence.distrito, geofence.provincia]
+        .filter(Boolean)
+        .join(' ')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [geofenceSearch, geofences]);
 
   const refreshGeofences = useCallback(async (targetCompanyId = empresaId) => {
     if (targetCompanyId !== activeCompanyRef.current) return;
@@ -218,6 +245,71 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
           })}
         </MapContainer>
       </div>
+
+      {geofences.length > 0 ? (
+        <div className="px-4 sm:px-5 pb-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs font-semibold text-slate-700">
+              {geofences.length} geocercas · {geofenceSummary.length} divisiones
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {geofenceSummary.map(([division, count]) => (
+                <span key={division} className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-800">
+                  {division}: {count}
+                </span>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowGeofenceList((visible) => !visible)}
+              aria-expanded={showGeofenceList}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 sm:ml-auto"
+            >
+              {showGeofenceList ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              {showGeofenceList ? 'Ocultar nombres' : `Ver los ${geofences.length} nombres`}
+            </button>
+          </div>
+          {showGeofenceList ? (
+            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
+              <label className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
+                <Search size={15} className="shrink-0 text-slate-400" />
+                <input
+                  type="search"
+                  value={geofenceSearch}
+                  onChange={(event) => setGeofenceSearch(event.target.value)}
+                  placeholder="Buscar por nombre, división, anexo o distrito"
+                  className="w-full bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400"
+                  aria-label="Buscar geocercas"
+                />
+              </label>
+              <div className="max-h-80 overflow-y-auto">
+                {filteredGeofences.length ? (
+                  <ol className="divide-y divide-slate-100">
+                    {filteredGeofences.map((geofence, index) => (
+                      <li key={geofence.id} className="flex items-start gap-3 px-3 py-2 text-xs">
+                        <span className="w-7 shrink-0 text-right tabular-nums text-slate-400">
+                          {index + 1}.
+                        </span>
+                        <span className="min-w-0 flex-1 font-semibold text-slate-800">{geofence.nombre}</span>
+                        <span className="max-w-[48%] text-right text-slate-500">
+                          {[geofence.division, geofence.anexo, geofence.distrito].filter(Boolean).join(' · ')}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="px-3 py-4 text-center text-xs text-slate-500">
+                    No hay geocercas que coincidan con la búsqueda.
+                  </p>
+                )}
+              </div>
+              <p className="border-t border-slate-200 bg-slate-50 px-3 py-2 text-[10px] text-slate-500">
+                Mostrando {filteredGeofences.length} de {geofences.length} geocercas
+              </p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="px-4 sm:px-5 pb-4 pt-1 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-slate-500">
         <span className="inline-flex items-center gap-1.5">

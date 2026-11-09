@@ -59,7 +59,7 @@ function isValidCoordinates(coordinates) {
   return coordinates.every(isValidCoordinates);
 }
 
-function toRow(feature, empresaId, userId) {
+function toRow(feature, empresaId) {
   const geometry = feature?.geometry;
   const properties = feature?.properties || {};
   const nombre = String(property(properties, 'Name', 'nombre') || '').trim();
@@ -85,15 +85,16 @@ function toRow(feature, empresaId, userId) {
     empresa_id: empresaId,
     source_key: sourceKey,
     nombre,
+    tipo: 'poligono',
+    forma: geometry.type === 'MultiPolygon' ? 'multipoligono' : 'irregular',
+    poligono: geometry,
     division: division || null,
     anexo: anexo || null,
     distrito: distrito || null,
     provincia: provincia || null,
     area_declarada: areaDeclarada,
-    geometria: geometry,
     atributos_fuente: properties,
     activa: true,
-    creado_por: userId,
     updated_at: new Date().toISOString(),
   };
 }
@@ -103,7 +104,7 @@ export async function listarGeocercas(empresaId) {
 
   const { data, error } = await supabase
     .from(GEOCERCAS_TABLE)
-    .select('id, empresa_id, nombre, division, anexo, distrito, provincia, geometria, activa')
+    .select('id, empresa_id, nombre, division, anexo, distrito, provincia, poligono, activa')
     .eq('empresa_id', empresaId)
     .eq('activa', true)
     .order('division', { ascending: true })
@@ -115,7 +116,10 @@ export async function listarGeocercas(empresaId) {
     }
     throw error;
   }
-  return data || [];
+  return (data || []).map((row) => ({
+    ...row,
+    geometria: row.poligono,
+  }));
 }
 
 export async function importarGeocercasZip(file, empresaId, userId) {
@@ -145,7 +149,7 @@ export async function importarGeocercasZip(file, empresaId, userId) {
     throw new Error(`La capa seleccionada contiene ${features.length} polígonos; se esperaban ${EXPECTED_FEATURE_COUNT}.`);
   }
 
-  const rows = features.map((feature) => toRow(feature, empresaId, userId));
+  const rows = features.map((feature) => toRow(feature, empresaId));
   const sourceKeys = new Set(rows.map((row) => row.source_key));
   if (sourceKeys.size !== rows.length) {
     throw new Error('La capa tiene nombres/divisiones repetidos; no se importó para evitar sobrescribir geocercas ambiguas.');
