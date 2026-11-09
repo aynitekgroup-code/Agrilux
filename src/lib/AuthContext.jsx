@@ -19,6 +19,21 @@ const normalizarWhatsapp = (valor) => {
   return `51${soloNumeros}`;
 };
 
+const seleccionarEmpresaInicial = (userId, empresas) => {
+  const storageKey = `agrilux_empresa_activa:${userId}`;
+  const empresaGuardadaId = localStorage.getItem(storageKey);
+  const empresaGuardada = empresas.find((empresa) => empresa.id === empresaGuardadaId);
+  if (empresaGuardada) return empresaGuardada.id;
+
+  const primeraEmpresaId = empresas[0]?.id || null;
+  if (primeraEmpresaId) {
+    localStorage.setItem(storageKey, primeraEmpresaId);
+  } else {
+    localStorage.removeItem(storageKey);
+  }
+  return primeraEmpresaId;
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
@@ -67,10 +82,7 @@ export const AuthProvider = ({ children }) => {
         try {
           const empresas = await listarEmpresasDelUsuario(session.user.id);
           setEmpresasDisponibles(empresas);
-          // Si no hay empresa activa seleccionada y hay empresas disponibles, seleccionar la primera
-          if (!empresa_activa_id && empresas.length > 0) {
-            setEmpresaActivaId(empresas[0].id);
-          }
+          setEmpresaActivaId(seleccionarEmpresaInicial(session.user.id, empresas));
         } catch (e) {
           console.warn('Error cargando empresas del usuario:', e.message);
         }
@@ -103,10 +115,7 @@ export const AuthProvider = ({ children }) => {
         try {
           const empresas = await listarEmpresasDelUsuario(session.user.id);
           setEmpresasDisponibles(empresas);
-          // Si no hay empresa activa seleccionada y hay empresas disponibles, seleccionar la primera
-          if (!empresa_activa_id && empresas.length > 0) {
-            setEmpresaActivaId(empresas[0].id);
-          }
+          setEmpresaActivaId(seleccionarEmpresaInicial(session.user.id, empresas));
         } catch (e) {
           console.warn('Error cargando empresas del usuario:', e.message);
         }
@@ -290,9 +299,11 @@ export const AuthProvider = ({ children }) => {
   // Cambiar empresa activa (validar membresía)
   const setEmpresaActiva = async (empresaId) => {
     try {
-      const resultado = await cambiarEmpresaActiva(empresaId, user?.id || user?.uid);
+      const userId = user?.id || user?.uid;
+      const resultado = await cambiarEmpresaActiva(empresaId, userId);
       if (resultado) {
         setEmpresaActivaId(empresaId);
+        localStorage.setItem(`agrilux_empresa_activa:${userId}`, empresaId);
         return true;
       }
       return false;
