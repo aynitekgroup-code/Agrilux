@@ -11,7 +11,6 @@
     "generate-android-icons": "node scripts/generate-android-icons.js",
     "deploy": "npm run build && git add -A && git commit -m \"deploy: $(date +'%Y-%m-%d %H:%M')\" && git push",
    "sync:win": "npm run build && mkdir -p /mnt/c/Users/User/Pictures/LUMAJIRA_SOC/clon_agrilux_android/Agrilux/android/app/src/main/assets/public && cp -r dist/* /mnt/c/Users/User/Pictures/LUMAJIRA_SOC/clon_agrilux_android/Agrilux/android/app/src/main/assets/public/"  },
-   
   "dependencies": {
     "@capacitor-community/speech-recognition": "^7.0.1",
     "@capacitor/android": "^8.5.0",
@@ -31,6 +30,7 @@
     "react-leaflet": "^4.2.1",
     "react-router-dom": "^6.26.0",
     "recharts": "^2.15.4",
+    "shpjs": "^6.2.0",
     "vite-plugin-pwa": "^1.3.0",
     "workbox-window": "^7.4.1",
     "xlsx": "^0.18.5"

@@ -324,6 +324,7 @@ export async function listarEmpresasDelUsuario(userId) {
     .from('empresa_miembros')
     .select(`
       empresa_id,
+      rol,
       empresas (
         id,
         nombre,
@@ -338,6 +339,7 @@ export async function listarEmpresasDelUsuario(userId) {
   if (error) throw error;
   return data.map(m => ({
     id: m.empresa_id,
+    rol: m.rol,
     nombre: m.empresas.nombre,
     ruc: m.empresas.ruc,
     ubicacion: m.empresas.ubicacion,

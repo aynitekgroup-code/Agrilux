@@ -46,7 +46,9 @@ function SectionHeading({ title, description, children }) {
 }
 
 export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
-  const { user } = useAuth();
+  const { user, empresa_activa_id, empresas_disponibles } = useAuth();
+  const empresaActiva = (empresas_disponibles || []).find((empresa) => empresa.id === empresa_activa_id);
+  const puedeImportarGeocercas = ['administrador', 'ingeniero'].includes(empresaActiva?.rol);
   const [section, setSection] = useState(initialSection);
   const [selectedVehicleId, setSelectedVehicleId] = useState(vehicles[0]?.id || '');
   const [alertList, setAlertList] = useState(mockAlerts);
@@ -108,7 +110,14 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
           <FleetKpis vehicles={vehicles} alerts={alertList} fuelTotal={consumoTotal} />
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
             <div className="xl:col-span-2 min-w-0">
-              <FleetMap vehicles={vehicles} selectedId={selectedVehicleId} onSelect={setSelectedVehicleId} />
+              <FleetMap
+                empresaId={empresa_activa_id}
+                userId={user?.id}
+                canImport={puedeImportarGeocercas}
+                vehicles={vehicles}
+                selectedId={selectedVehicleId}
+                onSelect={setSelectedVehicleId}
+              />
             </div>
             <div className="min-w-0">
               <FleetAlerts alerts={alertList} vehicles={vehicles} onAck={ackAlert} />
