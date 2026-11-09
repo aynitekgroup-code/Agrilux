@@ -6,7 +6,7 @@ import 'leaflet/dist/leaflet.css';
 import { importarGeocercasZip, listarGeocercas } from '../../../lib/agrotrackGeocercas';
 import { STATUS_META } from './fleetTokens';
 
-function FitMapToGeofences({ geoJson }) {
+function FitMapToGeofences({ geoJson, selectedGeofence }) {
   const map = useMap();
 
   useEffect(() => {
@@ -17,6 +17,14 @@ function FitMapToGeofences({ geoJson }) {
       map.setView([-6.78, -79.83], 13, { animate: false });
     }
   }, [geoJson, map]);
+
+  useEffect(() => {
+    if (!selectedGeofence) return;
+    const bounds = L.geoJSON(selectedGeofence.geometria).getBounds();
+    if (bounds.isValid()) {
+      map.fitBounds(bounds.pad(0.2), { maxZoom: 16, animate: true });
+    }
+  }, [map, selectedGeofence]);
 
   return null;
 }
@@ -41,6 +49,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
   const [mapRevision, setMapRevision] = useState(0);
   const [showGeofenceList, setShowGeofenceList] = useState(false);
   const [geofenceSearch, setGeofenceSearch] = useState('');
+  const [selectedGeofenceId, setSelectedGeofenceId] = useState('');
   const fileInputRef = useRef(null);
   const activeCompanyRef = useRef(empresaId);
   activeCompanyRef.current = empresaId;
@@ -80,6 +89,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
         .includes(query),
     );
   }, [geofenceSearch, geofences]);
+  const selectedGeofence = geofences.find((geofence) => geofence.id === selectedGeofenceId);
+  const searchResults = geofenceSearch.trim() ? filteredGeofences.slice(0, 8) : [];
 
   const refreshGeofences = useCallback(async (targetCompanyId = empresaId) => {
     if (targetCompanyId !== activeCompanyRef.current) return;
@@ -111,8 +122,14 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
     setNotice('');
     setError('');
     setGeofences([]);
+    setSelectedGeofenceId('');
     refreshGeofences();
   }, [empresaId, refreshGeofences]);
+
+  const handleSelectGeofence = (geofence) => {
+    setSelectedGeofenceId(geofence.id);
+    setShowGeofenceList(true);
+  };
 
   const handleImport = async (event) => {
     const file = event.target.files?.[0];
@@ -205,6 +222,60 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
         </p>
       ) : null}
 
+      {geofences.length > 0 ? (
+        <div className="px-4 sm:px-5 pb-3">
+          <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-100">
+            <Search size={17} className="shrink-0 text-slate-400" />
+            <input
+              type="search"
+              value={geofenceSearch}
+              onChange={(event) => setGeofenceSearch(event.target.value)}
+              placeholder="Buscar geocerca por nombre…"
+              className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+              aria-label="Buscar geocercas por nombre"
+              aria-controls="geofence-search-results"
+              aria-expanded={searchResults.length > 0}
+            />
+            <span className="shrink-0 text-[11px] text-slate-400">{geofences.length} geocercas</span>
+          </label>
+          {geofenceSearch.trim() ? (
+            <div id="geofence-search-results" className="mt-1 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg" role="listbox" aria-label="Resultados de geocercas">
+              {searchResults.length ? (
+                <>
+                  {searchResults.map((geofence) => (
+                    <button
+                      key={geofence.id}
+                      type="button"
+                      role="option"
+                      aria-selected={selectedGeofenceId === geofence.id}
+                      onClick={() => handleSelectGeofence(geofence)}
+                      className={`flex w-full items-start gap-3 border-b border-slate-100 px-3 py-2.5 text-left last:border-b-0 hover:bg-emerald-50 ${
+                        selectedGeofenceId === geofence.id ? 'bg-emerald-50' : ''
+                      }`}
+                    >
+                      <MapPin size={15} className="mt-0.5 shrink-0 text-emerald-700" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-slate-800">{geofence.nombre}</span>
+                        <span className="mt-0.5 block text-[11px] text-slate-500">
+                          {[geofence.division, geofence.anexo, geofence.distrito].filter(Boolean).join(' · ')}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                  {filteredGeofences.length > searchResults.length ? (
+                    <p className="px-3 py-2 text-[11px] text-slate-500">
+                      Mostrando 8 de {filteredGeofences.length} coincidencias. Escribe más para afinar la búsqueda.
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="px-3 py-3 text-xs text-slate-500">No encontramos geocercas con ese nombre.</p>
+              )}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="px-3 sm:px-5 pb-2">
         <MapContainer
           center={[-6.78, -79.83]}
@@ -219,16 +290,24 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
           <GeoJSON
             key={`${empresaId || 'none'}-${mapRevision}`}
             data={geoJson}
-            style={() => ({
-              color: '#15803D',
-              weight: 1.5,
-              opacity: 0.9,
-              fillColor: '#22C55E',
-              fillOpacity: 0.16,
-            })}
-            onEachFeature={featureTooltip}
+            style={(feature) => {
+              const selected = feature?.properties?.id === selectedGeofenceId;
+              return {
+                color: selected ? '#B45309' : '#15803D',
+                weight: selected ? 4 : 1.5,
+                opacity: 0.9,
+                fillColor: selected ? '#F59E0B' : '#22C55E',
+                fillOpacity: selected ? 0.35 : 0.16,
+              };
+            }}
+            onEachFeature={(feature, layer) => {
+              featureTooltip(feature, layer);
+              layer.on('click', () => setSelectedGeofenceId(feature.properties?.id || ''));
+            }}
           />
-          {geoJson.features.length > 0 ? <FitMapToGeofences geoJson={geoJson} /> : null}
+          {geoJson.features.length > 0 ? (
+            <FitMapToGeofences geoJson={geoJson} selectedGeofence={selectedGeofence} />
+          ) : null}
           {vehicles.filter((vehicle) => Number.isFinite(vehicle.lat) && Number.isFinite(vehicle.lng)).map((vehicle) => {
             const meta = STATUS_META[vehicle.estado] || STATUS_META.offline;
             return (
