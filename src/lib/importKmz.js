@@ -94,7 +94,7 @@ function calcularAreaHectareas(coordenadas) {
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
     area += coordenadas[i][0] * coordenadas[j][1];
-    area -= coordenadas[j][0] * coordenadas[i][0];
+    area -= coordenadas[j][0] * coordenadas[i][1];
   }
   area = Math.abs(area) / 2;
   const latMedia = coordenadas.reduce((s, c) => s + c[1], 0) / n;

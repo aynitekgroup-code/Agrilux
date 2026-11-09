@@ -1,3 +1,4 @@
+import { cleanGeofence, splitForExport } from './geofenceCleaner';
 import shp from 'shpjs';
 import { supabase } from './supabase';
 
@@ -80,7 +81,10 @@ function toRow(feature, empresaId) {
 
   const sourceKey = [division, anexo, nombre].map(normalizedKey).filter(Boolean).join('|');
   if (!sourceKey) throw new Error(`No se pudo identificar el polígono "${nombre}".`);
-
+const { report } = cleanGeofence(geometry);
+const requiereLimpieza =
+  report.huecosRellenados > 0 || report.partesOriginales > 1 ||
+  report.verticesAntes > 200 || report.autointersecciones > 0;
   return {
     empresa_id: empresaId,
     source_key: sourceKey,
@@ -173,4 +177,30 @@ export async function importarGeocercasZip(file, empresaId, userId) {
   }
 
   return saved;
+}
+export async function exportarGeocercasZonar(empresaId) {
+  const { data, error } = await supabase
+    .from(GEOCERCAS_TABLE)
+    .select('nombre, division, anexo, poligono')
+    .eq('empresa_id', empresaId)
+    .eq('activa', true);
+  if (error) throw error;
+
+  const features = [];
+  const resumen = { geocercas: data.length, poligonosExportados: 0, huecosRellenados: 0, partesDescartadas: 0, conAdvertencia: [] };
+  for (const row of data) {
+    const { items, report } = splitForExport(row.nombre, row.poligono);
+    resumen.huecosRellenados += report.huecosRellenados;
+    resumen.partesDescartadas += report.partesDescartadas;
+    if (report.advertencias.length) resumen.conAdvertencia.push(row.nombre);
+    for (const it of items) {
+      features.push({
+        type: 'Feature',
+        properties: { nombre: it.nombre, grupo: it.grupo, division: row.division, anexo: row.anexo },
+        geometry: it.geometry,
+      });
+      resumen.poligonosExportados++;
+    }
+  }
+  return { collection: { type: 'FeatureCollection', features }, resumen };
 }
