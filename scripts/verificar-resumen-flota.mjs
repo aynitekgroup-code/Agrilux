@@ -31,6 +31,7 @@ if (!url || !clave) {
 
 const empresaArg = process.argv.find((arg) => arg.startsWith('--empresa='));
 const empresaSolicitada = empresaArg ? empresaArg.split('=')[1] : null;
+const LIMITE_ALERTAS = 500;
 
 const supabase = createClient(url, clave, { auth: { persistSession: false } });
 
@@ -60,45 +61,58 @@ async function main() {
   }
   console.log(`Empresa: ${empresaId}\n`);
 
-  const { data: periodo, error: errPeriodo } = await supabase.rpc('agrotrack_periodo_flota', {
-    p_empresa_id: empresaId,
-  });
-  if (errPeriodo) return fallo('agrotrack_periodo_flota', errPeriodo);
-  console.log('Periodo:', periodo?.[0] || 'sin filas');
+  // Cronómetro: cada RPC con su duración, para detectar timeouts.
+  const medir = async (nombre, params) => {
+    const inicio = Date.now();
+    const { data, error } = await supabase.rpc(nombre, params);
+    const ms = Date.now() - inicio;
+    console.log(`  ⏱  ${nombre}: ${ms} ms${error ? `  [ERROR ${error.code}] ${error.message}` : ''}`);
+    if (error) return { error, ms };
+    return { data, ms };
+  };
 
-  const { data: eventos, error: errEventos } = await supabase.rpc('agrotrack_conteo_eventos', {
-    p_empresa_id: empresaId,
-  });
-  if (errEventos) return fallo('agrotrack_conteo_eventos', errEventos);
+  console.log('Tiempos por RPC:');
+  const conteoTabla = await supabase
+    .from('agrotrack_posiciones')
+    .select('id', { count: 'exact', head: true });
+  console.log(
+    `  ⏱  scan agrotrack_posiciones (count con RLS): ${conteoTabla.count ?? '-'} filas` +
+      (conteoTabla.error ? ` [ERROR] ${conteoTabla.error.message}` : '')
+  );
+
+  const periodo = await medir('agrotrack_periodo_flota', { p_empresa_id: empresaId });
+  if (periodo.error) return fallo('agrotrack_periodo_flota', periodo.error);
+  console.log('Periodo:', periodo.data?.[0] || 'sin filas');
+
+  const eventos = await medir('agrotrack_conteo_eventos', { p_empresa_id: empresaId });
+  if (eventos.error) return fallo('agrotrack_conteo_eventos', eventos.error);
   console.log('\nEventos (evento → total):');
-  for (const fila of eventos || []) console.log(`  ${fila.evento} → ${fila.total}`);
+  for (const fila of eventos.data || []) console.log(`  ${fila.evento} → ${fila.total}`);
 
-  const { data: resumen, error: errResumen } = await supabase.rpc('agrotrack_resumen_flota', {
-    p_empresa_id: empresaId,
-  });
-  if (errResumen) return fallo('agrotrack_resumen_flota', errResumen);
-  console.log(`\nResumen: ${resumen?.length || 0} unidades`);
-  for (const fila of (resumen || []).slice(0, 10)) {
+  const resumen = await medir('agrotrack_resumen_flota', { p_empresa_id: empresaId });
+  if (resumen.error) return fallo('agrotrack_resumen_flota', resumen.error);
+  console.log(`\nResumen: ${resumen.data?.length || 0} unidades`);
+  for (const fila of (resumen.data || []).slice(0, 10)) {
     console.log(
       `  ${fila.placa} | ${fila.ultimo_evento} | ${fila.ultima_fecha} | ` +
         `${fila.ultima_velocidad ?? '-'} km/h | ${fila.km_recorridos} km | altas: ${fila.eventos_alta_velocidad}`
     );
   }
-  const kmTotal = (resumen || []).reduce((suma, fila) => suma + Number(fila.km_recorridos || 0), 0);
-  console.log(`  Suma de km: ${kmTotal.toFixed(1)} km`);
+  const kmTotal = (resumen.data || []).reduce((suma, fila) => suma + Number(fila.km_recorridos || 0), 0);
+  const altasTotal = (resumen.data || []).reduce((suma, fila) => suma + Number(fila.eventos_alta_velocidad || 0), 0);
+  console.log(`  Suma de km: ${kmTotal.toFixed(1)} km | Suma de altas: ${altasTotal}`);
 
-  const { data: alertas, error: errAlertas } = await supabase.rpc('agrotrack_alertas_flota', {
+  const alertas = await medir('agrotrack_alertas_flota', {
     p_empresa_id: empresaId,
-    p_limite: 10,
+    p_limite: LIMITE_ALERTAS,
   });
-  if (errAlertas) return fallo('agrotrack_alertas_flota', errAlertas);
-  console.log(`\nAlertas: ${alertas?.length || 0} (máx. 10)`);
-  for (const fila of alertas || []) {
+  if (alertas.error) return fallo('agrotrack_alertas_flota', alertas.error);
+  console.log(`\nAlertas: ${alertas.data?.length || 0} (tope ${LIMITE_ALERTAS})`);
+  for (const fila of (alertas.data || []).slice(0, 6)) {
     console.log(`  ${fila.fecha} | ${fila.placa} | ${fila.evento} | ${fila.velocidad ?? '-'} km/h`);
   }
 
-  console.log('\nListo. Si el conteo de eventos no incluye "Alta velocidad" / "Botón de pánico",');
-  console.log('ajusta el filtro de agrotrack_alertas_flota en scripts/agrotrack-posiciones-resumen.sql.');
+  console.log('\nListo.');
 }
 
 main().catch((error) => fallo('Error inesperado', error));

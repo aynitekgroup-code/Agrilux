@@ -127,73 +127,77 @@ as $$
     ) d
     where d.orden = 1
   ),
-  ordenados as (
+  -- Único ordenamiento por placa/fecha: de aquí salen los tramos consecutivos
+  -- y, con last_value sobre todo el marco, la última posición del periodo.
+  con_prev as (
     select
       s.placa, s.unidad, s.descripcion, s.fecha, s.evento,
       s.velocidad, s.latitud, s.longitud,
       lag(s.latitud)  over ventana as prev_lat,
       lag(s.longitud) over ventana as prev_lon,
-      lag(s.fecha)    over ventana as prev_fecha
+      lag(s.fecha)    over ventana as prev_fecha,
+      last_value(s.fecha)       over ventana_completa as ult_fecha,
+      last_value(s.unidad)      over ventana_completa as ult_unidad,
+      last_value(s.descripcion) over ventana_completa as ult_descripcion,
+      last_value(s.evento)      over ventana_completa as ult_evento,
+      last_value(s.velocidad)   over ventana_completa as ult_velocidad,
+      last_value(s.latitud)     over ventana_completa as ult_lat,
+      last_value(s.longitud)    over ventana_completa as ult_lon
     from sin_duplicados s
-    window ventana as (partition by s.placa order by s.fecha, coalesce(s.secuencia, 0))
+    window
+      ventana as (partition by s.placa order by s.fecha, coalesce(s.secuencia, 0), s.id),
+      ventana_completa as (
+        partition by s.placa
+        order by s.fecha, coalesce(s.secuencia, 0), s.id
+        rows between unbounded preceding and unbounded following
+      )
   ),
+  -- Haversine calculado UNA sola vez por tramo. Antes se llamaba dos veces a
+  -- la función agrotrack_haversine_km por fila (207 mil llamadas) y su
+  -- set search_path impedía el inlining: eso sumaba ~5 s y disparaba el
+  -- statement timeout de PostgREST.
   tramos as (
     select
-      o.placa,
+      c.*,
       case
-        when o.prev_lat is null or o.prev_fecha is null then 0::double precision
-        -- intervalo mayor a 10 minutos: no hay continuidad
-        when extract(epoch from (o.fecha - o.prev_fecha)) > 600 then 0::double precision
-        -- salto de GPS mayor o igual a 5 km: se descarta
-        when public.agrotrack_haversine_km(o.prev_lat, o.prev_lon, o.latitud, o.longitud) >= 5
-          then 0::double precision
-        else public.agrotrack_haversine_km(o.prev_lat, o.prev_lon, o.latitud, o.longitud)
-      end as km
-    from ordenados o
-  ),
-  distancias as (
-    select t.placa, sum(t.km) as km_total
-    from tramos t
-    group by t.placa
-  ),
-  altas as (
-    select s.placa, count(*) as total
-    from sin_duplicados s
-    -- "Alta velocidad" sí es alerta; "Fin de alta velocidad" es el cierre del
-    -- mismo evento (255 aperturas + 255 cierres en los datos reales) y se excluye.
-    where lower(s.evento) like '%alta velocidad%'
-      and lower(s.evento) not like 'fin%'
-    group by s.placa
-  ),
-  ultima as (
-    select u.*
-    from (
-      select
-        s.placa, s.unidad, s.descripcion, s.fecha, s.evento,
-        s.velocidad, s.latitud, s.longitud,
-        row_number() over (
-          partition by s.placa
-          order by s.fecha desc, coalesce(s.secuencia, 0) desc, s.id desc
-        ) as orden
-      from sin_duplicados s
-    ) u
-    where u.orden = 1
+        when c.prev_lat is null or c.prev_fecha is null then null
+        else 2.0 * 6371.0 * asin(least(1.0, sqrt(
+          power(sin(radians(c.latitud - c.prev_lat) / 2.0), 2) +
+          cos(radians(c.prev_lat)) * cos(radians(c.latitud)) *
+          power(sin(radians(c.longitud - c.prev_lon) / 2.0), 2)
+        )))
+      end as dist_km
+    from con_prev c
   )
+  -- Un solo GROUP BY por placa en lugar de tres pasadas y dos joins.
   select
-    u.placa                  as placa,
-    u.unidad                 as unidad,
-    u.descripcion            as descripcion,
-    u.evento                 as ultimo_evento,
-    u.fecha                  as ultima_fecha,
-    u.latitud                as ultima_lat,
-    u.longitud               as ultima_lon,
-    u.velocidad              as ultima_velocidad,
-    coalesce(round(d.km_total::numeric, 2), 0) as km_recorridos,
-    coalesce(a.total, 0)     as eventos_alta_velocidad
-  from ultima u
-  left join distancias d on d.placa = u.placa
-  left join altas a       on a.placa = u.placa
-  order by u.placa;
+    t.placa                 as placa,
+    max(t.ult_unidad)       as unidad,
+    max(t.ult_descripcion)  as descripcion,
+    max(t.ult_evento)       as ultimo_evento,
+    max(t.ult_fecha)        as ultima_fecha,
+    max(t.ult_lat)          as ultima_lat,
+    max(t.ult_lon)          as ultima_lon,
+    max(t.ult_velocidad)    as ultima_velocidad,
+    coalesce(round(sum(
+      case
+        when t.prev_lat is null or t.prev_fecha is null then 0::double precision
+        -- intervalo mayor a 10 minutos: no hay continuidad
+        when extract(epoch from (t.fecha - t.prev_fecha)) > 600 then 0::double precision
+        -- salto de GPS mayor o igual a 5 km: se descarta
+        when t.dist_km is null or t.dist_km >= 5 then 0::double precision
+        else t.dist_km
+      end
+    )::numeric, 2), 0)     as km_recorridos,
+    -- "Alta velocidad" sí es alerta; "Fin de alta velocidad" es el cierre del
+    -- mismo evento (255 aperturas + 255 cierres) y se excluye.
+    count(*) filter (
+      where lower(t.evento) like '%alta velocidad%'
+        and lower(t.evento) not like 'fin%'
+    )                      as eventos_alta_velocidad
+  from tramos t
+  group by t.placa
+  order by t.placa;
 $$;
 
 grant execute on function public.agrotrack_resumen_flota(uuid, timestamptz, timestamptz)
