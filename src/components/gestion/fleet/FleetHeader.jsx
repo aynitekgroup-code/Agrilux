@@ -10,12 +10,16 @@ import {
   Power,
   GitBranch,
   ShieldCheck,
+  Map,
+  FileChartColumn,
 } from 'lucide-react';
 import { useAuth } from '../../../lib/AuthContext';
 import { DEMO_FUNDO } from '../../../mocks/agrotrackData';
 
 export const FLEET_SECTIONS = [
   { id: 'consola', label: 'Consola principal', icon: LayoutDashboard },
+  { id: 'mapas', label: 'Mapas', icon: Map },
+  { id: 'reportes', label: 'Reportes', icon: FileChartColumn },
   { id: 'combustible', label: 'Control de combustible', icon: Fuel },
   { id: 'corte', label: 'Corte remoto', icon: Power },
   { id: 'modulos', label: 'Esquema de módulos', icon: GitBranch },

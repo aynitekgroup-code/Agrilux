@@ -225,6 +225,64 @@ export function ultimoDiaLima(iso) {
   }
 }
 
+/**
+ * Rango de un mes calendario en hora de Perú: "2026-11" -> 00:00:00 del día 1
+ * hasta 23:59:59 del último día del mes.
+ */
+export function rangoMesLima(mesInput) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(mesInput || ''));
+  if (!m) return { desde: null, hasta: null };
+  const anio = Number(m[1]);
+  const mes = Number(m[2]);
+  if (!anio || mes < 1 || mes > 12) return { desde: null, hasta: null };
+  const ultimoDia = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
+  const dd = (n) => String(n).padStart(2, '0');
+  return {
+    desde: `${anio}-${dd(mes)}-01T00:00:00-05:00`,
+    hasta: `${anio}-${dd(mes)}-${dd(ultimoDia)}T23:59:59-05:00`,
+  };
+}
+
+/** Segundos -> "8 h 12 min" · "45 min" · "12 s" (para los reportes). */
+export function formatearDuracion(segundos) {
+  const s = Math.max(0, Math.round(Number(segundos || 0)));
+  if (s < 60) return `${s} s`;
+  const horas = Math.floor(s / 3600);
+  const minutos = Math.round((s % 3600) / 60);
+  if (!horas) return `${minutos} min`;
+  return `${horas} h ${String(minutos).padStart(2, '0')} min`;
+}
+
+/** Tope de filas del reporte de actividad: PostgREST corta en 1000. */
+export const LIMITE_FILAS_ACTIVIDAD = 1000;
+
+/**
+ * Reporte de actividad (FASE 3): km, encendido, viaje y ralentí por unidad.
+ * Devuelve una fila por unidad y periodo:
+ *   agrupar 'dia'   -> periodo '2026-11-05'
+ *   agrupar 'mes'   -> periodo '2026-11'
+ *   agrupar 'unidad'-> periodo null (totales del rango)
+ * Requiere: ejecutar scripts/agrotrack-reportes-flota.sql en Supabase.
+ */
+export async function obtenerActividadFlota(
+  empresaId,
+  { desde = null, hasta = null, placa = null, agrupar = 'dia', limite = LIMITE_FILAS_ACTIVIDAD } = {}
+) {
+  if (!empresaId) return [];
+  return llamarRpc(
+    'agrotrack_actividad_flota',
+    {
+      p_empresa_id: empresaId,
+      p_desde: desde,
+      p_hasta: hasta,
+      p_placa: placa,
+      p_agrupar: agrupar,
+      p_limite: limite,
+    },
+    'No se pudo cargar el reporte de actividad'
+  );
+}
+
 function aVehiculo(fila, fechaMaxPeriodo) {
   return {
     id: fila.placa,

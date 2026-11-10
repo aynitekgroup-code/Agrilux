@@ -13,6 +13,7 @@ import FleetHeader from '../../components/gestion/fleet/FleetHeader';
 import FleetKpis from '../../components/gestion/fleet/FleetKpis';
 import FleetMap from '../../components/gestion/fleet/FleetMap';
 import VehicleList from '../../components/gestion/fleet/VehicleList';
+import FleetReports from '../../components/gestion/fleet/FleetReports';
 import EngineCutSection from '../../components/gestion/fleet/EngineCutSection';
 import FuelDashboard from '../../components/gestion/fleet/FuelDashboard';
 import RemoteCutModal from '../../components/gestion/fleet/RemoteCutModal';
@@ -248,6 +249,46 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             selectedId={selectedVehicleId}
             onSelect={setSelectedVehicleId}
             onCut={abrirCorte}
+          />
+        </div>
+      ) : null}
+
+      {section === 'mapas' ? (
+        <div className="space-y-4">
+          <SectionHeading
+            title="Mapa de flota"
+            description="Posiciones de agrotrack_posiciones sobre el mapa: geocercas, buscador, comandos de voz y recorrido por unidad."
+          >
+            {conDatosReales ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide">
+                <Database size={12} /> Datos reales
+              </span>
+            ) : null}
+          </SectionHeading>
+          <FleetMap
+            empresaId={empresa_activa_id}
+            userId={user?.id}
+            canImport={puedeImportarGeocercas}
+            vehicles={vehiclesFuente}
+            selectedId={selectedVehicleId}
+            onSelect={setSelectedVehicleId}
+            fuentePosiciones={fuentePosiciones}
+            periodo={conDatosReales ? panel.periodo : null}
+          />
+        </div>
+      ) : null}
+
+      {section === 'reportes' ? (
+        <div className="space-y-4">
+          <SectionHeading
+            title="Reportes de flota"
+            description="Reporte de actividad por día y por mes: recorrido, encendido, hora de viaje y ralentí por separado (los 4 reportes pedidos, listos para exportar)."
+          />
+          <FleetReports
+            empresaId={empresa_activa_id}
+            periodo={conDatosReales ? panel.periodo : null}
+            vehicles={vehiclesFuente}
+            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
         </div>
       ) : null}
