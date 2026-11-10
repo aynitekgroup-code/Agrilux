@@ -134,17 +134,23 @@ export default function ModulesOverview() {
         <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
           <p className="text-xs font-bold uppercase tracking-wide text-emerald-800">Datos reales · Supabase</p>
           <ul className="mt-2 text-xs text-emerald-900/80 space-y-1.5">
-            <li>Autenticación del usuario y perfil mediante <span className="font-semibold">useAuth</span>.</li>
-            <li>Empresa activa, sede/fundo y permisos por <span className="font-semibold">empresa_id</span>.</li>
-            <li>Políticas RLS de lectura y estado de sincronización.</li>
+            <li>Autenticación, empresa activa y permisos por <span className="font-semibold">empresa_id</span> (RLS).</li>
+            <li>Posiciones GPS, km, estado y recorrido de <span className="font-mono">agrotrack_posiciones</span>.</li>
+            <li>Geocercas reales importadas por ZIP: <span className="font-mono">agrotrack_geocercas</span>.</li>
+            <li>Alertas de alta velocidad y botón de pánico.</li>
+            <li>Reporte de actividad (día/mes), exportación a Excel y resumen con IA.</li>
           </ul>
         </div>
         <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-amber-800">Datos simulados · Front-end</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-amber-800">Pendiente de fuente real</p>
           <ul className="mt-2 text-xs text-amber-900/80 space-y-1.5">
-            <li>Coordenadas GPS, rutas y geocercas del mapa demo.</li>
-            <li>Telemetría, nivel de combustible y anomalías.</li>
-            <li>Alertas y solicitudes de corte remoto 100 % demostrativas.</li>
+            <li>Combustible, nivel de tanque y anomalías (sin sensor ni registros de carga).</li>
+            <li>Corte remoto: no existe la tabla de órdenes ni comando al rastreador.</li>
+            <li>Conductor y temperatura: Zonar no los entrega en este volcado.</li>
+            <li>
+              La Consola principal conserva algunos indicadores demostrativos, siempre marcados como
+              <span className="font-semibold"> demo</span>.
+            </li>
           </ul>
         </div>
       </div>

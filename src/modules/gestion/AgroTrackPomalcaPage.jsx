@@ -5,7 +5,6 @@ import {
   vehicles,
   alerts as mockAlerts,
   fuelReadings as mockFuelReadings,
-  fuelAnomalies,
   cutRequests,
 } from '../../mocks/agrotrackData';
 import { cargarPanelFlota, textoPeriodoCargado, formatearRango, LIMITE_ALERTAS_PANEL } from '../../lib/agrotrackFlota';
@@ -14,8 +13,6 @@ import FleetKpis from '../../components/gestion/fleet/FleetKpis';
 import FleetMap from '../../components/gestion/fleet/FleetMap';
 import VehicleList from '../../components/gestion/fleet/VehicleList';
 import FleetReports from '../../components/gestion/fleet/FleetReports';
-import EngineCutSection from '../../components/gestion/fleet/EngineCutSection';
-import FuelDashboard from '../../components/gestion/fleet/FuelDashboard';
 import RemoteCutModal from '../../components/gestion/fleet/RemoteCutModal';
 import FleetAlerts from '../../components/gestion/fleet/FleetAlerts';
 import ModulesOverview from '../../components/gestion/fleet/ModulesOverview';
@@ -43,6 +40,42 @@ function SectionHeading({ title, description, children }) {
         <p className="text-sm text-slate-500 mt-0.5 max-w-3xl">{description}</p>
       </div>
       {children ? <div className="flex flex-wrap items-center gap-2 sm:ml-auto">{children}</div> : null}
+    </div>
+  );
+}
+
+/**
+ * Estado honesto de una sección que todavía no tiene fuente real de datos.
+ * Reemplaza a los tableros demostrativos: no se muestran cifras inventadas.
+ */
+function PanelSinDatos({ titulo, descripcion, puntos = [], nota = null }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6">
+      <div className="flex items-start gap-3">
+        <span className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center shrink-0">
+          <Database size={18} />
+        </span>
+        <div className="min-w-0">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide">
+            Sin datos
+          </span>
+          <h3 className="mt-2 text-base font-bold text-slate-800">{titulo}</h3>
+          <p className="text-sm text-slate-500 mt-1 leading-relaxed max-w-3xl">{descripcion}</p>
+          {puntos.length ? (
+            <ul className="mt-3 space-y-1.5">
+              {puntos.map((punto) => (
+                <li key={punto} className="text-xs text-slate-500 flex items-start gap-2">
+                  <span className="mt-1.5 w-1 h-1 rounded-full bg-slate-300 shrink-0" />
+                  {punto}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {nota ? (
+            <p className="mt-3 text-[11px] text-slate-400 border-t border-slate-100 pt-3 leading-relaxed">{nota}</p>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
@@ -244,6 +277,14 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
               />
             </div>
           </div>
+          {/* Lo que ya funciona con datos reales, también en la pantalla principal. */}
+          <FleetReports
+            empresaId={empresa_activa_id}
+            empresaNombre={empresaActiva?.nombre || ''}
+            periodo={conDatosReales ? panel.periodo : null}
+            vehicles={vehiclesFuente}
+            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+          />
           <VehicleList
             vehicles={vehicles}
             selectedId={selectedVehicleId}
@@ -300,32 +341,44 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             title="Control de combustible"
             description="Niveles de tanque, cargas registradas, comparación real vs. estimada y anomalías detectadas."
           >
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide">
-              <Bell size={12} /> Datos simulados
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide">
+              <Bell size={12} /> Sin fuente de datos
             </span>
           </SectionHeading>
-          <FuelDashboard
-            vehicles={vehicles}
-            readings={readings}
-            anomalies={fuelAnomalies}
-            onRegister={registrarAbastecimiento}
-            responsable={user?.nombre || 'Supervisor de flota'}
-            onToast={setToast}
+          <PanelSinDatos
+            titulo="Todavía no hay fuente real de combustible"
+            descripcion="Los niveles de tanque, el consumo y las anomalías requieren un sensor de nivel o el registro de cargas con su comprobante. Mientras no exista esa fuente no mostramos cifras, para no presentar números inventados como reales."
+            puntos={[
+              'Nivel de tanque por vehículo: no hay sensor conectado.',
+              'Cargas y consumos: se mostrarán con los registros reales (hoy no hay ninguno en la base).',
+              'Comparación real vs. estimada y anomalías: dependen del historial de cargas.',
+            ]}
+            nota="La Consola principal conserva su indicador demostrativo de combustible mientras no haya fuente real (así se pidió)."
           />
         </div>
       ) : null}
 
       {section === 'corte' ? (
-        <EngineCutSection
-          vehicles={vehicles}
-          alerts={alertList}
-          requests={cutOrders}
-          blockedIds={blockedIds}
-          pendingIds={pendingIds}
-          onBlock={abrirCorte}
-          onUnblock={desbloquearVehiculo}
-          onSchedule={programarBloqueo}
-        />
+        <div className="space-y-4">
+          <SectionHeading
+            title="Corte remoto"
+            description="Bloqueo y desbloqueo del motor, órdenes pendientes y su trazabilidad."
+          >
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide">
+              <Bell size={12} /> Sin fuente de datos
+            </span>
+          </SectionHeading>
+          <PanelSinDatos
+            titulo="Todavía no hay fuente real de corte remoto"
+            descripcion="Cortar el motor a distancia exige un rastreador que acepte comandos y una tabla de órdenes auditada en Supabase. Ninguna de las dos existe hoy, así que no mostramos órdenes ni estados de bloqueo."
+            puntos={[
+              'Órdenes de bloqueo / desbloqueo: no existe la tabla de órdenes.',
+              'Estado de bloqueo por unidad: no viene de agrotrack_posiciones.',
+              'Trazabilidad de quién aplicó el corte: pendiente de definir.',
+            ]}
+            nota="Las órdenes simuladas que aparecen en la Consola principal se mantienen solo como demostración (así se pidió)."
+          />
+        </div>
       ) : null}
 
       {section === 'modulos' ? <ModulesOverview /> : null}
