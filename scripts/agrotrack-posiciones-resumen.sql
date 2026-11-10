@@ -2,8 +2,23 @@
 -- Ejecutar completo en el SQL Editor de Supabase. Es repetible e idempotente:
 -- no borra ni modifica datos, ni toca RLS ni la tabla agrotrack_geocercas.
 --
--- Todas las funciones usan SECURITY INVOKER para que la RLS de
--- agrotrack_posiciones_seleccione_member se aplique con el usuario que llama.
+-- TODAS las RPC son SECURITY DEFINER y validan la membresía con
+-- public.onboarding_es_miembro(p_empresa_id) antes de leer: un no-miembro
+-- recibe 0 filas (mismo resultado que la RLS), pero la tabla se recorre sin
+-- evaluar la política fila por fila.
+--
+-- Por qué (medido el 2026-11-10 con un usuario autenticado real):
+--   count(*) con RLS ....... 5.618 ms   (sin RLS: instantáneo)
+--   agrotrack_periodo_flota  6.347 ms
+--   agrotrack_resumen_flota  8.410 ms -> 57014 "canceling statement due to
+--                                         statement timeout"  <-- el 500 de la consola
+-- La política de RLS llama a una función por cada una de las 103.628 filas
+-- (~53 µs c/u) y Supabase corta toda consulta a los 8 segundos.
+--
+-- IMPORTANTE: no se modifica ninguna política de RLS existente, ni la tabla
+-- agrotrack_posiciones, ni agrotrack_geocercas. Solo cambia la cabecera de
+-- estas funciones y se añade el chequeo de membresía.
+--
 -- El cálculo ocurre en SQL porque PostgREST devuelve máximo 1000 filas por consulta.
 --
 -- Valores reales de la columna evento (confirmados el 2026-11-09 sobre
@@ -57,7 +72,7 @@ returns table (
 )
 language sql
 stable
-security invoker
+security definer
 set search_path = public, pg_temp
 as $$
   select
@@ -66,7 +81,9 @@ as $$
     count(distinct p.placa) as unidades,
     count(*)              as registros
   from public.agrotrack_posiciones p
-  where p.empresa_id = p_empresa_id;
+  -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
+  where (select public.onboarding_es_miembro(p_empresa_id))
+    and p.empresa_id = p_empresa_id;
 $$;
 
 grant execute on function public.agrotrack_periodo_flota(uuid)
@@ -101,7 +118,7 @@ returns table (
 )
 language sql
 stable
-security invoker
+security definer
 set search_path = public, pg_temp
 as $$
   -- UNA sola pasada sobre la tabla (un solo sort, una sola ventana).
@@ -114,7 +131,9 @@ as $$
       p.id, p.placa, p.unidad, p.descripcion, p.fecha, p.secuencia,
       p.evento, p.velocidad, p.latitud, p.longitud
     from public.agrotrack_posiciones p
-    where p.empresa_id = p_empresa_id
+    -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
+    where (select public.onboarding_es_miembro(p_empresa_id))
+      and p.empresa_id = p_empresa_id
       and (p_desde is null or p.fecha >= p_desde)
       and (p_hasta is null or p.fecha <= p_hasta)
   ),
@@ -221,7 +240,7 @@ returns table (
 )
 language sql
 stable
-security invoker
+security definer
 set search_path = public, pg_temp
 as $$
   select
@@ -233,7 +252,9 @@ as $$
     p.velocidad  as velocidad,
     p.direccion  as direccion
   from public.agrotrack_posiciones p
-  where p.empresa_id = p_empresa_id
+  -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
+  where (select public.onboarding_es_miembro(p_empresa_id))
+    and p.empresa_id = p_empresa_id
     and (p_desde is null or p.fecha >= p_desde)
     and (p_hasta is null or p.fecha <= p_hasta)
     and (
@@ -262,14 +283,16 @@ returns table (
 )
 language sql
 stable
-security invoker
+security definer
 set search_path = public, pg_temp
 as $$
   select
     p.evento  as evento,
     count(*)  as total
   from public.agrotrack_posiciones p
-  where p.empresa_id = p_empresa_id
+  -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
+  where (select public.onboarding_es_miembro(p_empresa_id))
+    and p.empresa_id = p_empresa_id
   group by p.evento
   order by count(*) desc;
 $$;
@@ -308,7 +331,7 @@ returns table (
 )
 language sql
 stable
-security invoker
+security definer
 set search_path = public, pg_temp
 as $$
   with base as (
@@ -316,7 +339,9 @@ as $$
       p.id, p.fecha, p.latitud, p.longitud,
       p.velocidad, p.evento, p.direccion, p.secuencia
     from public.agrotrack_posiciones p
-    where p.empresa_id = p_empresa_id
+    -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
+    where (select public.onboarding_es_miembro(p_empresa_id))
+      and p.empresa_id = p_empresa_id
       and p.placa = p_placa
       and (p_desde is null or p.fecha >= p_desde)
       and (p_hasta is null or p.fecha <= p_hasta)
