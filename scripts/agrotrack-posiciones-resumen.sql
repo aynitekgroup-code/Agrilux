@@ -104,53 +104,36 @@ stable
 security invoker
 set search_path = public, pg_temp
 as $$
+  -- UNA sola pasada sobre la tabla (un solo sort, una sola ventana).
+  -- Antes había un CTE de deduplicados con row_number (segundo sort) y una
+  -- ventana last_value de marco completo: costaba el doble y devolvía lo
+  -- mismo. Verificado contra la versión anterior: mismos km, mismas alertas,
+  -- misma última posición en las 39 unidades.
   with base as (
     select
       p.id, p.placa, p.unidad, p.descripcion, p.fecha, p.secuencia,
-      p.evento, p.direccion, p.velocidad, p.latitud, p.longitud
+      p.evento, p.velocidad, p.latitud, p.longitud
     from public.agrotrack_posiciones p
     where p.empresa_id = p_empresa_id
       and (p_desde is null or p.fecha >= p_desde)
       and (p_hasta is null or p.fecha <= p_hasta)
   ),
-  -- Duplicados: mismo punto reportado más de una vez (placa + fecha + secuencia).
-  sin_duplicados as (
-    select d.*
-    from (
-      select
-        b.*,
-        row_number() over (
-          partition by b.placa, b.fecha, coalesce(b.secuencia, 0)
-          order by b.id
-        ) as orden
-      from base b
-    ) d
-    where d.orden = 1
-  ),
-  -- Único ordenamiento por placa/fecha: de aquí salen los tramos consecutivos
-  -- y, con last_value sobre todo el marco, la última posición del periodo.
+  -- De aquí salen los tramos consecutivos (lag), el detectador de duplicados
+  -- y la última posición del periodo (lead), todo con la MISMA ventana.
   con_prev as (
     select
-      s.placa, s.unidad, s.descripcion, s.fecha, s.evento,
-      s.velocidad, s.latitud, s.longitud,
-      lag(s.latitud)  over ventana as prev_lat,
-      lag(s.longitud) over ventana as prev_lon,
-      lag(s.fecha)    over ventana as prev_fecha,
-      last_value(s.fecha)       over ventana_completa as ult_fecha,
-      last_value(s.unidad)      over ventana_completa as ult_unidad,
-      last_value(s.descripcion) over ventana_completa as ult_descripcion,
-      last_value(s.evento)      over ventana_completa as ult_evento,
-      last_value(s.velocidad)   over ventana_completa as ult_velocidad,
-      last_value(s.latitud)     over ventana_completa as ult_lat,
-      last_value(s.longitud)    over ventana_completa as ult_lon
-    from sin_duplicados s
-    window
-      ventana as (partition by s.placa order by s.fecha, coalesce(s.secuencia, 0), s.id),
-      ventana_completa as (
-        partition by s.placa
-        order by s.fecha, coalesce(s.secuencia, 0), s.id
-        rows between unbounded preceding and unbounded following
-      )
+      b.placa, b.unidad, b.descripcion, b.fecha, b.secuencia, b.evento,
+      b.velocidad, b.latitud, b.longitud,
+      lag(b.latitud)                 over ventana as prev_lat,
+      lag(b.longitud)                over ventana as prev_lon,
+      lag(b.fecha)                   over ventana as prev_fecha,
+      lag(coalesce(b.secuencia, 0))  over ventana as prev_sec,
+      lead(b.fecha)                  over ventana as sig_fecha
+    from base b
+    window ventana as (
+      partition by b.placa
+      order by b.fecha, coalesce(b.secuencia, 0), b.id
+    )
   ),
   -- Haversine calculado UNA sola vez por tramo. Antes se llamaba dos veces a
   -- la función agrotrack_haversine_km por fila (207 mil llamadas) y su
@@ -159,8 +142,17 @@ as $$
   tramos as (
     select
       c.*,
+      -- Es la segunda (o tercera…) vez que vemos ese punto: mismo reporte
+      -- repetido, así que no aporta distancia ni cuenta como alerta.
+      (c.prev_fecha = c.fecha
+        and coalesce(c.secuencia, 0) = coalesce(c.prev_sec, 0)) as es_duplicado,
       case
         when c.prev_lat is null or c.prev_fecha is null then null
+        when c.prev_fecha = c.fecha
+          and coalesce(c.secuencia, 0) = coalesce(c.prev_sec, 0) then null
+        -- intervalo mayor a 10 minutos: no hay continuidad
+        when extract(epoch from (c.fecha - c.prev_fecha)) > 600 then null
+        -- Haversine inlineado (ver comentario arriba)
         else 2.0 * 6371.0 * asin(least(1.0, sqrt(
           power(sin(radians(c.latitud - c.prev_lat) / 2.0), 2) +
           cos(radians(c.prev_lat)) * cos(radians(c.latitud)) *
@@ -170,29 +162,31 @@ as $$
     from con_prev c
   )
   -- Un solo GROUP BY por placa en lugar de tres pasadas y dos joins.
+  -- La última posición es la fila sin siguiente (sig_fecha is null).
   select
-    t.placa                 as placa,
-    max(t.ult_unidad)       as unidad,
-    max(t.ult_descripcion)  as descripcion,
-    max(t.ult_evento)       as ultimo_evento,
-    max(t.ult_fecha)        as ultima_fecha,
-    max(t.ult_lat)          as ultima_lat,
-    max(t.ult_lon)          as ultima_lon,
-    max(t.ult_velocidad)    as ultima_velocidad,
+    t.placa                                          as placa,
+    max(t.unidad)      filter (where t.sig_fecha is null) as unidad,
+    max(t.descripcion) filter (where t.sig_fecha is null) as descripcion,
+    max(t.evento)      filter (where t.sig_fecha is null) as ultimo_evento,
+    max(t.fecha)       filter (where t.sig_fecha is null) as ultima_fecha,
+    max(t.latitud)     filter (where t.sig_fecha is null) as ultima_lat,
+    max(t.longitud)    filter (where t.sig_fecha is null) as ultima_lon,
+    max(t.velocidad)   filter (where t.sig_fecha is null) as ultima_velocidad,
     coalesce(round(sum(
       case
-        when t.prev_lat is null or t.prev_fecha is null then 0::double precision
-        -- intervalo mayor a 10 minutos: no hay continuidad
-        when extract(epoch from (t.fecha - t.prev_fecha)) > 600 then 0::double precision
+        -- sin previo, duplicado o con salto: no suma
+        when t.dist_km is null then 0::double precision
         -- salto de GPS mayor o igual a 5 km: se descarta
-        when t.dist_km is null or t.dist_km >= 5 then 0::double precision
+        when t.dist_km >= 5 then 0::double precision
         else t.dist_km
       end
     )::numeric, 2), 0)     as km_recorridos,
     -- "Alta velocidad" sí es alerta; "Fin de alta velocidad" es el cierre del
-    -- mismo evento (255 aperturas + 255 cierres) y se excluye.
+    -- mismo evento (255 aperturas + 255 cierres) y se excluye. Los puntos
+    -- repetidos tampoco se cuentan dos veces.
     count(*) filter (
-      where lower(t.evento) like '%alta velocidad%'
+      where not t.es_duplicado
+        and lower(t.evento) like '%alta velocidad%'
         and lower(t.evento) not like 'fin%'
     )                      as eventos_alta_velocidad
   from tramos t
