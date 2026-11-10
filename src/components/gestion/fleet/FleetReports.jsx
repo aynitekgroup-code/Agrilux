@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, AlertTriangle, RotateCw, Database, FileChartColumn, ArrowUpDown, CalendarClock } from 'lucide-react';
+import { Loader2, AlertTriangle, RotateCw, Database, FileChartColumn, ArrowUpDown, CalendarClock, FileSpreadsheet } from 'lucide-react';
 import {
   obtenerActividadFlota,
   rangoDiaLima,
   rangoMesLima,
   formatearDuracion,
   formatearRango,
+  etiquetaPeriodoReporte,
   ultimoDiaLima,
   LIMITE_FILAS_ACTIVIDAD,
 } from '../../../lib/agrotrackFlota';
@@ -33,17 +34,6 @@ const COLUMNAS = [
   { id: 'alertas', label: 'Alertas', numerica: true },
 ];
 
-function etiquetaPeriodo(fila, modo) {
-  if (modo === 'dia') return fila.periodo || '—';
-  if (modo === 'mes' && fila.periodo) {
-    const [anio, mes] = fila.periodo.split('-');
-    const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-    return `${MESES[Number(mes) - 1]} ${anio}`;
-  }
-  if (!fila.periodo) return 'Total';
-  return fila.periodo;
-}
-
 function numero(valor, decimales = 1) {
   const n = Number(valor);
   if (!Number.isFinite(n)) return '—';
@@ -60,6 +50,7 @@ export default function FleetReports({ empresaId, periodo = null, vehicles = [],
   const [filas, setFilas] = useState([]);
   const [error, setError] = useState(null);
   const [rangoTexto, setRangoTexto] = useState('');
+  const [descargaError, setDescargaError] = useState(null);
   const [orden, setOrden] = useState({ campo: 'unidad', dir: 'asc' });
 
   // Precarga con el último día (o mes) que trae datos reales.
@@ -149,6 +140,19 @@ export default function FleetReports({ empresaId, periodo = null, vehicles = [],
     setOrden((prev) => (prev.campo === campo ? { campo, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { campo, dir: 'desc' }));
 
   const cargando = estado === 'cargando';
+  const puedeExportar = estado === 'ok' && filas.length > 0;
+
+  // El XLSX se importa bajo demanda: la librería xlsx pesa ~430 kB y solo se
+  // necesita cuando el usuario pide el archivo.
+  const descargarExcel = async () => {
+    setDescargaError(null);
+    try {
+      const { exportarActividadExcel } = await import('../../../lib/exportExcel');
+      exportarActividadExcel(filas, { modo, rangoTexto, placa });
+    } catch (e) {
+      setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
+    }
+  };
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
@@ -164,11 +168,20 @@ export default function FleetReports({ empresaId, periodo = null, vehicles = [],
             </p>
           </div>
           {fuente === 'real' && rangoTexto ? (
-            <span className="ml-auto hidden sm:inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
               <Database size={12} /> Datos reales: {rangoTexto}
             </span>
           ) : null}
+          <button
+            type="button"
+            onClick={descargarExcel}
+            disabled={!puedeExportar}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <FileSpreadsheet size={13} /> Descargar Excel
+          </button>
         </div>
+        {descargaError ? <p className="text-[10px] text-red-600">{descargaError}</p> : null}
 
         <div className="flex flex-wrap items-end gap-3">
           <div>
@@ -301,7 +314,7 @@ export default function FleetReports({ empresaId, periodo = null, vehicles = [],
               <tbody>
                 {filasOrdenadas.map((fila, i) => (
                   <tr key={`${fila.placa}-${fila.periodo || 'total'}-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
-                    <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-600">{etiquetaPeriodo(fila, modo)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-600">{etiquetaPeriodoReporte(fila, modo)}</td>
                     <td className="px-3 py-2">
                       <span className="font-bold text-slate-800">{fila.placa}</span>
                       {fila.unidad && fila.unidad !== fila.placa ? (

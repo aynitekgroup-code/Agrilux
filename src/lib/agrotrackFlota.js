@@ -253,6 +253,22 @@ export function formatearDuracion(segundos) {
   return `${horas} h ${String(minutos).padStart(2, '0')} min`;
 }
 
+/**
+ * Etiqueta legible del período de una fila del reporte:
+ * '2026-11-05' -> "05 nov" · '2026-11' -> "nov 2026" · null -> "Total".
+ * La usa la tabla de la consola y la exportación a Excel (mismo texto).
+ */
+export function etiquetaPeriodoReporte(fila, modo) {
+  if (modo === 'dia') return fila.periodo || '—';
+  if (modo === 'mes' && fila.periodo) {
+    const [anio, mes] = fila.periodo.split('-');
+    const numero = Number(mes);
+    return `${MESES_CORTOS[numero - 1] || mes} ${anio}`;
+  }
+  if (!fila.periodo) return 'Total';
+  return fila.periodo;
+}
+
 /** Tope de filas del reporte de actividad: PostgREST corta en 1000. */
 export const LIMITE_FILAS_ACTIVIDAD = 1000;
 
