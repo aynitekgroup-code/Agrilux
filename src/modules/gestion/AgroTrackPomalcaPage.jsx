@@ -223,6 +223,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
                 selectedId={selectedVehicleId}
                 onSelect={setSelectedVehicleId}
                 fuentePosiciones={fuentePosiciones}
+                periodo={conDatosReales ? panel.periodo : null}
               />
             </div>
             <div className="min-w-0">

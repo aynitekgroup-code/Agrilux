@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CircleMarker, GeoJSON, MapContainer, TileLayer, Tooltip, useMap } from 'react-leaflet';
+import { CircleMarker, GeoJSON, MapContainer, Polyline, TileLayer, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import {
   AlertCircle,
@@ -17,7 +17,12 @@ import {
 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { importarGeocercasZip, listarGeocercas } from '../../../lib/agrotrackGeocercas';
-import { formatearFechaHora } from '../../../lib/agrotrackFlota';
+import {
+  formatearFechaHora,
+  obtenerRecorridoFlota,
+  rangoDiaLima,
+  ultimoDiaLima,
+} from '../../../lib/agrotrackFlota';
 import { STATUS_META } from './fleetTokens';
 import PosicionesImport from './PosicionesImport';
 
@@ -135,9 +140,22 @@ function featureTooltip(feature, layer) {
   }
 }
 
+/** Encuadra el mapa sobre el recorrido cargado (FASE 2). */
+function FitMapToRoute({ puntos, token }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!puntos?.length) return;
+    const bounds = L.latLngBounds(puntos.map((punto) => [punto.lat, punto.lng]));
+    if (bounds.isValid()) {
+      map.fitBounds(bounds.pad(0.12), { maxZoom: 16, animate: false });
+    }
+  }, [map, puntos, token]);
+  return null;
+}
+
 /* ---------- Componente ---------- */
 
-export default function FleetMap({ empresaId, userId, canImport = false, vehicles = [], selectedId, onSelect, fuentePosiciones = 'demo' }) {
+export default function FleetMap({ empresaId, userId, canImport = false, vehicles = [], selectedId, onSelect, fuentePosiciones = 'demo', periodo = null }) {
   const [rawGeofences, setRawGeofences] = useState([]);
   const [loading, setLoading] = useState(Boolean(empresaId));
   const [importing, setImporting] = useState(false);
@@ -151,11 +169,19 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
   const [focusRequest, setFocusRequest] = useState(null);
   const [listening, setListening] = useState(false);
   const [voiceMessage, setVoiceMessage] = useState('');
+  // FASE 2: recorrido de la unidad seleccionada en un día calendario de Perú.
+  const [rutaFecha, setRutaFecha] = useState('');
+  const [rutaPuntos, setRutaPuntos] = useState(null); // null = sin cargar
+  const [rutaCargando, setRutaCargando] = useState(false);
+  const [rutaError, setRutaError] = useState('');
+  const [rutaFitToken, setRutaFitToken] = useState(0);
   const fileInputRef = useRef(null);
   const recognitionRef = useRef(null);
   const applyVoiceRef = useRef(null);
   const activeCompanyRef = useRef(empresaId);
   activeCompanyRef.current = empresaId;
+  const activePlacaRef = useRef(selectedId);
+  activePlacaRef.current = selectedId;
 
   const geofences = useMemo(() => rawGeofences.map(normalizeGeofence), [rawGeofences]);
   const withoutGeometry = useMemo(
@@ -248,6 +274,56 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
       setFocusRequest({ geometry: geofence.geometria, token: Date.now() });
     }
   }, []);
+
+  /* ----- Recorrido (FASE 2) ----- */
+
+  // Por defecto, el último día con datos del periodo cargado.
+  useEffect(() => {
+    setRutaFecha((prev) => prev || ultimoDiaLima(periodo?.hasta) || ultimoDiaLima(periodo?.desde) || '');
+  }, [periodo]);
+
+  // Al cambiar de empresa se limpia todo lo del recorrido anterior.
+  useEffect(() => {
+    setRutaPuntos(null);
+    setRutaError('');
+    setRutaCargando(false);
+  }, [empresaId]);
+
+  // El recorrido dibujado pertenece a una unidad: si cambia la selección, se limpia.
+  useEffect(() => {
+    setRutaPuntos(null);
+    setRutaError('');
+  }, [selectedId]);
+
+  const cargarRecorrido = useCallback(async () => {
+    if (!empresaId || !selectedId || !rutaFecha) return;
+    const placa = selectedId;
+    const { desde, hasta } = rangoDiaLima(rutaFecha);
+    if (!desde) {
+      setRutaError('Elige un día válido para ver el recorrido.');
+      return;
+    }
+    setRutaCargando(true);
+    setRutaError('');
+    try {
+      const puntos = await obtenerRecorridoFlota(empresaId, { placa, desde, hasta });
+      // Si mientras cargaba cambió la unidad, se descarta la respuesta vieja.
+      if (placa === activePlacaRef.current) {
+        setRutaPuntos(puntos || []);
+        setRutaFitToken(Date.now());
+      }
+    } catch (routeError) {
+      setRutaPuntos(null);
+      setRutaError(routeError.message || 'No se pudo cargar el recorrido.');
+    } finally {
+      setRutaCargando(false);
+    }
+  }, [empresaId, selectedId, rutaFecha]);
+
+  const limpiarRecorrido = () => {
+    setRutaPuntos(null);
+    setRutaError('');
+  };
 
   const handleSelectGeofence = (geofence) => {
     focusGeofence(geofence);
@@ -572,6 +648,71 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
         </div>
       ) : null}
 
+      {fuentePosiciones === 'real' && vehicles.length ? (
+        <div className="px-4 sm:px-5 pb-3">
+          <div className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-slate-700">Recorrido de la unidad</p>
+              <p className="text-[11px] text-slate-500">
+                {selectedId ? `Unidad seleccionada: ${selectedId}` : 'Selecciona una unidad en el mapa o en la lista.'}
+              </p>
+            </div>
+            <label className="ml-auto flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+              Día (hora de Perú)
+              <input
+                type="date"
+                value={rutaFecha}
+                onChange={(event) => {
+                  setRutaFecha(event.target.value);
+                  setRutaPuntos(null);
+                  setRutaError('');
+                }}
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-normal text-slate-700 outline-none focus:border-emerald-500"
+                aria-label="Día del recorrido"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={cargarRecorrido}
+              disabled={rutaCargando || !selectedId || !rutaFecha}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-forest px-3 py-2 text-xs font-semibold text-white hover:bg-forest-dark disabled:opacity-50"
+            >
+              {rutaCargando ? <LoaderCircle size={14} className="animate-spin" /> : <MapPin size={14} />}
+              {rutaCargando ? 'Cargando…' : 'Ver recorrido'}
+            </button>
+            {rutaPuntos ? (
+              <button
+                type="button"
+                onClick={limpiarRecorrido}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-white"
+              >
+                <X size={14} /> Limpiar
+              </button>
+            ) : null}
+          </div>
+          {rutaError ? (
+            <p className="mt-2 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800" role="alert">
+              <AlertCircle size={14} className="mt-0.5 shrink-0" />
+              <span>{rutaError}</span>
+            </p>
+          ) : null}
+          {!rutaError && rutaPuntos && !rutaCargando && rutaPuntos.length === 0 ? (
+            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status">
+              No hay posiciones de {selectedId} el {rutaFecha}. Prueba con otro día dentro del periodo cargado.
+            </p>
+          ) : null}
+          {!rutaError && rutaPuntos && rutaPuntos.length > 0 ? (
+            <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800" role="status">
+              Recorrido de {selectedId} · {rutaFecha} · {rutaPuntos.length} puntos GPS
+              {rutaPuntos.some((punto) => punto.es_alerta)
+                ? ` · ${rutaPuntos.filter((punto) => punto.es_alerta).length} con alerta de velocidad o pánico`
+                : ''}
+              .
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="px-3 sm:px-5 pb-2">
         <MapContainer
           center={[-6.78, -79.83]}
@@ -603,6 +744,70 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
           />
           {geoJson.features.length > 0 ? (
             <FitMapToGeofences geoJson={geoJson} focusRequest={focusRequest} />
+          ) : null}
+          {rutaPuntos && rutaPuntos.length > 0 ? (
+            <>
+              <Polyline
+                positions={rutaPuntos.map((punto) => [Number(punto.latitud), Number(punto.longitud)])}
+                pathOptions={{ color: '#2563EB', weight: 3, opacity: 0.85 }}
+              />
+              <CircleMarker
+                center={[
+                  Number(rutaPuntos[0].latitud),
+                  Number(rutaPuntos[0].longitud),
+                ]}
+                radius={6}
+                pathOptions={{ color: '#FFFFFF', weight: 2, fillColor: '#16A34A', fillOpacity: 1 }}
+              >
+                <Tooltip direction="top" offset={[0, -6]} opacity={1} className="fleet-unit-tooltip">
+                  <div className="text-[11px] leading-snug">
+                    <p className="font-bold text-slate-900">Inicio del recorrido</p>
+                    <p className="text-slate-600">{formatearFechaHora(rutaPuntos[0].fecha)}</p>
+                  </div>
+                </Tooltip>
+              </CircleMarker>
+              <CircleMarker
+                center={[
+                  Number(rutaPuntos[rutaPuntos.length - 1].latitud),
+                  Number(rutaPuntos[rutaPuntos.length - 1].longitud),
+                ]}
+                radius={6}
+                pathOptions={{ color: '#FFFFFF', weight: 2, fillColor: '#DC2626', fillOpacity: 1 }}
+              >
+                <Tooltip direction="top" offset={[0, -6]} opacity={1} className="fleet-unit-tooltip">
+                  <div className="text-[11px] leading-snug">
+                    <p className="font-bold text-slate-900">Fin del recorrido</p>
+                    <p className="text-slate-600">
+                      {formatearFechaHora(rutaPuntos[rutaPuntos.length - 1].fecha)}
+                    </p>
+                  </div>
+                </Tooltip>
+              </CircleMarker>
+              {rutaPuntos
+                .filter((punto) => punto.es_alerta)
+                .map((punto) => (
+                  <CircleMarker
+                    key={`alerta-${punto.id}`}
+                    center={[Number(punto.latitud), Number(punto.longitud)]}
+                    radius={5}
+                    pathOptions={{ color: '#FFFFFF', weight: 2, fillColor: '#F59E0B', fillOpacity: 1 }}
+                  >
+                    <Tooltip direction="top" offset={[0, -6]} opacity={1} className="fleet-unit-tooltip">
+                      <div className="text-[11px] leading-snug">
+                        <p className="font-bold text-slate-900">{punto.evento}</p>
+                        <p className="text-slate-600">{formatearFechaHora(punto.fecha)}</p>
+                        {punto.velocidad != null ? (
+                          <p className="text-slate-600">{punto.velocidad} km/h</p>
+                        ) : null}
+                      </div>
+                    </Tooltip>
+                  </CircleMarker>
+                ))}
+              <FitMapToRoute
+                puntos={rutaPuntos.map((punto) => [Number(punto.latitud), Number(punto.longitud)])}
+                token={rutaFitToken}
+              />
+            </>
           ) : null}
           {vehicles.filter((vehicle) => (
             vehicle?.lat != null && vehicle?.lng != null
@@ -733,6 +938,18 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
                 ? 'Sin posiciones disponibles'
                 : 'Posiciones GPS simuladas'}
         </span>
+        {rutaPuntos && rutaPuntos.length > 0 ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block w-4 h-0.5 rounded bg-blue-600" />
+            Recorrido de {selectedId} · {rutaFecha}
+          </span>
+        ) : null}
+        {rutaPuntos && rutaPuntos.some((punto) => punto.es_alerta) ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 border border-white" />
+            Alertas sobre la ruta
+          </span>
+        ) : null}
         <span className="inline-flex items-center gap-1.5 sm:ml-auto">
           <Info size={12} /> Haz clic en un polígono para ver sus atributos.
         </span>

@@ -173,6 +173,58 @@ export async function obtenerAlertasFlota(empresaId, { desde = null, hasta = nul
   );
 }
 
+/** Tope de puntos del recorrido: PostgREST devuelve máximo 1000 filas. */
+export const LIMITE_PUNTOS_RECORRIDO = 900;
+
+/**
+ * Puntos GPS de una placa para dibujar el recorrido (FASE 2).
+ * Cada fila: { id, fecha, latitud, longitud, velocidad, evento, direccion, es_alerta }.
+ */
+export async function obtenerRecorridoFlota(empresaId, { placa, desde = null, hasta = null } = {}) {
+  if (!empresaId || !placa) return [];
+  return llamarRpc(
+    'agrotrack_recorrido_flota',
+    {
+      p_empresa_id: empresaId,
+      p_placa: placa,
+      p_desde: desde,
+      p_hasta: hasta,
+      p_max_puntos: LIMITE_PUNTOS_RECORRIDO,
+    },
+    'No se pudo cargar el recorrido'
+  );
+}
+
+/**
+ * Rango de un día calendario en hora de Perú (UTC-5, sin horario de verano):
+ * "2026-11-05" -> desde 00:00:00 hasta 23:59:59 de ese día.
+ */
+export function rangoDiaLima(fechaInput) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fechaInput || ''))) return { desde: null, hasta: null };
+  return {
+    desde: `${fechaInput}T00:00:00-05:00`,
+    hasta: `${fechaInput}T23:59:59-05:00`,
+  };
+}
+
+/** Último día (en hora de Perú) de un ISO, para precargar el selector de recorrido. */
+export function ultimoDiaLima(iso) {
+  const value = fecha(iso);
+  if (!value) return '';
+  try {
+    const partes = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      timeZone: ZONA_PERU,
+    }).formatToParts(value);
+    const get = (tipo) => partes.find((parte) => parte.type === tipo)?.value || '';
+    return `${get('year')}-${get('month')}-${get('day')}`;
+  } catch {
+    return '';
+  }
+}
+
 function aVehiculo(fila, fechaMaxPeriodo) {
   return {
     id: fila.placa,

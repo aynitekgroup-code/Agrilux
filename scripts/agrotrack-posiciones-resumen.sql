@@ -1,4 +1,4 @@
--- Resúmenes de flota a partir de public.agrotrack_posiciones (FASE 1).
+-- Resúmenes de flota a partir de public.agrotrack_posiciones (FASE 1 y FASE 2).
 -- Ejecutar completo en el SQL Editor de Supabase. Es repetible e idempotente:
 -- no borra ni modifica datos, ni toca RLS ni la tabla agrotrack_geocercas.
 --
@@ -284,9 +284,112 @@ grant execute on function public.agrotrack_conteo_eventos(uuid)
   to anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
+-- 6) Recorrido de una unidad (FASE 2): puntos GPS de una placa en un rango,
+--    ya deduplicados y con muestreo para no superar el límite de 1000 filas
+--    que PostgREST devuelve por consulta.
+--
+--    Un día completo a un punto cada 2 minutos son ~720 puntos, así que entra
+--    completo. Si el rango trae más, se muestrea por paso entero conservando
+--    siempre el primer punto, el último y todas las alertas (alta velocidad /
+--    botón de pánico), que la UI dibuja marcadas sobre la línea.
+-- ---------------------------------------------------------------------------
+drop function if exists public.agrotrack_recorrido_flota(uuid, text, timestamptz, timestamptz, integer);
+
+create function public.agrotrack_recorrido_flota(
+  p_empresa_id   uuid,
+  p_placa        text,
+  p_desde        timestamptz default null,
+  p_hasta        timestamptz default null,
+  p_max_puntos   integer     default 900
+)
+returns table (
+  id         bigint,
+  fecha      timestamptz,
+  latitud    double precision,
+  longitud   double precision,
+  velocidad  numeric,
+  evento     text,
+  direccion  text,
+  es_alerta  boolean
+)
+language sql
+stable
+security invoker
+set search_path = public, pg_temp
+as $$
+  with base as (
+    select
+      p.id, p.fecha, p.latitud, p.longitud,
+      p.velocidad, p.evento, p.direccion, p.secuencia
+    from public.agrotrack_posiciones p
+    where p.empresa_id = p_empresa_id
+      and p.placa = p_placa
+      and (p_desde is null or p.fecha >= p_desde)
+      and (p_hasta is null or p.fecha <= p_hasta)
+  ),
+  sin_duplicados as (
+    select d.*
+    from (
+      select
+        b.*,
+        row_number() over (
+          partition by b.fecha, coalesce(b.secuencia, 0)
+          order by b.id
+        ) as orden
+      from base b
+    ) d
+    where d.orden = 1
+  ),
+  numerado as (
+    select
+      s.*,
+      row_number() over (order by s.fecha, coalesce(s.secuencia, 0), s.id) as rn,
+      count(*) over () as total
+    from sin_duplicados s
+  ),
+  muestreado as (
+    select
+      n.*,
+      greatest(1, (n.total + greatest(coalesce(p_max_puntos, 900), 1) - 1)
+        / greatest(coalesce(p_max_puntos, 900), 1)) as paso
+    from numerado n
+  )
+  select
+    m.id        as id,
+    m.fecha     as fecha,
+    m.latitud   as latitud,
+    m.longitud  as longitud,
+    m.velocidad as velocidad,
+    m.evento    as evento,
+    m.direccion as direccion,
+    -- Mismo criterio de alerta que agrotrack_alertas_flota: "Alta velocidad"
+    -- cuenta, "Fin de alta velocidad" es el cierre y no.
+    (lower(m.evento) like '%alta velocidad%' and lower(m.evento) not like 'fin%')
+      or lower(m.evento) like '%pánico%'
+      or lower(m.evento) like '%panico%'      as es_alerta
+  from muestreado m
+  where m.rn = 1
+     or m.rn = m.total
+     or m.rn % m.paso = 0
+     or (lower(m.evento) like '%alta velocidad%' and lower(m.evento) not like 'fin%')
+     or lower(m.evento) like '%pánico%'
+     or lower(m.evento) like '%panico%'
+  order by m.fecha, coalesce(m.secuencia, 0), m.id
+  limit greatest(coalesce(p_max_puntos, 900), 1) + 100;
+$$;
+
+grant execute on function public.agrotrack_recorrido_flota(uuid, text, timestamptz, timestamptz, integer)
+  to anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
 -- Comprobaciones (opcionales): deben devolver 39 unidades y ~103 mil registros.
 -- ---------------------------------------------------------------------------
 -- select * from public.agrotrack_periodo_flota('<empresa_id>');
 -- select placa, ultimo_evento, ultima_fecha, round(km_recorridos, 1) as km
 --   from public.agrotrack_resumen_flota('<empresa_id>') limit 10;
 -- select * from public.agrotrack_alertas_flota('<empresa_id>', null, null, 10);
+-- select fecha, round(latitud::numeric, 5) as lat, round(longitud::numeric, 5) as lon,
+--        es_alerta
+--   from public.agrotrack_recorrido_flota('<empresa_id>', '<placa>',
+--           '2026-11-05T00:00:00-05:00', '2026-11-05T23:59:59-05:00')
+--   limit 10;

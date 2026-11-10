@@ -112,6 +112,34 @@ async function main() {
     console.log(`  ${fila.fecha} | ${fila.placa} | ${fila.evento} | ${fila.velocidad ?? '-'} km/h`);
   }
 
+  // FASE 2: recorrido de un día completo de la primera unidad con datos.
+  const placa = resumen.data?.[0]?.placa;
+  if (placa && periodo.data?.hasta) {
+    const dia = new Date(periodo.data.hasta).toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
+    const recorrido = await medir('agrotrack_recorrido_flota', {
+      p_empresa_id: empresaId,
+      p_placa: placa,
+      p_desde: `${dia}T00:00:00-05:00`,
+      p_hasta: `${dia}T23:59:59-05:00`,
+      p_max_puntos: 900,
+    });
+    if (recorrido.error) return fallo('agrotrack_recorrido_flota', recorrido.error);
+    const puntos = recorrido.data || [];
+    const conAlerta = puntos.filter((fila) => fila.es_alerta).length;
+    const fueraDeOrden = puntos.some(
+      (fila, i) => i > 0 && new Date(fila.fecha) < new Date(puntos[i - 1].fecha)
+    );
+    console.log(`\nRecorrido de ${placa} el ${dia}: ${puntos.length} puntos · ${conAlerta} con alerta`);
+    if (puntos.length) {
+      console.log(`  Inicio: ${puntos[0].fecha} | Fin: ${puntos[puntos.length - 1].fecha}`);
+    }
+    if (puntos.length > 1000) {
+      console.log('  ⚠ Superó las 1000 filas: PostgREST cortaría la respuesta.');
+    }
+    if (fueraDeOrden) console.log('  ⚠ Los puntos no están ordenados por fecha.');
+    if (puntos.length === 0) console.log('  ⚠ Sin puntos: ¿la placa no tiene datos ese día?');
+  }
+
   console.log('\nListo.');
 }
 
