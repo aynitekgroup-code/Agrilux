@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { CheckCheck, X, Bell } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { CheckCheck, X, Bell, RefreshCw, Database, Loader2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import {
   vehicles,
@@ -8,6 +8,7 @@ import {
   fuelAnomalies,
   cutRequests,
 } from '../../mocks/agrotrackData';
+import { cargarPanelFlota, textoPeriodoCargado, formatearRango } from '../../lib/agrotrackFlota';
 import FleetHeader from '../../components/gestion/fleet/FleetHeader';
 import FleetKpis from '../../components/gestion/fleet/FleetKpis';
 import FleetMap from '../../components/gestion/fleet/FleetMap';
@@ -51,18 +52,52 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
   const puedeImportarGeocercas = ['administrador', 'ingeniero'].includes(empresaActiva?.rol);
   const [section, setSection] = useState(initialSection);
   const [selectedVehicleId, setSelectedVehicleId] = useState(vehicles[0]?.id || '');
-  const [alertList, setAlertList] = useState(mockAlerts);
   const [readings, setReadings] = useState(mockFuelReadings);
+  // Panel de flota con datos reales de public.agrotrack_posiciones (FASE 1).
+  const [panel, setPanel] = useState({ estado: 'cargando', periodo: null, unidades: [], alertas: [], error: null });
+  // "Marcar atendida" queda en memoria: todavía no existe la tabla agrotrack_alertas.
+  const [ackIds, setAckIds] = useState([]);
   const [cutModal, setCutModal] = useState(null);
   const [toast, setToast] = useState('');
   const [blockedIds, setBlockedIds] = useState(['veh-003', 'veh-005']);
   const [pendingIds, setPendingIds] = useState(['veh-002']);
   const [cutOrders, setCutOrders] = useState(INITIAL_CUT_ORDERS);
 
+  // ¿Hay filas reales en agrotrack_posiciones para esta empresa?
+  const enCarga = panel.estado === 'cargando';
+  const hayErrorPanel = panel.estado === 'error';
+  const conDatosReales = panel.estado === 'real';
+  const sinDatosReales = panel.estado === 'vacio';
+
+  // Fuente compartida por tarjetas, alertas y marcadores del mapa.
+  const vehiclesFuente = conDatosReales ? panel.unidades : sinDatosReales ? vehicles : [];
+  const alertasBase = conDatosReales ? panel.alertas : sinDatosReales ? mockAlerts : [];
+  const alertList = alertasBase.map((alerta) => (ackIds.includes(alerta.id) ? { ...alerta, atendida: true } : alerta));
+  const fuentePosiciones = conDatosReales ? 'real' : enCarga ? 'cargando' : hayErrorPanel ? 'ninguna' : 'demo';
+
+  const recargarPanel = useCallback(async () => {
+    if (!empresa_activa_id) {
+      setPanel({ estado: 'vacio', periodo: null, unidades: [], alertas: [], error: null });
+      return;
+    }
+    setPanel((prev) => ({ ...prev, estado: 'cargando', error: null }));
+    setPanel(await cargarPanelFlota(empresa_activa_id));
+  }, [empresa_activa_id]);
+
+  useEffect(() => {
+    recargarPanel();
+  }, [recargarPanel]);
+
+  // Con datos reales, la selección pasa a la primera unidad real (ids = placa).
+  useEffect(() => {
+    if (panel.estado !== 'real' || !panel.unidades.length) return;
+    setSelectedVehicleId((prev) => (panel.unidades.some((unidad) => unidad.id === prev) ? prev : panel.unidades[0].id));
+  }, [panel]);
+
   const pendientes = alertList.filter((a) => !a.atendida).length;
   const consumoTotal = readings.reduce((sum, r) => sum + Number(r.galones || 0), 0);
 
-  const ackAlert = (id) => setAlertList((prev) => prev.map((a) => (a.id === id ? { ...a, atendida: true } : a)));
+  const ackAlert = (id) => setAckIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
 
   const abrirCorte = (vehiculo) => setCutModal({ vehiculoId: vehiculo ? vehiculo.id : '' });
 
@@ -107,27 +142,99 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
 
       {section === 'consola' ? (
         <div className="space-y-4">
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
-            <span className="flex shrink-0 items-center justify-center w-8 h-8 rounded-full bg-amber-200 text-amber-700 font-bold text-xs">!</span>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-amber-800">Datos de demostración</p>
-              <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">Estás viendo datos de ejemplo (vehículos, conductores, telemetría y combustible). Configura tu propia empresa y flota desde Ajustes para usar información real.</p>
+          {enCarga ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-4 flex items-start gap-3">
+              <span className="flex shrink-0 items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-500">
+                <Loader2 size={16} className="animate-spin" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-700">Cargando datos de flota</p>
+                <p className="text-xs text-slate-500 mt-0.5">Consultando public.agrotrack_posiciones de la empresa activa…</p>
+              </div>
             </div>
-          </div>
-          <FleetKpis vehicles={vehicles} alerts={alertList} fuelTotal={consumoTotal} />
+          ) : null}
+
+          {hayErrorPanel ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 flex items-start gap-3">
+              <span className="flex shrink-0 items-center justify-center w-8 h-8 rounded-full bg-red-200 text-red-700">
+                <AlertTriangle size={16} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-red-800">No se pudieron cargar los datos reales</p>
+                <p className="text-xs text-red-700 mt-0.5 leading-relaxed">{panel.error}</p>
+              </div>
+              <button
+                type="button"
+                onClick={recargarPanel}
+                className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-red-300 px-2.5 py-1.5 text-[11px] font-semibold text-red-700 hover:bg-red-100 transition-colors"
+              >
+                <RefreshCw size={12} /> Reintentar
+              </button>
+            </div>
+          ) : null}
+
+          {conDatosReales ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 flex items-start gap-3">
+              <span className="flex shrink-0 items-center justify-center w-8 h-8 rounded-full bg-emerald-200 text-emerald-700">
+                <Database size={16} />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-emerald-800">
+                  Datos reales: {formatearRango(panel.periodo?.desde, panel.periodo?.hasta)}
+                </p>
+                <p className="text-xs text-emerald-700 mt-0.5 leading-relaxed">
+                  {panel.periodo?.unidades} unidades · {panel.periodo?.registros} posiciones de public.agrotrack_posiciones.
+                  Combustible, conductor y temperatura siguen sin fuente real (demo / sin datos).
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {sinDatosReales ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+              <span className="flex shrink-0 items-center justify-center w-8 h-8 rounded-full bg-amber-200 text-amber-700 font-bold text-xs">!</span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-amber-800">Datos de demostración</p>
+                <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
+                  Esta empresa todavía no tiene filas en agrotrack_posiciones, así que ves datos de ejemplo (vehículos,
+                  conductores, telemetría y combustible). Carga un reporte de Zonar con “Cargar reporte de unidades” para ver la flota real.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          <FleetKpis
+            vehicles={vehiclesFuente}
+            alerts={alertList}
+            fuelTotal={consumoTotal}
+            cargando={enCarga}
+            error={hayErrorPanel ? panel.error : null}
+            combustibleDemo
+            notaPeriodo={conDatosReales ? textoPeriodoCargado(panel.periodo) : null}
+            onReintentar={recargarPanel}
+          />
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
             <div className="xl:col-span-2 min-w-0">
               <FleetMap
                 empresaId={empresa_activa_id}
                 userId={user?.id}
                 canImport={puedeImportarGeocercas}
-                vehicles={vehicles}
+                vehicles={vehiclesFuente}
                 selectedId={selectedVehicleId}
                 onSelect={setSelectedVehicleId}
+                fuentePosiciones={fuentePosiciones}
               />
             </div>
             <div className="min-w-0">
-              <FleetAlerts alerts={alertList} vehicles={vehicles} onAck={ackAlert} />
+              <FleetAlerts
+                alerts={alertList}
+                vehicles={vehiclesFuente}
+                onAck={ackAlert}
+                cargando={enCarga}
+                error={hayErrorPanel ? panel.error : null}
+                fuente={conDatosReales ? 'real' : 'demo'}
+                onReintentar={recargarPanel}
+              />
             </div>
           </div>
           <VehicleList

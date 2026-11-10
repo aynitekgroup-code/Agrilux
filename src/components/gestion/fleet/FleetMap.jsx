@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { importarGeocercasZip, listarGeocercas } from '../../../lib/agrotrackGeocercas';
+import { formatearFechaHora } from '../../../lib/agrotrackFlota';
 import { STATUS_META } from './fleetTokens';
 import PosicionesImport from './PosicionesImport';
 
@@ -136,7 +137,7 @@ function featureTooltip(feature, layer) {
 
 /* ---------- Componente ---------- */
 
-export default function FleetMap({ empresaId, userId, canImport = false, vehicles = [], selectedId, onSelect }) {
+export default function FleetMap({ empresaId, userId, canImport = false, vehicles = [], selectedId, onSelect, fuentePosiciones = 'demo' }) {
   const [rawGeofences, setRawGeofences] = useState([]);
   const [loading, setLoading] = useState(Boolean(empresaId));
   const [importing, setImporting] = useState(false);
@@ -603,17 +604,40 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
           {geoJson.features.length > 0 ? (
             <FitMapToGeofences geoJson={geoJson} focusRequest={focusRequest} />
           ) : null}
-          {vehicles.filter((vehicle) => Number.isFinite(vehicle.lat) && Number.isFinite(vehicle.lng)).map((vehicle) => {
+          {vehicles.filter((vehicle) => (
+            vehicle?.lat != null && vehicle?.lng != null
+            && Number.isFinite(Number(vehicle.lat)) && Number.isFinite(Number(vehicle.lng))
+            && Number(vehicle.lat) !== 0 && Number(vehicle.lng) !== 0
+          )).map((vehicle) => {
             const meta = STATUS_META[vehicle.estado] || STATUS_META.offline;
+            const latitud = Number(vehicle.lat);
+            const longitud = Number(vehicle.lng);
+            const fechaPosicion = fuentePosiciones === 'real'
+              ? (vehicle.ultima_fecha ? formatearFechaHora(vehicle.ultima_fecha) : '')
+              : vehicle.ultima_actualizacion;
+            const velocidad = Number(vehicle.velocidad_kmh);
             return (
               <CircleMarker
                 key={vehicle.id}
-                center={[vehicle.lat, vehicle.lng]}
-                radius={selectedId === vehicle.id ? 8 : 6}
+                center={[latitud, longitud]}
+                radius={selectedId === vehicle.id ? 7 : 5}
                 pathOptions={{ color: '#FFFFFF', weight: 2, fillColor: meta.dot, fillOpacity: 1 }}
                 eventHandlers={onSelect ? { click: () => onSelect(vehicle.id) } : undefined}
               >
-                <Tooltip>{vehicle.placa} · GPS de demostración</Tooltip>
+                <Tooltip direction="top" offset={[0, -6]} opacity={1} className="fleet-unit-tooltip">
+                  <div className="text-[11px] leading-snug space-y-0.5">
+                    <p className="font-bold text-slate-900">{vehicle.placa}</p>
+                    <p className="text-slate-600">{vehicle.descripcion || vehicle.modelo || '—'}</p>
+                    <p className="text-slate-700">
+                      {meta.label}
+                      {Number.isFinite(velocidad) && velocidad > 0 ? ` · ${velocidad} km/h` : ''}
+                    </p>
+                    {fechaPosicion ? <p className="text-slate-500">{fechaPosicion}</p> : null}
+                    {fuentePosiciones !== 'real' ? (
+                      <p className="text-slate-400">GPS de demostración</p>
+                    ) : null}
+                  </div>
+                </Tooltip>
               </CircleMarker>
             );
           })}
@@ -700,7 +724,14 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
           Límites reales importados
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <MapPin size={12} className="text-blue-600" /> Posiciones GPS simuladas
+          <MapPin size={12} className="text-blue-600" />
+          {fuentePosiciones === 'real'
+            ? `Última posición real por unidad (${vehicles.length})`
+            : fuentePosiciones === 'cargando'
+              ? 'Cargando posiciones GPS…'
+              : fuentePosiciones === 'ninguna'
+                ? 'Sin posiciones disponibles'
+                : 'Posiciones GPS simuladas'}
         </span>
         <span className="inline-flex items-center gap-1.5 sm:ml-auto">
           <Info size={12} /> Haz clic en un polígono para ver sus atributos.
