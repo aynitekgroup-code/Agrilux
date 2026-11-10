@@ -286,6 +286,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
           />
           <FleetReports
             empresaId={empresa_activa_id}
+            empresaNombre={empresaActiva?.nombre || ''}
             periodo={conDatosReales ? panel.periodo : null}
             vehicles={vehiclesFuente}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}

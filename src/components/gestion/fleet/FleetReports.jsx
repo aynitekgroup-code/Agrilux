@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, AlertTriangle, RotateCw, Database, FileChartColumn, ArrowUpDown, CalendarClock, FileSpreadsheet } from 'lucide-react';
+import { Loader2, AlertTriangle, RotateCw, Database, FileChartColumn, ArrowUpDown, CalendarClock, FileSpreadsheet, Sparkles } from 'lucide-react';
 import {
   obtenerActividadFlota,
   rangoDiaLima,
@@ -40,7 +40,7 @@ function numero(valor, decimales = 1) {
   return n.toLocaleString('es-PE', { minimumFractionDigits: decimales, maximumFractionDigits: decimales });
 }
 
-export default function FleetReports({ empresaId, periodo = null, vehicles = [], fuente = 'real' }) {
+export default function FleetReports({ empresaId, empresaNombre = '', periodo = null, vehicles = [], fuente = 'real' }) {
   const [modo, setModo] = useState('dia');
   const [dia, setDia] = useState('');
   const [mes, setMes] = useState('');
@@ -51,6 +51,9 @@ export default function FleetReports({ empresaId, periodo = null, vehicles = [],
   const [error, setError] = useState(null);
   const [rangoTexto, setRangoTexto] = useState('');
   const [descargaError, setDescargaError] = useState(null);
+  const [resumenIA, setResumenIA] = useState(null);
+  const [resumenCargando, setResumenCargando] = useState(false);
+  const [resumenError, setResumenError] = useState(null);
   const [orden, setOrden] = useState({ campo: 'unidad', dir: 'asc' });
 
   // Precarga con el último día (o mes) que trae datos reales.
@@ -86,6 +89,9 @@ export default function FleetReports({ empresaId, periodo = null, vehicles = [],
     let cancelado = false;
     setEstado('cargando');
     setError(null);
+    // Un rango nuevo invalida el resumen anterior de IA.
+    setResumenIA(null);
+    setResumenError(null);
     obtenerActividadFlota(empresaId, {
       desde: consulta.desde,
       hasta: consulta.hasta,
@@ -154,6 +160,32 @@ export default function FleetReports({ empresaId, periodo = null, vehicles = [],
     }
   };
 
+  // Resumen ejecutivo con IA sobre las filas ya agregadas por SQL.
+  const generarResumen = async () => {
+    setResumenCargando(true);
+    setResumenError(null);
+    try {
+      const respuesta = await fetch('/api/flota-insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          empresa: empresaNombre,
+          rango: rangoTexto,
+          agrupacion: MODOS.find((m) => m.id === modo)?.label || modo,
+          filas,
+        }),
+      });
+      const data = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(data.error || `Error ${respuesta.status}`);
+      if (!data.resumen) throw new Error('El modelo no devolvió texto.');
+      setResumenIA({ texto: data.resumen, modelo: data.modelo_usado || '' });
+    } catch (e) {
+      setResumenError(e?.message || 'No se pudo generar el resumen con IA.');
+    } finally {
+      setResumenCargando(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
       <div className="p-4 sm:p-5 border-b border-slate-50 space-y-3">
@@ -167,19 +199,30 @@ export default function FleetReports({ empresaId, periodo = null, vehicles = [],
               Recorrido, encendido, hora de viaje y ralentí por unidad, por día o por mes.
             </p>
           </div>
-          {fuente === 'real' && rangoTexto ? (
-            <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <Database size={12} /> Datos reales: {rangoTexto}
-            </span>
-          ) : null}
-          <button
-            type="button"
-            onClick={descargarExcel}
-            disabled={!puedeExportar}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            <FileSpreadsheet size={13} /> Descargar Excel
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            {fuente === 'real' && rangoTexto ? (
+              <span className="hidden lg:inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <Database size={12} /> Datos reales: {rangoTexto}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={generarResumen}
+              disabled={!puedeExportar || resumenCargando}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {resumenCargando ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+              {resumenCargando ? 'Generando…' : 'Resumen IA'}
+            </button>
+            <button
+              type="button"
+              onClick={descargarExcel}
+              disabled={!puedeExportar}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <FileSpreadsheet size={13} /> Descargar Excel
+            </button>
+          </div>
         </div>
         {descargaError ? <p className="text-[10px] text-red-600">{descargaError}</p> : null}
 
@@ -356,6 +399,39 @@ export default function FleetReports({ empresaId, periodo = null, vehicles = [],
             <p className="px-4 py-2 text-[10px] text-amber-600 border-t border-slate-50">
               Se alcanzó el tope de {LIMITE_FILAS_ACTIVIDAD} filas (límite de PostgREST). Reduce el rango o agrupa por mes.
             </p>
+          ) : null}
+
+          {resumenError ? (
+            <div className="px-4 py-3 border-t border-slate-50 flex items-start gap-2 text-xs text-red-600">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              <p>No se pudo generar el resumen con IA: {resumenError}</p>
+            </div>
+          ) : null}
+
+          {resumenIA ? (
+            <div className="border-t border-slate-100 bg-slate-50/70 p-4 sm:p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles size={14} className="text-emerald-600" />
+                <p className="text-xs font-bold text-slate-700">Resumen con IA del reporte</p>
+                {resumenIA.modelo ? (
+                  <span className="ml-auto text-[10px] text-slate-400 font-mono">{resumenIA.modelo}</span>
+                ) : null}
+              </div>
+              <div className="space-y-1 text-xs text-slate-600 leading-relaxed">
+                {resumenIA.texto
+                  .split('\n')
+                  .map((linea) => linea.trim())
+                  .filter(Boolean)
+                  .map((linea, i) => (
+                    <p key={i} className={/^(•|-|\*|\d+[.)])/.test(linea) ? 'pl-3' : ''}>
+                      {linea}
+                    </p>
+                  ))}
+              </div>
+              <p className="mt-2 text-[10px] text-slate-400">
+                Generado con las cifras del reporte; no sustituye la revisión del responsable de flota.
+              </p>
+            </div>
           ) : null}
         </>
       ) : null}
