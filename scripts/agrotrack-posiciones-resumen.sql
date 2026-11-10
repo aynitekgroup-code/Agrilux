@@ -6,8 +6,11 @@
 -- agrotrack_posiciones_seleccione_member se aplique con el usuario que llama.
 -- El cálculo ocurre en SQL porque PostgREST devuelve máximo 1000 filas por consulta.
 --
--- Antes de ejecutar, confirma los textos reales de la columna evento:
---   select evento, count(*) from public.agrotrack_posiciones group by 1 order by 2 desc;
+-- Valores reales de la columna evento (confirmados el 2026-11-09 sobre
+-- agrotrack_posiciones): Estacionado, Conduciendo, Salida de Geocerca,
+-- Entrada a Geocerca, Inmóvil - Detenido, Ignición Encendida/Apagada,
+-- Inicio de Viaje, Viaje detenido, Alerta de Inmovilidad, Alta velocidad,
+-- Fin de alta velocidad, Botón de pánico, Giro Brusco, PING, Encender, etc.
 
 -- ---------------------------------------------------------------------------
 -- 1) Distancia haversine en kilómetros entre dos puntos.
@@ -156,7 +159,10 @@ as $$
   altas as (
     select s.placa, count(*) as total
     from sin_duplicados s
+    -- "Alta velocidad" sí es alerta; "Fin de alta velocidad" es el cierre del
+    -- mismo evento (255 aperturas + 255 cierres en los datos reales) y se excluye.
     where lower(s.evento) like '%alta velocidad%'
+      and lower(s.evento) not like 'fin%'
     group by s.placa
   ),
   ultima as (
@@ -233,7 +239,9 @@ as $$
     and (p_desde is null or p.fecha >= p_desde)
     and (p_hasta is null or p.fecha <= p_hasta)
     and (
-      lower(p.evento) like '%alta velocidad%'
+      -- Valores reales confirmados: "Alta velocidad" (255) y "Botón de pánico" (24).
+      -- Se excluye "Fin de alta velocidad" (255), que es el cierre del mismo evento.
+      (lower(p.evento) like '%alta velocidad%' and lower(p.evento) not like 'fin%')
       or lower(p.evento) like '%pánico%'
       or lower(p.evento) like '%panico%'
     )
