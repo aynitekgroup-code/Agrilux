@@ -10,6 +10,7 @@ import {
   ultimoDiaLima,
   LIMITE_FILAS_ACTIVIDAD,
 } from '../../../lib/agrotrackFlota';
+import { generarResumenFlota } from '../../../lib/agrotrackInsights';
 
 /**
  * Reporte de actividad de flota (FASE 3).
@@ -161,24 +162,19 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
   };
 
   // Resumen ejecutivo con IA sobre las filas ya agregadas por SQL.
+  // Va por /api/analizar-imagen en modo texto (mismo endpoint del diagnóstico):
+  // el plan Hobby de Vercel no admite más de 12 funciones serverless.
   const generarResumen = async () => {
     setResumenCargando(true);
     setResumenError(null);
     try {
-      const respuesta = await fetch('/api/flota-insights', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          empresa: empresaNombre,
-          rango: rangoTexto,
-          agrupacion: MODOS.find((m) => m.id === modo)?.label || modo,
-          filas,
-        }),
+      const { resumen, detalleEnviado, totalFilas } = await generarResumenFlota({
+        empresa: empresaNombre,
+        rango: rangoTexto,
+        agrupacion: MODOS.find((m) => m.id === modo)?.label || modo,
+        filas,
       });
-      const data = await respuesta.json().catch(() => ({}));
-      if (!respuesta.ok) throw new Error(data.error || `Error ${respuesta.status}`);
-      if (!data.resumen) throw new Error('El modelo no devolvió texto.');
-      setResumenIA({ texto: data.resumen, modelo: data.modelo_usado || '' });
+      setResumenIA({ texto: resumen, detalleEnviado, totalFilas });
     } catch (e) {
       setResumenError(e?.message || 'No se pudo generar el resumen con IA.');
     } finally {
@@ -429,7 +425,11 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
                   ))}
               </div>
               <p className="mt-2 text-[10px] text-slate-400">
-                Generado con las cifras del reporte; no sustituye la revisión del responsable de flota.
+                Generado con las cifras del reporte
+                {resumenIA.totalFilas && resumenIA.detalleEnviado < resumenIA.totalFilas
+                  ? ` (detalle de ${resumenIA.detalleEnviado} de ${resumenIA.totalFilas} filas; totales y tops siempre completos)`
+                  : ''}
+                ; no sustituye la revisión del responsable de flota.
               </p>
             </div>
           ) : null}
