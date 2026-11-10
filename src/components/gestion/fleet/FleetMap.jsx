@@ -140,14 +140,19 @@ function featureTooltip(feature, layer) {
   }
 }
 
-/** Encuadra el mapa sobre el recorrido cargado (FASE 2). */
+/** Encuadra el mapa sobre el recorrido cargado (FASE 2).
+ *  `puntos` es una lista de pares [lat, lng]. */
 function FitMapToRoute({ puntos, token }) {
   const map = useMap();
   useEffect(() => {
     if (!puntos?.length) return;
-    const bounds = L.latLngBounds(puntos.map((punto) => [punto.lat, punto.lng]));
-    if (bounds.isValid()) {
-      map.fitBounds(bounds.pad(0.12), { maxZoom: 16, animate: false });
+    try {
+      const bounds = L.latLngBounds(puntos);
+      if (bounds.isValid()) {
+        map.fitBounds(bounds.pad(0.12), { maxZoom: 16, animate: false });
+      }
+    } catch {
+      // Un punto malformado no debe tumbar la consola entera.
     }
   }, [map, puntos, token]);
   return null;
@@ -324,6 +329,15 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
     setRutaPuntos(null);
     setRutaError('');
   };
+
+  // Puntos con coordenadas numéricas: un NaN o undefined rompe Leaflet.
+  const rutaValidos = useMemo(
+    () =>
+      (rutaPuntos || []).filter(
+        (punto) => Number.isFinite(Number(punto.latitud)) && Number.isFinite(Number(punto.longitud)),
+      ),
+    [rutaPuntos],
+  );
 
   const handleSelectGeofence = (geofence) => {
     focusGeofence(geofence);
@@ -745,16 +759,16 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
           {geoJson.features.length > 0 ? (
             <FitMapToGeofences geoJson={geoJson} focusRequest={focusRequest} />
           ) : null}
-          {rutaPuntos && rutaPuntos.length > 0 ? (
+          {rutaValidos.length > 0 ? (
             <>
               <Polyline
-                positions={rutaPuntos.map((punto) => [Number(punto.latitud), Number(punto.longitud)])}
+                positions={rutaValidos.map((punto) => [Number(punto.latitud), Number(punto.longitud)])}
                 pathOptions={{ color: '#2563EB', weight: 3, opacity: 0.85 }}
               />
               <CircleMarker
                 center={[
-                  Number(rutaPuntos[0].latitud),
-                  Number(rutaPuntos[0].longitud),
+                  Number(rutaValidos[0].latitud),
+                  Number(rutaValidos[0].longitud),
                 ]}
                 radius={6}
                 pathOptions={{ color: '#FFFFFF', weight: 2, fillColor: '#16A34A', fillOpacity: 1 }}
@@ -762,14 +776,14 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
                 <Tooltip direction="top" offset={[0, -6]} opacity={1} className="fleet-unit-tooltip">
                   <div className="text-[11px] leading-snug">
                     <p className="font-bold text-slate-900">Inicio del recorrido</p>
-                    <p className="text-slate-600">{formatearFechaHora(rutaPuntos[0].fecha)}</p>
+                    <p className="text-slate-600">{formatearFechaHora(rutaValidos[0].fecha)}</p>
                   </div>
                 </Tooltip>
               </CircleMarker>
               <CircleMarker
                 center={[
-                  Number(rutaPuntos[rutaPuntos.length - 1].latitud),
-                  Number(rutaPuntos[rutaPuntos.length - 1].longitud),
+                  Number(rutaValidos[rutaValidos.length - 1].latitud),
+                  Number(rutaValidos[rutaValidos.length - 1].longitud),
                 ]}
                 radius={6}
                 pathOptions={{ color: '#FFFFFF', weight: 2, fillColor: '#DC2626', fillOpacity: 1 }}
@@ -778,12 +792,12 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
                   <div className="text-[11px] leading-snug">
                     <p className="font-bold text-slate-900">Fin del recorrido</p>
                     <p className="text-slate-600">
-                      {formatearFechaHora(rutaPuntos[rutaPuntos.length - 1].fecha)}
+                      {formatearFechaHora(rutaValidos[rutaValidos.length - 1].fecha)}
                     </p>
                   </div>
                 </Tooltip>
               </CircleMarker>
-              {rutaPuntos
+              {rutaValidos
                 .filter((punto) => punto.es_alerta)
                 .map((punto) => (
                   <CircleMarker
@@ -804,7 +818,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
                   </CircleMarker>
                 ))}
               <FitMapToRoute
-                puntos={rutaPuntos.map((punto) => [Number(punto.latitud), Number(punto.longitud)])}
+                puntos={rutaValidos.map((punto) => [Number(punto.latitud), Number(punto.longitud)])}
                 token={rutaFitToken}
               />
             </>

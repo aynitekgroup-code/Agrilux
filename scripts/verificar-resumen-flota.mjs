@@ -114,8 +114,9 @@ async function main() {
 
   // FASE 2: recorrido de un día completo de la primera unidad con datos.
   const placa = resumen.data?.[0]?.placa;
-  if (placa && periodo.data?.hasta) {
-    const dia = new Date(periodo.data.hasta).toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
+  const hastaPeriodo = periodo.data?.[0]?.hasta;
+  if (placa && hastaPeriodo) {
+    const dia = new Date(hastaPeriodo).toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
     const recorrido = await medir('agrotrack_recorrido_flota', {
       p_empresa_id: empresaId,
       p_placa: placa,
