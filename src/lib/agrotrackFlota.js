@@ -19,6 +19,13 @@ const EVENTO_EN_MOVIMIENTO = /conducci|en marcha|viaje|alta velocidad|ignici[oó
 const EVENTO_DETENIDO = /estacionad|detenid|ignici[oó]n apagada|apagad/i;
 const VELOCIDAD_MINIMA_EN_RUTA = 2; // km/h; por debajo se considera detenida
 
+/**
+ * Cuántas alertas trae el panel (la lista más reciente).
+ * Con los datos actuales hay 279 (255 alta velocidad + 24 botón de pánico),
+ * así que el tope no recorta; si un día lo supera, el pie lo indicará.
+ */
+export const LIMITE_ALERTAS_PANEL = 500;
+
 const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const ZONA_PERU = 'America/Lima';
 
@@ -158,7 +165,7 @@ export async function obtenerResumenFlota(empresaId, { desde = null, hasta = nul
 }
 
 /** Eventos de "Alta velocidad" y "Botón de pánico" más recientes. */
-export async function obtenerAlertasFlota(empresaId, { desde = null, hasta = null, limite = 50 } = {}) {
+export async function obtenerAlertasFlota(empresaId, { desde = null, hasta = null, limite = LIMITE_ALERTAS_PANEL } = {}) {
   return llamarRpc(
     'agrotrack_alertas_flota',
     { p_empresa_id: empresaId, p_desde: desde, p_hasta: hasta, p_limite: limite },
@@ -224,7 +231,7 @@ export async function cargarPanelFlota(empresaId) {
     }
     const [filasResumen, filasAlertas] = await Promise.all([
       obtenerResumenFlota(empresaId),
-      obtenerAlertasFlota(empresaId, { limite: 50 }),
+      obtenerAlertasFlota(empresaId, { limite: LIMITE_ALERTAS_PANEL }),
     ]);
     return {
       estado: filasResumen.length ? 'real' : 'vacio',

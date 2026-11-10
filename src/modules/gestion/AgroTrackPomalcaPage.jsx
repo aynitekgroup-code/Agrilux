@@ -8,7 +8,7 @@ import {
   fuelAnomalies,
   cutRequests,
 } from '../../mocks/agrotrackData';
-import { cargarPanelFlota, textoPeriodoCargado, formatearRango } from '../../lib/agrotrackFlota';
+import { cargarPanelFlota, textoPeriodoCargado, formatearRango, LIMITE_ALERTAS_PANEL } from '../../lib/agrotrackFlota';
 import FleetHeader from '../../components/gestion/fleet/FleetHeader';
 import FleetKpis from '../../components/gestion/fleet/FleetKpis';
 import FleetMap from '../../components/gestion/fleet/FleetMap';
@@ -233,6 +233,11 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
                 cargando={enCarga}
                 error={hayErrorPanel ? panel.error : null}
                 fuente={conDatosReales ? 'real' : 'demo'}
+                notaTope={
+                  conDatosReales && panel.alertas.length >= LIMITE_ALERTAS_PANEL
+                    ? `Se muestran las ${LIMITE_ALERTAS_PANEL} más recientes; hay más eventos en el periodo.`
+                    : null
+                }
                 onReintentar={recargarPanel}
               />
             </div>

@@ -9,6 +9,7 @@ export default function FleetAlerts({
   cargando = false,
   error = null,
   fuente = 'demo',
+  notaTope = null,
   onReintentar,
 }) {
   const [filtro, setFiltro] = useState('pendientes');
@@ -137,6 +138,7 @@ export default function FleetAlerts({
         ) : (
           'Eventos simulados preparados para la tabla agrotrack_alertas.'
         )}
+        {notaTope ? <span className="block mt-0.5 text-amber-600">{notaTope}</span> : null}
       </p>
     </div>
   );
