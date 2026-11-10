@@ -18,6 +18,7 @@ import {
 import 'leaflet/dist/leaflet.css';
 import { importarGeocercasZip, listarGeocercas } from '../../../lib/agrotrackGeocercas';
 import { STATUS_META } from './fleetTokens';
+import PosicionesImport from './PosicionesImport';
 
 const SpeechRecognitionCtor =
   typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
@@ -431,6 +432,15 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
           ZIP con los archivos de la capa <code>linderos</code> (.shp, .shx, .dbf, .prj y .cpg).
           La carga actualiza únicamente polígonos con la misma división, anexo y nombre.
         </p>
+      ) : null}
+
+      {canImport ? (
+        <div className="px-4 sm:px-5 pb-3 flex flex-wrap items-center gap-2">
+          <PosicionesImport empresaId={empresaId} userId={userId} disabled={importing} />
+          <span className="text-[11px] text-slate-500">
+            ZIP o Excel del “Reporte por placa” de Zonar (un punto GPS cada 2 minutos por unidad).
+          </span>
+        </div>
       ) : null}
 
       {error ? (
