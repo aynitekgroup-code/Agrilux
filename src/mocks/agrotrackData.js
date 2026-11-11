@@ -330,14 +330,10 @@ export const cutRequests = [
 ];
 
 export const modules = [
-  { id: 'vehiculos', nombre: 'Vehículos', descripcion: 'Placas, modelos, tipo y estado operativo de la flota.', tabla: 'agrotrack_vehiculos', depende_de: [], icon: 'truck' },
-  { id: 'conductores', nombre: 'Conductores', descripcion: 'Personal asignado, licencias y tarjetas RFID.', tabla: 'agrotrack_conductores', depende_de: ['vehiculos'], icon: 'user' },
-  { id: 'dispositivos', nombre: 'Dispositivos GPS', descripcion: 'IMEI, SIM, firmware, batería y señal del equipo.', tabla: 'agrotrack_dispositivos_gps', depende_de: ['vehiculos'], icon: 'radio' },
-  { id: 'telemetria', nombre: 'Telemetría', descripcion: 'Reportes de posición, velocidad, motor y sensores.', tabla: 'agrotrack_telemetria', depende_de: ['dispositivos'], icon: 'activity' },
-  { id: 'geocercas', nombre: 'Geocercas', descripcion: 'Zonas autorizadas, restringidas y puntos de interés.', tabla: 'agrotrack_geocercas', depende_de: ['telemetria'], icon: 'map' },
-  { id: 'combustible', nombre: 'Combustible', descripcion: 'Nivel de tanque, cargas, costos y anomalías.', tabla: 'agrotrack_combustible', depende_de: ['telemetria'], icon: 'fuel' },
-  { id: 'alertas', nombre: 'Alertas', descripcion: 'Eventos priorizados por severidad y origen.', tabla: 'agrotrack_alertas', depende_de: ['telemetria', 'geocercas', 'combustible'], icon: 'bell' },
-  { id: 'supabase', nombre: 'Supabase', descripcion: 'Persistencia con RLS por empresa_id y sincronización.', tabla: 'agrotrack_*', depende_de: ['alertas'], icon: 'database' },
+  { id: 'flota', nombre: 'Flota', descripcion: 'Vehículos, conductores asignados, licencias y estado operativo.', tabla: 'agrotrack_vehiculos · agrotrack_conductores', depende_de: [], icon: 'truck' },
+  { id: 'geocercas', nombre: 'Geocercas y rutas', descripcion: 'Zonas, recorridos y telemetría de posición, velocidad y motor.', tabla: 'agrotrack_geocercas · agrotrack_telemetria', depende_de: ['flota'], icon: 'map' },
+  { id: 'combustible', nombre: 'Combustible', descripcion: 'Nivel de tanque, cargas, costos y anomalías.', tabla: 'agrotrack_combustible', depende_de: ['flota'], icon: 'fuel' },
+  { id: 'alertas', nombre: 'Alertas y eventos', descripcion: 'Eventos priorizados por severidad y origen.', tabla: 'agrotrack_alertas', depende_de: ['flota', 'geocercas', 'combustible'], icon: 'bell' },
 ];
 
 export const fleetMap = {

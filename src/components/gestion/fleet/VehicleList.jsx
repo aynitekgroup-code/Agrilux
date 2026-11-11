@@ -121,7 +121,7 @@ export default function VehicleList({ vehicles = [], selectedId, onSelect, onCut
       </div>
 
       <div className="px-4 py-2.5 text-[11px] text-slate-400 border-t border-slate-50">
-        Vista demostrativa. Los estados provienen de datos simulados listos para conectarse a Supabase.
+        Vista demostrativa. Los estados provienen de datos simulados.
       </div>
     </div>
   );

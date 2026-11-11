@@ -61,6 +61,19 @@ body::before {
   min-height: 100vh;
 }
 
+.fleet-reports-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+}
+
+@media (max-width: 767px) {
+  .fleet-reports-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 

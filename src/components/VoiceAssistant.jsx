@@ -501,47 +501,48 @@ export default function VoiceAssistant({
 
   // ── Floating mode (default) ──
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
-      <div className="flex flex-col items-end gap-1">
-        <button
-          onClick={escuchando ? detenerEscucha : iniciarEscucha}
-          disabled={procesando && !escuchandoRef.current}
-          className={`
-            w-16 h-16 rounded-full shadow-xl flex items-center justify-center
-            transition-all duration-200 active:scale-95
-            ${escuchando
-              ? 'bg-red-500 text-white animate-pulse'
-              : procesando
-                ? 'bg-amber-500 text-white'
-                : 'bg-primary text-white hover:bg-primary/90'
-            }
-          `}
-        >
-          {procesando ? (
-            <Loader2 size={28} className="animate-spin" />
-          ) : escuchando ? (
-            <MicOff size={28} />
-          ) : (
-            <Mic size={28} />
-          )}
-        </button>
+    <div className="fixed bottom-2 right-4 z-50 flex flex-col items-end gap-2">
+      <div className="flex items-end gap-2">
         <button
           onClick={() => setMostrarHistorial((prev) => !prev)}
           disabled={procesando && !escuchandoRef.current}
           className={`
             w-10 h-10 rounded-full shadow-xl flex items-center justify-center
-            transition-all duration-200 active:scale-95
+            transition-all duration-200 active:scale-95 mb-2
             ${mostrarHistorial ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
           `}
           title="Ver historial de conversación"
         >
           <MessageCircle size={16} />
         </button>
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-[10px] text-gray-400">
+            {escuchando ? '🔴 Hablando...' : procesando ? '⏳' : 'Hablar'}
+          </span>
+          <button
+            onClick={escuchando ? detenerEscucha : iniciarEscucha}
+            disabled={procesando && !escuchandoRef.current}
+            className={`
+              w-16 h-16 rounded-full shadow-xl flex items-center justify-center
+              transition-all duration-200 active:scale-95
+              ${escuchando
+                ? 'bg-red-500 text-white animate-pulse'
+                : procesando
+                  ? 'bg-amber-500 text-white'
+                  : 'bg-primary text-white hover:bg-primary/90'
+              }
+            `}
+          >
+            {procesando ? (
+              <Loader2 size={28} className="animate-spin" />
+            ) : escuchando ? (
+              <MicOff size={28} />
+            ) : (
+              <Mic size={28} />
+            )}
+          </button>
+        </div>
       </div>
-
-      <span className="text-[10px] text-gray-400 text-center">
-        {escuchando ? '🔴 Hablando...' : procesando ? '⏳' : 'Hablar'}
-      </span>
 
       {/* Panel de historial de conversación */}
       {mostrarHistorial && (

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCheck, X, Bell, RefreshCw, Database, Loader2, AlertTriangle } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext';
 import {
   vehicles,
@@ -17,6 +18,7 @@ import VigiaFlota from '../../components/gestion/fleet/VigiaFlota';
 import RemoteCutModal from '../../components/gestion/fleet/RemoteCutModal';
 import FleetAlerts from '../../components/gestion/fleet/FleetAlerts';
 import ModulesOverview from '../../components/gestion/fleet/ModulesOverview';
+import ReportesPage from './ReportesPage';
 import { FLEET } from '../../components/gestion/fleet/fleetTokens';
 
 const INITIAL_CUT_ORDERS = [
@@ -82,10 +84,12 @@ function PanelSinDatos({ titulo, descripcion, puntos = [], nota = null }) {
 }
 
 export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
+  const [searchParams] = useSearchParams();
   const { user, empresa_activa_id, empresas_disponibles } = useAuth();
   const empresaActiva = (empresas_disponibles || []).find((empresa) => empresa.id === empresa_activa_id);
   const puedeImportarGeocercas = ['administrador', 'ingeniero'].includes(empresaActiva?.rol);
-  const [section, setSection] = useState(initialSection);
+  const [section, setSection] = useState(() => searchParams.get('section') || initialSection);
+  const [selectedFleetModule, setSelectedFleetModule] = useState('flota');
   const [selectedVehicleId, setSelectedVehicleId] = useState(vehicles[0]?.id || '');
   const [readings, setReadings] = useState(mockFuelReadings);
   // Panel de flota con datos reales de public.agrotrack_posiciones (FASE 1).
@@ -392,7 +396,12 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
         </div>
       ) : null}
 
-      {section === 'modulos' ? <ModulesOverview /> : null}
+      {section === 'modulos' ? (
+        <div className="space-y-4">
+          <ModulesOverview selectedId={selectedFleetModule} onSelect={setSelectedFleetModule} />
+          <ReportesPage selectedModuleId={selectedFleetModule} />
+        </div>
+      ) : null}
 
       {cutModal ? (
         <RemoteCutModal

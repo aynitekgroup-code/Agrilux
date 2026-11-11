@@ -3,7 +3,6 @@ import {
   Leaf,
   Building2,
   MapPin,
-  Database,
   Wifi,
   LayoutDashboard,
   Fuel,
@@ -22,7 +21,7 @@ export const FLEET_SECTIONS = [
   { id: 'reportes', label: 'Reportes', icon: FileChartColumn },
   { id: 'combustible', label: 'Control de combustible', icon: Fuel },
   { id: 'corte', label: 'Corte remoto', icon: Power },
-  { id: 'modulos', label: 'Esquema de módulos', icon: GitBranch },
+  { id: 'modulos', label: 'Esquema de modulos', icon: GitBranch },
 ];
 
 function ContextChip({ icon: Icon, title, subtitle, tone }) {
@@ -81,15 +80,9 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
           <ContextChip icon={Building2} title="Empresa activa" subtitle={empresaActiva ? empresaNombre : `${empresaNombre} (Demo)`} tone={empresaActiva ? '#22C55E' : '#F59E0B'} />
           <ContextChip icon={MapPin} title={DEMO_FUNDO.fundo} subtitle={`${ubicacion} · ${campana} · Demo`} />
-          <ContextChip
-            icon={Database}
-            title="Supabase Sync"
-            subtitle={user ? 'Sesión verificada · RLS' : 'Sin sesión verificada'}
-            tone={user ? '#22C55E' : '#F59E0B'}
-          />
           <ContextChip
             icon={cuota != null ? Wifi : ShieldCheck}
             title="Cuota de telemetría"
