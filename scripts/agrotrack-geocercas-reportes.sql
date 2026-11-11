@@ -123,6 +123,34 @@ alter table if exists public.agrotrack_geocercas
   add column if not exists incluir_reportes boolean not null default true;
 
 -- ---------------------------------------------------------------------------
+-- 0.6) Checks de forma / tipo ampliados (FASE 3.7: gestión de geocercas).
+--
+--    La tabla traía dos CHECK restrictivos de AgroTrack:
+--      agrotrack_geocercas_forma_check / ck_agrotrack_geocerca_forma
+--        -> solo admiten forma = 'poligono';
+--      agrotrack_geocercas_tipo_check
+--        -> solo admite tipo  = 'autorizada'.
+--
+--    La FASE 3.7 importa oficinas (tipo = 'oficina') y distritos
+--    (tipo = 'distrito'), y el editor crea geocercas nuevas; sin ampliarlos
+--    el INSERT falla con "violates check constraint".
+--
+--    Idempotente (DROP IF EXISTS + ADD) y NO toca RLS: el conjunto permitido
+--    solo se AMPLÍA (los valores ya existentes siguen siendo válidos, así que
+--    el ADD no puede fallar por datos existentes).
+-- ---------------------------------------------------------------------------
+alter table if exists public.agrotrack_geocercas
+  drop constraint if exists agrotrack_geocercas_forma_check,
+  drop constraint if exists ck_agrotrack_geocerca_forma,
+  drop constraint if exists agrotrack_geocercas_tipo_check;
+
+alter table if exists public.agrotrack_geocercas
+  add constraint agrotrack_geocercas_forma_check
+    check (forma in ('poligono', 'multipoligono', 'irregular')),
+  add constraint agrotrack_geocercas_tipo_check
+    check (tipo in ('autorizada', 'oficina', 'distrito', 'poligono'));
+
+-- ---------------------------------------------------------------------------
 -- 1) Reporte de eventos de geocerca: entradas y salidas.
 --
 --    Fuente: los eventos que ya trae el dispositivo Zonar en
