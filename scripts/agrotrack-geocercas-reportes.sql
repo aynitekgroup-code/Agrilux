@@ -1,4 +1,5 @@
--- Reportes de geocercas (FASE 3.5): los dos reportes pedidos por Ing. Carlos Perez.
+-- Reportes de geocercas + estado de unidades (FASE 3.5 / 3.6): los tres
+-- reportes pedidos por Ing. Carlos Perez que necesitan PostGIS.
 -- Ejecutar completo en el SQL Editor de Supabase. Es repetible e idempotente:
 -- no borra ni modifica datos, ni toca RLS, ni a agrotrack_posiciones,
 -- ni a agrotrack_geocercas (solo se LEE).
@@ -7,7 +8,7 @@
 -- to create extension", ejecutar primero y sola la línea:
 --   create extension if not exists postgis with schema public;
 --
--- Los dos reportes:
+-- Los tres reportes:
 --   1) agrotrack_eventos_geocerca_flota : entradas / salidas por geocerca de los
 --      eventos de Zonar ("Entrada a Geocerca" / "Salida de Geocerca", con
 --      pt_referencia = nombre del dispositivo). Agrupable por geocerca, por día
@@ -15,6 +16,11 @@
 --   2) agrotrack_lotes_flota            : tiempo dentro de cada lote importado
 --      (agrotrack_geocercas, 129 polígonos) calculado punto-dentro-de-polígono
 --      con PostGIS sobre las posiciones GPS del periodo.
+--   3) agrotrack_estado_unidades_flota  : estado de unidades (reporte 34 de
+--      Zonar): la última posición de cada placa en el rango (fecha, evento,
+--      dirección, velocidad, coordenadas) MÁS la geocerca actual: el polígono
+--      PostGIS que contiene esa posición (la columna extra que pidió el
+--      Ing. Carlos Perez).
 --
 -- Mismo criterio que los reportes de actividad (FASE 3), para que las cifras
 -- sean comparables:
@@ -365,7 +371,122 @@ grant execute on function public.agrotrack_lotes_flota(uuid, timestamptz, timest
   to anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
--- Comprobaciones (opcionales): deben devolver 28 geocerca y ~129 lotes.
+-- 3) Estado de unidades + geocerca actual (reporte 34 de Zonar).
+--
+--    Una fila por placa con su posición MÁS RECIENTE del rango (distinct on,
+--    mismo orden que el resto de las RPC: fecha, secuencia, id) y el nombre
+--    del polígono que la contiene, resuelto con PostGIS + el mismo prefilter
+--    de bbox que agrotrack_lotes_flota. Si la posición cae fuera de todos
+--    los polígonos, geocerca queda en null (la UI lo muestra como
+--    "Fuera de geocercas").
+--
+--    Rendimiento: son pocas placas (~20-30) contra 129 polígonos, con el
+--    bbox descartando casi todo antes de ST_Contains. El distinct on usa el
+--    índice agrotrack_posiciones_empresa_placa_fecha_idx.
+--
+--    Nota: la columna "Current Odometer" del reporte de Zonar NO se puede
+--    replicar: el archivo "Reporte por placa" que importamos no trae
+--    odómetro (ver src/lib/agrotrackPosiciones.js), así que la UI la
+--    muestra en «—» con esta aclaración.
+-- ---------------------------------------------------------------------------
+drop function if exists public.agrotrack_estado_unidades_flota(uuid, timestamptz, timestamptz, integer);
+
+create function public.agrotrack_estado_unidades_flota(
+  p_empresa_id uuid,
+  p_desde      timestamptz default null,
+  p_hasta      timestamptz default null,
+  p_limite     integer     default 500
+)
+returns table (
+  placa             text,
+  unidad            text,
+  ultima_fecha      timestamptz,
+  ultimo_evento     text,
+  ultima_velocidad  numeric,
+  direccion         text,
+  latitud           double precision,
+  longitud          double precision,
+  geocerca          text,           -- nombre del polígono que contiene la posición (null = fuera)
+  geocerca_division text
+)
+language sql
+stable
+security definer
+set search_path = public, extensions, pg_catalog, pg_temp
+as $$
+  -- Última posición de cada placa en el rango, en una sola pasada.
+  with ultimos as (
+    select distinct on (p.placa)
+      p.placa,
+      p.unidad,
+      p.fecha,
+      p.evento,
+      p.velocidad,
+      p.direccion,
+      p.latitud,
+      p.longitud
+    from public.agrotrack_posiciones p
+    -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
+    where (select public.onboarding_es_miembro(p_empresa_id))
+      and p.empresa_id = p_empresa_id
+      and (p_desde is null or p.fecha >= p_desde)
+      and (p_hasta is null or p.fecha <= p_hasta)
+      and p.latitud is not null
+      and p.longitud is not null
+    order by p.placa, p.fecha desc, coalesce(p.secuencia, 0) desc, p.id desc
+  ),
+  -- 129 filas: mismo prefilter de bbox + conversión única que agrotrack_lotes_flota.
+  geocercas as materialized (
+    select
+      g.nombre,
+      g.division,
+      ((g.geometria->'bbox')->>0)::double precision           as lon_min,
+      ((g.geometria->'bbox')->>1)::double precision           as lat_min,
+      ((g.geometria->'bbox')->>2)::double precision           as lon_max,
+      ((g.geometria->'bbox')->>3)::double precision           as lat_max,
+      ST_SetSRID(ST_GeomFromGeoJSON(g.geometria::text), 4326) as poligono
+    from public.agrotrack_geocercas g
+    where g.empresa_id = p_empresa_id
+      and g.activa is true
+      and g.geometria is not null
+      and jsonb_typeof(g.geometria) = 'object'
+      and (g.geometria->>'type') in ('Polygon', 'MultiPolygon')
+      and jsonb_typeof(g.geometria->'bbox') = 'array'
+  )
+  select
+    u.placa,
+    u.unidad,
+    u.fecha                                                    as ultima_fecha,
+    u.evento                                                   as ultimo_evento,
+    u.velocidad                                                as ultima_velocidad,
+    u.direccion,
+    u.latitud,
+    u.longitud,
+    cg.nombre                                                  as geocerca,
+    cg.division                                                as geocerca_division
+  from ultimos u
+  -- Geocerca actual: el primer polígono (orden alfabético, para que el
+  -- resultado sea estable si dos se solapan) que contiene la última posición.
+  left join lateral (
+    select g2.nombre, g2.division
+    from geocercas g2
+    where u.latitud  between g2.lat_min and g2.lat_max
+      and u.longitud between g2.lon_min and g2.lon_max
+      and ST_Contains(g2.poligono, ST_SetSRID(ST_MakePoint(u.longitud, u.latitud), 4326))
+    order by g2.nombre
+    limit 1
+  ) cg on true
+  -- Lo más reciente primero: la unidad que reportó hace menos tiempo arriba.
+  order by u.fecha desc nulls last, u.placa
+  limit greatest(coalesce(p_limite, 500), 1);
+$$;
+
+grant execute on function public.agrotrack_estado_unidades_flota(uuid, timestamptz, timestamptz, integer)
+  to anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
+-- Comprobaciones (opcionales): deben devolver 28 geocerca, ~129 lotes y
+-- una fila por placa con su geocerca actual.
 -- ---------------------------------------------------------------------------
 -- select * from public.agrotrack_eventos_geocerca_flota('<empresa_id>');
 -- select * from public.agrotrack_eventos_geocerca_flota('<empresa_id>',
@@ -375,3 +496,6 @@ grant execute on function public.agrotrack_lotes_flota(uuid, timestamptz, timest
 --   from public.agrotrack_lotes_flota('<empresa_id>',
 --           '2026-11-01T00:00:00-05:00', '2026-11-07T23:59:59-05:00')
 --   limit 20;
+-- select placa, ultima_fecha, ultimo_evento, geocerca, geocerca_division
+--   from public.agrotrack_estado_unidades_flota('<empresa_id>',
+--           '2026-11-01T00:00:00-05:00', '2026-11-07T23:59:59-05:00');

@@ -14,6 +14,8 @@ import FleetKpis from '../../components/gestion/fleet/FleetKpis';
 import FleetMap from '../../components/gestion/fleet/FleetMap';
 import VehicleList from '../../components/gestion/fleet/VehicleList';
 import FleetReports from '../../components/gestion/fleet/FleetReports';
+import FleetEventsSummary from '../../components/gestion/fleet/FleetEventsSummary';
+import FleetUnitStatus from '../../components/gestion/fleet/FleetUnitStatus';
 import FleetGeofenceReports from '../../components/gestion/fleet/FleetGeofenceReports';
 import FleetGeofenceSummary from '../../components/gestion/fleet/FleetGeofenceSummary';
 import VigiaFlota from '../../components/gestion/fleet/VigiaFlota';
@@ -341,13 +343,24 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
         <div className="space-y-4">
           <SectionHeading
             title="Reportes de flota"
-            description="Reporte de actividad por día y por mes: recorrido, encendido, hora de viaje y ralentí por separado (los 4 reportes pedidos, listos para exportar)."
+            description="Los 4 reportes pedidos por el Ing. Carlos Perez: actividad por día/mes (recorrido, encendido, hora de viaje y ralentí), eventos resumidos Stop/Idle/Drive y estado de unidades con su geocerca actual, todos exportables a Excel."
           />
           <FleetReports
             empresaId={empresa_activa_id}
             empresaNombre={empresaActiva?.nombre || ''}
             periodo={conDatosReales ? panel.periodo : null}
             vehicles={vehiclesFuente}
+            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+          />
+          <FleetEventsSummary
+            empresaId={empresa_activa_id}
+            periodo={conDatosReales ? panel.periodo : null}
+            vehicles={vehiclesFuente}
+            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+          />
+          <FleetUnitStatus
+            empresaId={empresa_activa_id}
+            periodo={conDatosReales ? panel.periodo : null}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
           <VigiaFlota

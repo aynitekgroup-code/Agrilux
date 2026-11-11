@@ -3,7 +3,9 @@
  * Exporta datos de parcelas y diagnósticos a Excel
  */
 import * as XLSX from 'xlsx';
-import { etiquetaPeriodoReporte, formatearFechaLarga } from './agrotrackFlota';
+import { etiquetaPeriodoReporte, formatearFechaLarga, clasificarEstado } from './agrotrackFlota';
+import { calcularEventosResumidos, totalesEventosResumidos, formatearHMS } from './agrotrackEventosResumidos';
+import { STATUS_META } from '../components/gestion/fleet/fleetTokens';
 
 export function exportarParcelasExcel(parcelas, registros) {
   const wb = XLSX.utils.book_new();
@@ -264,4 +266,121 @@ export function exportarLotesExcel(filas, { rangoTexto = '' } = {}) {
 
   const etiquetaRango = (rangoTexto || 'todo').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
   XLSX.writeFile(wb, `Agrilux_Geocercas_Lotes_${etiquetaRango || 'rango'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/**
+ * Reporte 15 de Zonar "Eventos resumidos" a Excel: Stop / Idle / Drive por
+ * unidad con su porcentaje, mismas cifras que la pantalla y hoja de criterio.
+ * @param {Array} filas  filas de agrotrack_actividad_flota (agrupar 'unidad')
+ * @param {{totalSegundos?: number|null, rangoTexto?: string, placa?: string}} opciones
+ */
+export function exportarEventosResumidosExcel(filas, { totalSegundos = null, rangoTexto = '', placa = '' } = {}) {
+  const wb = XLSX.utils.book_new();
+
+  const calculadas = calcularEventosResumidos(filas, totalSegundos);
+  const datos = calculadas.map((f) => ({
+    'Placa': f.placa,
+    'Unidad': f.unidad,
+    'Total Stop': f.total == null ? '' : formatearHMS(f.stop),
+    'Stop %': f.pct_stop,
+    'Total Idle': f.total == null ? '' : formatearHMS(f.idle),
+    'Idle %': f.pct_idle,
+    'Total Drive': f.total == null ? '' : formatearHMS(f.drive),
+    'Drive %': f.pct_drive,
+    'Total': f.total == null ? '' : formatearHMS(f.total),
+  }));
+
+  // Totales al pie (la flota completa), igual que en la consola.
+  const totales = totalesEventosResumidos(calculadas);
+  datos.push({
+    'Placa': 'TOTALES',
+    'Unidad': `${calculadas.length} unidad(es)`,
+    'Total Stop': formatearHMS(totales.stop),
+    'Stop %': totales.pct_stop,
+    'Total Idle': formatearHMS(totales.idle),
+    'Idle %': totales.pct_idle,
+    'Total Drive': formatearHMS(totales.drive),
+    'Drive %': totales.pct_drive,
+    'Total': formatearHMS(totales.total),
+  });
+
+  const ws = XLSX.utils.json_to_sheet(datos);
+  ws['!cols'] = [
+    { wch: 12 }, { wch: 30 }, { wch: 13 }, { wch: 9 },
+    { wch: 13 }, { wch: 9 }, { wch: 13 }, { wch: 10 }, { wch: 13 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'Eventos resumidos');
+
+  const criterio = [
+    { Concepto: 'Reporte', Detalle: 'Eventos resumidos Stop/Idle/Drive (Agrilux · réplica de Zonar, reporte 15)' },
+    { Concepto: 'Rango', Detalle: rangoTexto || 'Todo el periodo cargado' },
+    { Concepto: 'Unidad', Detalle: placa || 'Todas las unidades' },
+    { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones (agrotrack_actividad_flota); Stop/Idle/Drive derivados de esas filas agregadas' },
+    { Concepto: 'Drive', Detalle: 'Motor encendido y velocidad > 5 km/h' },
+    { Concepto: 'Idle', Detalle: 'Motor encendido y velocidad <= 5 km/h' },
+    { Concepto: 'Stop', Detalle: 'Tiempo del rango sin motor encendido (total del rango − encendido)' },
+    { Concepto: 'Total', Detalle: `Duración del rango${totalSegundos ? ` (${formatearHMS(totalSegundos)})` : ''}, limitada al periodo realmente cargado` },
+    { Concepto: 'Porcentajes', Detalle: 'Stop + Idle + Drive = 100% en cada fila (Stop se cierra por resta)' },
+    { Concepto: 'Recorrido', Detalle: 'Haversine entre puntos consecutivos, tramos <= 10 min, saltos >= 5 km descartados' },
+    { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
+    { Concepto: 'Generado', Detalle: new Date().toLocaleString('es-PE') },
+  ];
+  const wsCriterio = XLSX.utils.json_to_sheet(criterio);
+  wsCriterio['!cols'] = [{ wch: 16 }, { wch: 90 }];
+  XLSX.utils.book_append_sheet(wb, wsCriterio, 'Criterio');
+
+  const etiquetaRango = (rangoTexto || 'todo').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
+  XLSX.writeFile(wb, `Agrilux_Eventos_Resumidos_${etiquetaRango || 'rango'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/**
+ * Reporte 34 de Zonar "Estado de unidades" a Excel, con la columna extra de
+ * geocerca actual y la hoja de criterio.
+ * @param {Array} filas  filas de agrotrack_estado_unidades_flota
+ * @param {{rangoTexto?: string, periodo?: {hasta: string|null}|null}} opciones
+ */
+export function exportarEstadoUnidadesExcel(filas, { rangoTexto = '', periodo = null } = {}) {
+  const wb = XLSX.utils.book_new();
+
+  const datos = (filas || []).map((f) => {
+    const estado = clasificarEstado(f, periodo?.hasta);
+    return {
+      'Placa': f.placa,
+      'Unidad': f.unidad || f.placa,
+      'Últ. fecha': f.ultima_fecha ? formatearFechaLarga(f.ultima_fecha) : '—',
+      'Estado': STATUS_META[estado]?.label || estado,
+      'Dirección': f.direccion || '—',
+      'Últ. evento': f.ultimo_evento || '—',
+      'Vel. (km/h)': f.ultima_velocidad == null ? '' : Number(f.ultima_velocidad),
+      'Odómetro actual': '—',
+      'Geocerca': f.geocerca || 'Fuera de geocercas',
+      'División': f.geocerca_division || '—',
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(datos);
+  ws['!cols'] = [
+    { wch: 12 }, { wch: 30 }, { wch: 22 }, { wch: 15 }, { wch: 45 },
+    { wch: 22 }, { wch: 11 }, { wch: 17 }, { wch: 26 }, { wch: 18 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'Estado unidades');
+
+  const criterio = [
+    { Concepto: 'Reporte', Detalle: 'Estado de unidades + geocerca (Agrilux · réplica de Zonar, reporte 34)' },
+    { Concepto: 'Rango', Detalle: rangoTexto || 'Todo el periodo cargado' },
+    { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones + public.agrotrack_geocercas (agrotrack_estado_unidades_flota)' },
+    { Concepto: 'Motor', Detalle: 'PostGIS: polígono que contiene la última posición (ST_Contains, EPSG:4326) con prefilter de bbox' },
+    { Concepto: 'Geocerca', Detalle: 'Nombre del polígono que contiene la última posición; "Fuera de geocercas" si no cae en ninguno' },
+    { Concepto: 'Estado', Detalle: 'En ruta / Detenido / Sin conexión contra max(fecha) del periodo cargado (umbral 30 min), nunca contra la fecha de hoy' },
+    { Concepto: 'Odómetro', Detalle: 'Sin dato: el archivo "Reporte por placa" de Zonar que importamos no incluye la columna de odómetro' },
+    { Concepto: 'Orden', Detalle: 'Última posición más reciente primero' },
+    { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
+    { Concepto: 'Generado', Detalle: new Date().toLocaleString('es-PE') },
+  ];
+  const wsCriterio = XLSX.utils.json_to_sheet(criterio);
+  wsCriterio['!cols'] = [{ wch: 16 }, { wch: 90 }];
+  XLSX.utils.book_append_sheet(wb, wsCriterio, 'Criterio');
+
+  const etiquetaRango = (rangoTexto || 'todo').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
+  XLSX.writeFile(wb, `Agrilux_Estado_Unidades_${etiquetaRango || 'rango'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }

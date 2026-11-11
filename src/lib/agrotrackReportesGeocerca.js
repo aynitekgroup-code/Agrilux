@@ -1,14 +1,16 @@
 /**
  * src/lib/agrotrackReportesGeocerca.js
- * Reportes de geocercas (FASE 3.5) a partir de public.agrotrack_posiciones y
- * public.agrotrack_geocercas.
+ * Reportes de geocercas (FASE 3.5) y estado de unidades (FASE 3.6) a partir
+ * de public.agrotrack_posiciones y public.agrotrack_geocercas.
  *
- * Dos reportes, ambos calculados en SQL (RPC) porque PostgREST devuelve máximo
- * 1000 filas por consulta y el cruce son +100 mil posiciones x 129 polígonos:
+ * Todo se calcula en SQL (RPC) porque PostgREST devuelve máximo 1000 filas
+ * por consulta y el cruce son +100 mil posiciones x 129 polígonos:
  *   1) agrotrack_eventos_geocerca_flota : entradas / salidas por geocerca
  *      (eventos de Zonar), agrupables por geocerca, día o mes.
  *   2) agrotrack_lotes_flota            : tiempo dentro de cada lote
  *      (punto-dentro-de-polígono con PostGIS).
+ *   3) agrotrack_estado_unidades_flota  : última posición de cada placa en el
+ *      rango + la geocerca actual (polígono PostGIS que la contiene).
  *
  * Requiere: ejecutar scripts/agrotrack-geocercas-reportes.sql en Supabase
  * (crea la extensión postGIS en su sección 0).
@@ -18,6 +20,7 @@ import { supabase } from './supabase';
 /** Tope de filas de cada reporte: PostgREST corta en 1000. */
 export const LIMITE_EVENTOS_GEOCERCA = 500;
 export const LIMITE_LOTES = 200;
+export const LIMITE_ESTADO_UNIDADES = 500;
 
 function mensajeDeError(error, contexto) {
   const detalle = error?.message || String(error);
@@ -81,5 +84,23 @@ export async function obtenerLotesFlota(
     'agrotrack_lotes_flota',
     { p_empresa_id: empresaId, p_desde: desde, p_hasta: hasta, p_limite: limite },
     'No se pudo cargar el tiempo en cada lote'
+  );
+}
+
+/**
+ * Estado de unidades (reporte 34 de Zonar): una fila por placa con su
+ * posición más reciente del rango y la geocerca actual (PostGIS).
+ * @returns filas { placa, unidad, ultima_fecha, ultimo_evento, ultima_velocidad,
+ *                  direccion, latitud, longitud, geocerca, geocerca_division }
+ */
+export async function obtenerEstadoUnidadesFlota(
+  empresaId,
+  { desde = null, hasta = null, limite = LIMITE_ESTADO_UNIDADES } = {}
+) {
+  if (!empresaId) return [];
+  return llamarRpc(
+    'agrotrack_estado_unidades_flota',
+    { p_empresa_id: empresaId, p_desde: desde, p_hasta: hasta, p_limite: limite },
+    'No se pudo cargar el estado de unidades'
   );
 }
