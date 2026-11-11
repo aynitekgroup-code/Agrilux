@@ -232,8 +232,16 @@ function AppRoutes() {
               user && isAprobado ? <CicloCultivo /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />
 
-            {/* Gestión — requiere login + aprobación */}
+            {/* Gestión — requiere login + aprobación.
+                Al presionar "Gestión" en el sidebar se abre directamente la
+                consola Agrilux · AgroTrack Pomalca (lo pedido por el
+                Ing. Carlos Perez). La pantalla de bienvenida /
+                configuración de infraestructura queda en
+                /gestion/configuracion. */}
             <Route path="/gestion" element={
+              user && isAprobado ? <AgroTrackPomalca /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
+            } />
+            <Route path="/gestion/configuracion" element={
               user && isAprobado ? <Gestion /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />
             <Route path="/gestion/sensores-agricolas" element={
