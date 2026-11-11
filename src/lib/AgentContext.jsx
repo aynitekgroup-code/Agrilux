@@ -6,6 +6,7 @@
  * - Asistente de voz (responde preguntas → busca tiendas)
  * - Ciclo del cultivo (recomienda productos → busca tiendas)
  * - Búsqueda local (encuentra tiendas → muestra ofertas)
+ * - Vigía de flota (revisa el reporte de actividad → comparte hallazgos)
  * 
  * Flujo sincronizado:
  * 1. Diagnóstico detecta: "Tizón tardío en papa"
@@ -35,6 +36,8 @@ export function AgentProvider({ children }) {
   const [ofertasRegistradas, setOfertasRegistradas] = useState([]);
   const [alertasActivas, setAlertasActivas] = useState([]);
   const [historial, setHistorial] = useState([]);
+  // Vigía de flota (FASE 3.4): hallazgos del reporte de actividad de vehículos.
+  const [hallazgosFlota, setHallazgosFlota] = useState(null);
 
   // ── Cargar ubicación del usuario al iniciar ──
   useEffect(() => {
@@ -175,6 +178,23 @@ export function AgentProvider({ children }) {
     setCultivoActivo(cultivo);
   }, []);
 
+  // Vigía de flota revisa el reporte → comparte sus hallazgos con todos los agentes
+  const reportarVigiaFlota = useCallback((hallazgos, meta = {}) => {
+    setHallazgosFlota({
+      hallazgos: Array.isArray(hallazgos) ? hallazgos : [],
+      rangoTexto: meta.rangoTexto || '',
+      unidades: meta.unidades || 0,
+      fecha: new Date().toISOString(),
+    });
+    if (Array.isArray(hallazgos) && hallazgos.length) {
+      setHistorial(prev => [...prev, {
+        tipo: 'vigia-flota',
+        datos: { total: hallazgos.length, titulo: hallazgos[0].titulo },
+        fecha: new Date().toISOString(),
+      }]);
+    }
+  }, []);
+
   // Agregar alerta preventiva
   const agregarAlerta = useCallback((alerta) => {
     setAlertasActivas(prev => {
@@ -195,9 +215,10 @@ export function AgentProvider({ children }) {
       tiendasCercanas: tiendasCercanas.length,
       ofertasRegistradas: ofertasRegistradas.length,
       alertasActivas: alertasActivas.length,
+      hallazgosFlota: hallazgosFlota?.hallazgos?.length || 0,
       historial: historial.slice(-5), // Últimos 5 eventos
     };
-  }, [ubicacion, coords, cultivoActivo, productoRecomendado, problemaDetectado, tiendasCercanas, ofertasRegistradas, alertasActivas, historial]);
+  }, [ubicacion, coords, cultivoActivo, productoRecomendado, problemaDetectado, tiendasCercanas, ofertasRegistradas, alertasActivas, hallazgosFlota, historial]);
 
   const value = {
     // Estado
@@ -209,6 +230,7 @@ export function AgentProvider({ children }) {
     tiendasCercanas,
     ofertasRegistradas,
     alertasActivas,
+    hallazgosFlota,
     historial,
     
     // Acciones
@@ -220,6 +242,7 @@ export function AgentProvider({ children }) {
     actualizarUbicacion,
     seleccionarCultivo,
     agregarAlerta,
+    reportarVigiaFlota,
     getContextoCompleto,
   };
 

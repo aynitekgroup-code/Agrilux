@@ -12,7 +12,7 @@
 
 import React from 'react';
 import { useAgentes } from '../lib/AgentContext';
-import { AlertTriangle, CheckCircle, Store, Calendar, Bell, MapPin } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Store, Calendar, Bell, MapPin, Truck } from 'lucide-react';
 
 export default function AgentStatus() {
   const {
@@ -24,11 +24,12 @@ export default function AgentStatus() {
     tiendasCercanas,
     ofertasRegistradas,
     alertasActivas,
+    hallazgosFlota,
     historial,
   } = useAgentes();
 
   // No mostrar si no hay nada relevante
-  const tieneActividad = problemaDetectado || productoRecomendado || tiendasCercanas.length > 0 || ofertasRegistradas.length > 0 || alertasActivas.length > 0;
+  const tieneActividad = problemaDetectado || productoRecomendado || tiendasCercanas.length > 0 || ofertasRegistradas.length > 0 || alertasActivas.length > 0 || (hallazgosFlota?.hallazgos?.length || 0) > 0;
   if (!tieneActividad) return null;
 
   return (
@@ -130,6 +131,28 @@ export default function AgentStatus() {
             </div>
             <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">
               Riesgo
+            </span>
+          </div>
+        )}
+
+        {/* Vigía de flota (FASE 3.4) */}
+        {(hallazgosFlota?.hallazgos?.length || 0) > 0 && (
+          <div className="flex items-center gap-2 bg-white rounded-xl px-3 py-2 border border-gray-100">
+            <Truck size={14} className="text-forest flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-gray-700 truncate">
+                {hallazgosFlota.hallazgos.length} hallazgo(s): {hallazgosFlota.hallazgos[0].titulo}
+              </p>
+              <p className="text-[10px] text-gray-400">
+                Agente Vigía de flota{hallazgosFlota.rangoTexto ? ` · ${hallazgosFlota.rangoTexto}` : ''}
+              </p>
+            </div>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+              hallazgosFlota.hallazgos[0].nivel === 'alto' ? 'bg-red-100 text-red-700' :
+              hallazgosFlota.hallazgos[0].nivel === 'medio' ? 'bg-orange-100 text-orange-700' :
+              'bg-yellow-100 text-yellow-700'
+            }`}>
+              {hallazgosFlota.hallazgos[0].nivel}
             </span>
           </div>
         )}

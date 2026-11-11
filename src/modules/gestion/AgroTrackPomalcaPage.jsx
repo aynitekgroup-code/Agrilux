@@ -13,6 +13,7 @@ import FleetKpis from '../../components/gestion/fleet/FleetKpis';
 import FleetMap from '../../components/gestion/fleet/FleetMap';
 import VehicleList from '../../components/gestion/fleet/VehicleList';
 import FleetReports from '../../components/gestion/fleet/FleetReports';
+import VigiaFlota from '../../components/gestion/fleet/VigiaFlota';
 import RemoteCutModal from '../../components/gestion/fleet/RemoteCutModal';
 import FleetAlerts from '../../components/gestion/fleet/FleetAlerts';
 import ModulesOverview from '../../components/gestion/fleet/ModulesOverview';
@@ -285,6 +286,11 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             vehicles={vehiclesFuente}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
+          <VigiaFlota
+            empresaId={empresa_activa_id}
+            periodo={conDatosReales ? panel.periodo : null}
+            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+          />
           <VehicleList
             vehicles={vehicles}
             selectedId={selectedVehicleId}
@@ -330,6 +336,11 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             empresaNombre={empresaActiva?.nombre || ''}
             periodo={conDatosReales ? panel.periodo : null}
             vehicles={vehiclesFuente}
+            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+          />
+          <VigiaFlota
+            empresaId={empresa_activa_id}
+            periodo={conDatosReales ? panel.periodo : null}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
         </div>
