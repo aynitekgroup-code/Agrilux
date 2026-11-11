@@ -3,6 +3,11 @@
 -- no borra ni modifica datos, ni toca RLS, ni la tabla agrotrack_posiciones,
 -- ni agrotrack_geocercas, ni las funciones de scripts/agrotrack-posiciones-resumen.sql.
 --
+-- INCLUYE (sección 0) las funciones de membresía onboarding_es_miembro /
+-- onboarding_es_admin, que no existían en este proyecto (de ahí el ERROR 42883
+-- "function public.onboarding_es_miembro(uuid) does not exist" al ejecutarlo).
+-- Tampoco hace falta correr otro archivo antes.
+--
 -- Réplica de lo que el Ing. Carlos Perez pidió textualmente de Zonar:
 --   "reporte de actividad... que salga el reporte por día, y por ralentí,
 --    hora de viaje y encendido, y recorrido por separado y por mes"
@@ -41,6 +46,56 @@
 -- UMBRAL_RALENTI_KMH más abajo cambia el reporte completo, nunca se duplica
 -- el criterio en el código de la interfaz.
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 0) PREREQUISITO: funciones de membresía (ver el mismo bloque en
+-- scripts/agrotrack-posiciones-resumen.sql y en scripts/onboarding-es-miembro.sql).
+--
+-- Este archivo validaba con public.onboarding_es_miembro(...) que no existía
+-- en este proyecto (ERROR 42883 "function public.onboarding_es_miembro(uuid)
+-- does not exist"). Se crean aquí para que el archivo funcione solo:
+-- idempotente (solo CREATE OR REPLACE), no toca datos ni políticas. Requiere
+-- auth.uid() (esquema auth de Supabase) y la tabla empresa_miembros.
+-- ---------------------------------------------------------------------------
+create or replace function public.onboarding_es_miembro(p_empresa_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select auth.uid() is not null
+     and exists (
+       select 1
+       from public.empresa_miembros em
+       where em.empresa_id = p_empresa_id
+         and em.user_id = auth.uid()::text
+         and em.activo is true
+     );
+$$;
+
+create or replace function public.onboarding_es_admin(p_empresa_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select auth.uid() is not null
+     and exists (
+       select 1
+       from public.empresa_miembros em
+       where em.empresa_id = p_empresa_id
+         and em.user_id = auth.uid()::text
+         and em.activo is true
+         and em.rol = 'administrador'
+     );
+$$;
+
+revoke all on function public.onboarding_es_miembro(uuid) from public;
+revoke all on function public.onboarding_es_admin(uuid) from public;
+grant execute on function public.onboarding_es_miembro(uuid) to authenticated, anon, service_role;
+grant execute on function public.onboarding_es_admin(uuid) to authenticated, anon, service_role;
 
 -- ---------------------------------------------------------------------------
 -- 1) Reporte de actividad por unidad, agrupado por día, por mes o total.

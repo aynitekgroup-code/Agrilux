@@ -2,6 +2,12 @@
 -- Ejecutar completo en el SQL Editor de Supabase. Es repetible e idempotente:
 -- no borra ni modifica datos, ni toca RLS ni la tabla agrotrack_geocercas.
 --
+-- INCLUYE (sección 0) las funciones de membresía onboarding_es_miembro /
+-- onboarding_es_admin, que este archivo necesita y que no existían en este
+-- proyecto (de ahí el ERROR 42883 al ejecutarlo). No hace falta correr ningún
+-- otro archivo antes; scripts/onboarding-es-miembro.sql trae lo mismo por
+-- separado si solo se necesitan esas funciones.
+--
 -- TODAS las RPC son SECURITY DEFINER y validan la membresía con
 -- public.onboarding_es_miembro(p_empresa_id) antes de leer: un no-miembro
 -- recibe 0 filas (mismo resultado que la RLS), pero la tabla se recorre sin
@@ -26,6 +32,59 @@
 -- Entrada a Geocerca, Inmóvil - Detenido, Ignición Encendida/Apagada,
 -- Inicio de Viaje, Viaje detenido, Alerta de Inmovilidad, Alta velocidad,
 -- Fin de alta velocidad, Botón de pánico, Giro Brusco, PING, Encender, etc.
+
+-- ---------------------------------------------------------------------------
+-- 0) PREREQUISITO: funciones de membresía.
+--
+-- Todas las RPC de este archivo validan con public.onboarding_es_miembro(...)
+-- y en este proyecto esa función NUNCA se instaló (la migración de onboarding
+-- 2.5 no se ejecutó), así que este archivo fallaba con:
+--   ERROR: 42883 function public.onboarding_es_miembro(uuid) does not exist
+-- Se crean aquí para que este archivo funcione solo, con la MISMA definición
+-- de scripts/onboarding-es-miembro.sql (que es la de
+-- scripts/onboarding-2.5-10-funciones.sql). Idempotente: solo CREATE OR
+-- REPLACE, no toca datos ni políticas. Usa auth.uid() (esquema auth de
+-- Supabase) y la tabla empresa_miembros, que sí existen.
+-- ---------------------------------------------------------------------------
+create or replace function public.onboarding_es_miembro(p_empresa_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select auth.uid() is not null
+     and exists (
+       select 1
+       from public.empresa_miembros em
+       where em.empresa_id = p_empresa_id
+         and em.user_id = auth.uid()::text
+         and em.activo is true
+     );
+$$;
+
+create or replace function public.onboarding_es_admin(p_empresa_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select auth.uid() is not null
+     and exists (
+       select 1
+       from public.empresa_miembros em
+       where em.empresa_id = p_empresa_id
+         and em.user_id = auth.uid()::text
+         and em.activo is true
+         and em.rol = 'administrador'
+     );
+$$;
+
+revoke all on function public.onboarding_es_miembro(uuid) from public;
+revoke all on function public.onboarding_es_admin(uuid) from public;
+grant execute on function public.onboarding_es_miembro(uuid) to authenticated, anon, service_role;
+grant execute on function public.onboarding_es_admin(uuid) to authenticated, anon, service_role;
 
 -- ---------------------------------------------------------------------------
 -- 1) Distancia haversine en kilómetros entre dos puntos.
