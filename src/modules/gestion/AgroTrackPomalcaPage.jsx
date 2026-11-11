@@ -92,6 +92,8 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
   const { user, empresa_activa_id, empresas_disponibles } = useAuth();
   const empresaActiva = (empresas_disponibles || []).find((empresa) => empresa.id === empresa_activa_id);
   const puedeImportarGeocercas = ['administrador', 'ingeniero'].includes(empresaActiva?.rol);
+  // La RLS solo permite DELETE a administradores (FASE 3.7: editor de geocercas).
+  const puedeEliminarGeocercas = empresaActiva?.rol === 'administrador';
   const [section, setSection] = useState(() => searchParams.get('section') || initialSection);
   const [selectedFleetModule, setSelectedFleetModule] = useState('flota');
   const [selectedVehicleId, setSelectedVehicleId] = useState(vehicles[0]?.id || '');
@@ -262,6 +264,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
                 empresaId={empresa_activa_id}
                 userId={user?.id}
                 canImport={puedeImportarGeocercas}
+                canDelete={puedeEliminarGeocercas}
                 vehicles={vehiclesFuente}
                 selectedId={selectedVehicleId}
                 onSelect={setSelectedVehicleId}
@@ -330,6 +333,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             empresaId={empresa_activa_id}
             userId={user?.id}
             canImport={puedeImportarGeocercas}
+            canDelete={puedeEliminarGeocercas}
             vehicles={vehiclesFuente}
             selectedId={selectedVehicleId}
             onSelect={setSelectedVehicleId}

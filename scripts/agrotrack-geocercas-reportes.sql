@@ -15,12 +15,14 @@
 --      o por mes.
 --   2) agrotrack_lotes_flota            : tiempo dentro de cada lote importado
 --      (agrotrack_geocercas, 129 polígonos) calculado punto-dentro-de-polígono
---      con PostGIS sobre las posiciones GPS del periodo.
+--      con PostGIS sobre las posiciones GPS del periodo. Solo las geocercas de
+--      campo: oficinas y distritos (FASE 3.7) quedan fuera con
+--      incluir_reportes = false, para que un distrito no se coma el reporte.
 --   3) agrotrack_estado_unidades_flota  : estado de unidades (reporte 34 de
 --      Zonar): la última posición de cada placa en el rango (fecha, evento,
 --      dirección, velocidad, coordenadas) MÁS la geocerca actual: el polígono
 --      PostGIS que contiene esa posición (la columna extra que pidió el
---      Ing. Carlos Perez).
+--      Ing. Carlos Perez). Igual que en (2), solo geocercas de campo.
 --
 -- Mismo criterio que los reportes de actividad (FASE 3), para que las cifras
 -- sean comparables:
@@ -103,6 +105,22 @@ revoke all on function public.onboarding_es_miembro(uuid) from public;
 revoke all on function public.onboarding_es_admin(uuid) from public;
 grant execute on function public.onboarding_es_miembro(uuid) to authenticated, anon, service_role;
 grant execute on function public.onboarding_es_admin(uuid) to authenticated, anon, service_role;
+
+-- ---------------------------------------------------------------------------
+-- 0.5) Columna incluir_reportes (FASE 3.7: gestión de geocercas).
+--
+--    true  (por defecto): geocerca de campo -> entra en "Tiempo en lote" y en
+--                         "Geocerca actual", y se exporta a Zonar;
+--    false:                oficinas / distritos -> solo se ven en el mapa.
+--
+--    Es lo que permite cargar esos grupos sin que un distrito (que contiene
+--    todas las posiciones) se trague el reporte de tiempo en lote. La columna
+--    la pone el importador de src/lib/agrotrackGeocercas.js.
+--
+--    Idempotente (IF NOT EXISTS) y NO toca RLS ni ninguna otra columna.
+-- ---------------------------------------------------------------------------
+alter table if exists public.agrotrack_geocercas
+  add column if not exists incluir_reportes boolean not null default true;
 
 -- ---------------------------------------------------------------------------
 -- 1) Reporte de eventos de geocerca: entradas y salidas.
@@ -247,6 +265,9 @@ as $$
     from public.agrotrack_geocercas g
     where g.empresa_id = p_empresa_id
       and g.activa is true
+      -- Solo geocercas de campo: oficinas y distritos (incluir_reportes =
+      -- false, FASE 3.7) no entran en el reporte de tiempo en lote.
+      and g.incluir_reportes
       and g.geometria is not null
       and jsonb_typeof(g.geometria) = 'object'
       and (g.geometria->>'type') in ('Polygon', 'MultiPolygon')
@@ -448,6 +469,9 @@ as $$
     from public.agrotrack_geocercas g
     where g.empresa_id = p_empresa_id
       and g.activa is true
+      -- Solo geocercas de campo: oficinas y distritos (incluir_reportes =
+      -- false, FASE 3.7) no pueden ser la "geocerca actual" de una unidad.
+      and g.incluir_reportes
       and g.geometria is not null
       and jsonb_typeof(g.geometria) = 'object'
       and (g.geometria->>'type') in ('Polygon', 'MultiPolygon')

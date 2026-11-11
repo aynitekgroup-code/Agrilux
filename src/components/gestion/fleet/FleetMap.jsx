@@ -16,7 +16,22 @@ import {
   X,
 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
-import { importarGeocercasZip, listarGeocercas } from '../../../lib/agrotrackGeocercas';
+import {
+  crearGeocerca,
+  guardarGeocerca,
+  importarGeocercasZip,
+  listarGeocercas,
+  quitarGeocerca,
+} from '../../../lib/agrotrackGeocercas';
+import {
+  contarVertices,
+  insertarVerticeEnBorde,
+  moverVertice,
+  poligonoDePuntos,
+  quitarVertice,
+  rellenarHueco,
+} from '../../../lib/geocercasGeometria';
+import { GeocercaEditorPanel, GeocercaVertexLayer } from './GeocercaEditor';
 import {
   formatearFechaHora,
   obtenerRecorridoFlota,
@@ -103,6 +118,23 @@ function stripVoiceCommand(transcript) {
 
 /* ---------- Mapa ---------- */
 
+/** Mensaje de éxito de la importación por grupos (FASE 3.7). */
+function textoResumenImportacion(resumen) {
+  const partes = (resumen?.grupos || []).map((grupo) => {
+    const poligonos = `${grupo.procesadas} polígono${grupo.procesadas === 1 ? '' : 's'}`;
+    if (grupo.omitidas && grupo.guardadas) {
+      return `${grupo.etiqueta}: ${poligonos} · ${grupo.guardadas} nuevas y ${grupo.omitidas} ya existentes (sin modificar)`;
+    }
+    if (grupo.omitidas) {
+      return `${grupo.etiqueta}: ${poligonos} · todos ya existían, no se modificó ninguno`;
+    }
+    return `${grupo.etiqueta}: ${poligonos} guardados`;
+  });
+  if (resumen?.excluidas?.length) partes.push(`capa ${resumen.excluidas.join(', ')} ignorada (divisiones)`);
+  if (resumen?.ignoradas?.length) partes.push(`capas sin reconocer: ${resumen.ignoradas.join(', ')}`);
+  return `Importación correcta: ${partes.join(' · ')}.`;
+}
+
 function FitMapToGeofences({ geoJson, focusRequest }) {
   const map = useMap();
 
@@ -160,13 +192,26 @@ function FitMapToRoute({ puntos, token }) {
 
 /* ---------- Componente ---------- */
 
-export default function FleetMap({ empresaId, userId, canImport = false, vehicles = [], selectedId, onSelect, fuentePosiciones = 'demo', periodo = null }) {
+export default function FleetMap({ empresaId, userId, canImport = false, canDelete = false, vehicles = [], selectedId, onSelect, fuentePosiciones = 'demo', periodo = null }) {
   const [rawGeofences, setRawGeofences] = useState([]);
   const [loading, setLoading] = useState(Boolean(empresaId));
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [mapRevision, setMapRevision] = useState(0);
+  // FASE 3.7: editor de geocercas (renombrar, mover/insertar/quitar puntos,
+  // rellenar huecos, dibujar y eliminar).
+  const [editando, setEditando] = useState(false);
+  const [editModo, setEditModo] = useState('mover'); // mover | insertar | quitar | dibujo
+  const [editNombre, setEditNombre] = useState('');
+  const [editGeo, setEditGeo] = useState(null);           // geometría en borrador
+  const [editOriginal, setEditOriginal] = useState(null); // { nombre, geometria } guardados
+  const [editRevision, setEditRevision] = useState(0);
+  const [editGuardando, setEditGuardando] = useState(false);
+  const [editEliminando, setEditEliminando] = useState(false);
+  const [editMensaje, setEditMensaje] = useState(null);   // { tipo, texto }
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false);
+  const [dibujo, setDibujo] = useState([]);               // [[lat, lng], ...]
   const [showGeofenceList, setShowGeofenceList] = useState(false);
   const [geofenceSearch, setGeofenceSearch] = useState('');
   const [resultsOpen, setResultsOpen] = useState(false);
@@ -187,6 +232,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
   activeCompanyRef.current = empresaId;
   const activePlacaRef = useRef(selectedId);
   activePlacaRef.current = selectedId;
+  // Nombre que tenía el borrador antes de entrar en modo "dibujar nueva".
+  const nombreAntesDeDibujar = useRef('');
 
   const geofences = useMemo(() => rawGeofences.map(normalizeGeofence), [rawGeofences]);
   const withoutGeometry = useMemo(
@@ -194,7 +241,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
     [geofences],
   );
 
-  const geoJson = useMemo(
+  // Solo los datos guardados: el encuadre del mapa no debe saltar cuando se
+  // edita un polígono (FitMapToGeofences usa esta colección).
+  const geoJsonBase = useMemo(
     () => ({
       type: 'FeatureCollection',
       features: geofences
@@ -208,13 +257,30 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
     [geofences],
   );
 
+  // Lo que se pinta: los datos guardados + el borrador de la geocerca en
+  // edición, para ver el resultado de mover/insertar/quitar puntos en vivo.
+  const geoJson = useMemo(() => {
+    if (!editando || !editGeo || !selectedGeofenceId) return geoJsonBase;
+    return {
+      type: 'FeatureCollection',
+      features: geoJsonBase.features.map((feature) =>
+        feature.properties?.id === selectedGeofenceId ? { ...feature, geometry: editGeo } : feature,
+      ),
+    };
+  }, [editando, editGeo, geoJsonBase, selectedGeofenceId]);
+
   const geofenceSummary = useMemo(() => {
-    const divisions = new Map();
+    const grupos = new Map();
     geofences.forEach((geofence) => {
-      const division = geofence.division || 'Sin división';
-      divisions.set(division, (divisions.get(division) || 0) + 1);
+      // Las geocercas sin división (oficinas / distritos cargados en la
+      // FASE 3.7) se cuentan por su grupo para no mezclarlas con lotes.
+      const etiqueta = geofence.division
+        || (geofence.tipo === 'oficina' ? 'Oficinas'
+          : geofence.tipo === 'distrito' ? 'Distritos'
+            : 'Sin división');
+      grupos.set(etiqueta, (grupos.get(etiqueta) || 0) + 1);
     });
-    return [...divisions.entries()].sort(([a], [b]) => a.localeCompare(b, 'es'));
+    return [...grupos.entries()].sort(([a], [b]) => a.localeCompare(b, 'es'));
   }, [geofences]);
 
   const filteredGeofences = useMemo(
@@ -224,6 +290,16 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
   const selectedGeofence = geofences.find((geofence) => geofence.id === selectedGeofenceId);
   const searchResults = geofenceSearch.trim() ? filteredGeofences.slice(0, 8) : [];
   const showResults = Boolean(geofenceSearch.trim()) && resultsOpen;
+
+  /* ----- Derivados del editor (FASE 3.7) ----- */
+  const seleccionEdicion = editando ? selectedGeofence : undefined;
+  // Geometría por referencia: cada operación del editor crea una copia nueva.
+  const sucio = Boolean(
+    seleccionEdicion
+    && (editNombre !== (editOriginal?.nombre ?? '')
+      || editGeo !== (editOriginal?.geometria ?? null)),
+  );
+  const editVertices = editGeo ? contarVertices(editGeo) : 0;
 
   const refreshGeofences = useCallback(async (targetCompanyId = empresaId) => {
     if (targetCompanyId !== activeCompanyRef.current) return;
@@ -259,8 +335,44 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
     setFocusRequest(null);
     setGeofenceSearch('');
     setResultsOpen(false);
+    setEditando(false);
+    setEditModo('mover');
+    setEditNombre('');
+    setEditGeo(null);
+    setEditOriginal(null);
+    setEditMensaje(null);
+    setConfirmarEliminar(false);
+    setDibujo([]);
     refreshGeofences();
   }, [empresaId, refreshGeofences]);
+
+  /* ----- Borrador del editor (FASE 3.7) ----- */
+
+  // Borrador nuevo al cambiar de geocerca seleccionada. NO borra el mensaje:
+  // tras "Guardar" o "Crear" la selección cambia y el mensaje debe seguir.
+  useEffect(() => {
+    const geofence = geofences.find((item) => item.id === selectedGeofenceId);
+    setEditNombre(geofence?.nombre || '');
+    setEditGeo(geofence?.geometria || null);
+    setEditOriginal(geofence ? { nombre: geofence.nombre, geometria: geofence.geometria } : null);
+    setEditModo('mover');
+    setDibujo([]);
+    setConfirmarEliminar(false);
+    // geofences se omite a propósito: solo interesa el cambio de selección.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedGeofenceId]);
+
+  // Tras recargar los datos (importar / guardar / eliminar) el borrador se
+  // sincroniza con lo que quedó guardado en la base.
+  useEffect(() => {
+    if (!selectedGeofenceId) return;
+    const geofence = geofences.find((item) => item.id === selectedGeofenceId);
+    if (!geofence) return;
+    setEditNombre(geofence.nombre);
+    setEditGeo(geofence.geometria);
+    setEditOriginal({ nombre: geofence.nombre, geometria: geofence.geometria });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geofences]);
 
   // Avisa en consola si hay geocercas sin geometría legible (ayuda a diagnosticar
   // si la columna es `geometria` o `poligono`).
@@ -275,6 +387,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
 
   const focusGeofence = useCallback((geofence) => {
     setSelectedGeofenceId(geofence.id);
+    setEditMensaje(null);
     if (geofence.geometria) {
       setFocusRequest({ geometry: geofence.geometria, token: Date.now() });
     }
@@ -364,6 +477,216 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
     setGeofenceSearch('');
     setResultsOpen(false);
     setVoiceMessage('');
+    setEditMensaje(null);
+  };
+
+  /* ----- Editor de geocercas (FASE 3.7) ----- */
+
+  const aplicarGeo = (nueva) => {
+    setEditGeo(nueva);
+    setEditRevision((revision) => revision + 1);
+  };
+
+  const entrarEdicion = () => {
+    setEditando(true);
+    setEditModo('mover');
+    setEditMensaje(null);
+    setConfirmarEliminar(false);
+  };
+
+  const salirEdicion = () => {
+    setEditando(false);
+    setEditModo('mover');
+    setDibujo([]);
+    setEditMensaje(null);
+    setConfirmarEliminar(false);
+    setEditNombre(editOriginal?.nombre ?? '');
+    setEditGeo(editOriginal?.geometria ?? null);
+    setEditRevision((revision) => revision + 1);
+  };
+
+  const cambiarModoEdicion = (modo) => {
+    setConfirmarEliminar(false);
+    if (modo === 'dibujo') {
+      nombreAntesDeDibujar.current = editNombre;
+      setDibujo([]);
+      setEditNombre('');
+      setEditModo('dibujo');
+      setEditMensaje(null);
+      return;
+    }
+    setEditModo((anterior) => (anterior === modo ? 'mover' : modo));
+    setEditMensaje(null);
+  };
+
+  const cancelarDibujo = () => {
+    setDibujo([]);
+    setEditModo('mover');
+    setEditNombre(nombreAntesDeDibujar.current);
+    setEditMensaje(null);
+    setEditRevision((revision) => revision + 1);
+  };
+
+  const agregarPuntoDibujo = (punto) => {
+    setDibujo((puntos) => [...puntos, punto]);
+    setEditMensaje(null);
+  };
+
+  const guardarCambios = async () => {
+    if (!seleccionEdicion || !empresaId) return;
+    const cambios = {};
+    if (editNombre !== (editOriginal?.nombre ?? '')) cambios.nombre = editNombre;
+    if (editGeo !== (editOriginal?.geometria ?? null)) cambios.geometria = editGeo;
+    if (!Object.keys(cambios).length) {
+      setEditMensaje({ tipo: 'info', texto: 'No hay cambios para guardar.' });
+      return;
+    }
+
+    setEditGuardando(true);
+    setEditMensaje(null);
+    try {
+      await guardarGeocerca(empresaId, { id: seleccionEdicion.id, ...cambios });
+      await refreshGeofences();
+      setEditMensaje({
+        tipo: 'ok',
+        texto: 'Cambios guardados: la geocerca ya se usa en el mapa y en los reportes.',
+      });
+    } catch (guardadoError) {
+      setEditMensaje({ tipo: 'error', texto: guardadoError.message || 'No se pudieron guardar los cambios.' });
+    } finally {
+      setEditGuardando(false);
+    }
+  };
+
+  const descartarCambios = () => {
+    setEditNombre(editOriginal?.nombre ?? '');
+    aplicarGeo(editOriginal?.geometria ?? null);
+    setEditMensaje(null);
+    setConfirmarEliminar(false);
+  };
+
+  // Rellena los huecos (anillos interiores) con el mismo reparador de la
+  // exportación a Zonar: sirve para arreglar geocercas como "Medano".
+  const rellenarHuecoSeleccion = () => {
+    if (!editGeo) return;
+    const { geometria, report } = rellenarHueco(editGeo);
+    if (!geometria) {
+      setEditMensaje({ tipo: 'error', texto: 'No se pudo rellenar: la geometría no es válida.' });
+      return;
+    }
+    aplicarGeo(geometria);
+    if (report.huecosRellenados > 0) {
+      setEditMensaje({
+        tipo: 'ok',
+        texto:
+          `Se rellenaron ${report.huecosRellenados} hueco(s): ${report.verticesAntes} → ` +
+          `${report.verticesDespues} vértices${report.partesDescartadas ? ` · ${report.partesDescartadas} parte(s) descartada(s) por ser muy pequeña(s)` : ''}. ` +
+          'Pulsa Guardar para conservarlo.',
+      });
+    } else {
+      setEditMensaje({
+        tipo: 'info',
+        texto:
+          `Esta geocerca no tiene huecos; se limpió la geometría (${report.verticesAntes} → ` +
+          `${report.verticesDespues} vértices). Pulsa Guardar para conservarlo o Descartar para deshacer.`,
+      });
+    }
+  };
+
+  const moverPunto = (parte, anillo, indice, punto) => {
+    if (!editGeo) return;
+    const nueva = moverVertice(editGeo, parte, anillo, indice, punto);
+    if (!nueva) {
+      setEditMensaje({ tipo: 'error', texto: 'No se pudo mover ese punto.' });
+      return;
+    }
+    aplicarGeo(nueva);
+  };
+
+  const insertarPunto = (punto) => {
+    if (!editGeo) return;
+    const resultado = insertarVerticeEnBorde(editGeo, punto);
+    if (!resultado) {
+      setEditMensaje({
+        tipo: 'info',
+        texto: 'No hay ningún borde cerca de ese clic (se busca hasta 400 m). Acércate al borde e inténtalo otra vez.',
+      });
+      return;
+    }
+    aplicarGeo(resultado.geometria);
+    setEditMensaje(null);
+  };
+
+  const quitarPunto = (parte, anillo, indice) => {
+    if (!editGeo) return;
+    const nueva = quitarVertice(editGeo, parte, anillo, indice);
+    if (!nueva) {
+      setEditMensaje({
+        tipo: 'error',
+        texto: 'Un polígono necesita al menos 3 puntos: ya no se puede quitar ningún punto.',
+      });
+      return;
+    }
+    aplicarGeo(nueva);
+    setEditMensaje(null);
+  };
+
+  const crearNueva = async () => {
+    if (!empresaId) return;
+    // Los puntos del dibujo van en [lat, lng] (orden del mapa); la geometría
+    // GeoJSON va en [lon, lat].
+    const geometria = poligonoDePuntos(dibujo.map(([lat, lng]) => [lng, lat]));
+    if (!geometria) {
+      setEditMensaje({ tipo: 'error', texto: 'La geocerca nueva necesita al menos 3 puntos.' });
+      return;
+    }
+    if (!editNombre.trim()) {
+      setEditMensaje({ tipo: 'error', texto: 'Escribe un nombre para la geocerca nueva.' });
+      return;
+    }
+
+    setEditGuardando(true);
+    setEditMensaje(null);
+    try {
+      const creada = await crearGeocerca(empresaId, { nombre: editNombre.trim(), geometria });
+      await refreshGeofences();
+      setDibujo([]);
+      setEditModo('mover');
+      setSelectedGeofenceId(creada.id);
+      setEditMensaje({ tipo: 'ok', texto: `Se creó la geocerca "${creada.nombre}".` });
+    } catch (creadoError) {
+      setEditMensaje({ tipo: 'error', texto: creadoError.message || 'No se pudo crear la geocerca.' });
+    } finally {
+      setEditGuardando(false);
+    }
+  };
+
+  const eliminarSeleccion = async () => {
+    if (!seleccionEdicion || !empresaId) return;
+    // Confirmación en dos pasos: un DELETE no se puede deshacer.
+    if (!confirmarEliminar) {
+      setConfirmarEliminar(true);
+      setEditMensaje({
+        tipo: 'info',
+        texto: 'Vuelve a pulsar "Eliminar" para confirmar. Esta acción no se puede deshacer.',
+      });
+      return;
+    }
+
+    setEditEliminando(true);
+    setEditMensaje(null);
+    try {
+      await quitarGeocerca(empresaId, seleccionEdicion.id);
+      setConfirmarEliminar(false);
+      await refreshGeofences();
+      setSelectedGeofenceId('');
+      setEditMensaje({ tipo: 'ok', texto: 'Geocerca eliminada.' });
+    } catch (eliminadoError) {
+      setConfirmarEliminar(false);
+      setEditMensaje({ tipo: 'error', texto: eliminadoError.message || 'No se pudo eliminar la geocerca.' });
+    } finally {
+      setEditEliminando(false);
+    }
   };
 
   /* ----- Búsqueda por voz ----- */
@@ -464,10 +787,10 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
     setError('');
     setNotice('');
     try {
-      const saved = await importarGeocercasZip(file, empresaId, userId);
+      const resumen = await importarGeocercasZip(file, empresaId, userId);
       if (empresaId) {
         await refreshGeofences(empresaId);
-        setNotice(`Se importaron correctamente ${saved} geocercas para esta empresa.`);
+        setNotice(textoResumenImportacion(resumen));
       }
     } catch (importError) {
       setError(importError.message || 'No se pudo importar el archivo de geocercas.');
@@ -518,10 +841,39 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
         </div>
       </div>
 
+      <GeocercaEditorPanel
+        puedeEditar={canImport}
+        editando={editando}
+        onEntrar={entrarEdicion}
+        onSalir={salirEdicion}
+        modo={editModo}
+        onModo={cambiarModoEdicion}
+        seleccion={seleccionEdicion}
+        nombre={editNombre}
+        onNombre={setEditNombre}
+        sucio={sucio}
+        guardando={editGuardando}
+        mensaje={editMensaje}
+        onGuardar={guardarCambios}
+        onDescartar={descartarCambios}
+        onRellenar={rellenarHuecoSeleccion}
+        cantidadVertices={editVertices}
+        dibujo={dibujo}
+        onCrear={crearNueva}
+        onCancelarDibujo={cancelarDibujo}
+        puedeEliminar={canDelete}
+        confirmarEliminar={confirmarEliminar}
+        eliminando={editEliminando}
+        onEliminar={eliminarSeleccion}
+        onDibujar={() => cambiarModoEdicion('dibujo')}
+      />
+
       {canImport ? (
         <p className="px-4 sm:px-5 pb-3 text-[11px] text-slate-500">
-          ZIP con los archivos de la capa <code>linderos</code> (.shp, .shx, .dbf, .prj y .cpg).
-          La carga actualiza únicamente polígonos con la misma división, anexo y nombre.
+          ZIP con las capas <code>linderos</code>, <code>oficinas</code> y <code>distritos</code>
+          (.shp, .shx, .dbf, .prj y .cpg): solo se usa el campo nombre. Los linderos que ya
+          existen no se modifican (los 129 cargados) y la capa <code>divisiones</code> se ignora.
+          Oficinas y distritos se ven en el mapa pero no entran en los reportes.
         </p>
       ) : null}
 
@@ -739,7 +1091,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <GeoJSON
-            key={`${empresaId || 'none'}-${mapRevision}`}
+            key={`${empresaId || 'none'}-${mapRevision}-${editRevision}`}
             data={geoJson}
             style={(feature) => {
               const selected = feature?.properties?.id === selectedGeofenceId;
@@ -753,11 +1105,28 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
             }}
             onEachFeature={(feature, layer) => {
               featureTooltip(feature, layer);
-              layer.on('click', () => setSelectedGeofenceId(feature.properties?.id || ''));
+              layer.on('click', () => {
+                // En modo "insertar" o "dibujar" el clic lo maneja el mapa
+                // (agrega el punto): la selección no cambia.
+                if (editModo === 'insertar' || editModo === 'dibujo') return;
+                setEditMensaje(null);
+                setSelectedGeofenceId(feature.properties?.id || '');
+              });
             }}
           />
-          {geoJson.features.length > 0 ? (
-            <FitMapToGeofences geoJson={geoJson} focusRequest={focusRequest} />
+          {editando ? (
+            <GeocercaVertexLayer
+              modo={editModo}
+              geometria={editGeo}
+              dibujo={dibujo}
+              onMover={moverPunto}
+              onInsertar={insertarPunto}
+              onQuitar={quitarPunto}
+              onPuntoDibujo={agregarPuntoDibujo}
+            />
+          ) : null}
+          {geoJsonBase.features.length > 0 ? (
+            <FitMapToGeofences geoJson={geoJsonBase} focusRequest={focusRequest} />
           ) : null}
           {rutaValidos.length > 0 ? (
             <>
@@ -867,7 +1236,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, vehicle
         <div className="px-4 sm:px-5 pb-3">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-xs font-semibold text-slate-700">
-              {geofences.length} geocercas · {geofenceSummary.length} divisiones
+              {geofences.length} geocercas · {geofenceSummary.length} grupos
             </p>
             <div className="flex flex-wrap gap-1.5">
               {geofenceSummary.map(([division, count]) => (
