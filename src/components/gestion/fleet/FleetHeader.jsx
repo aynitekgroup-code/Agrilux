@@ -10,6 +10,7 @@ import {
   GitBranch,
   ShieldCheck,
   Map,
+  MapPinned,
   FileChartColumn,
 } from 'lucide-react';
 import { useAuth } from '../../../lib/AuthContext';
@@ -19,6 +20,7 @@ export const FLEET_SECTIONS = [
   { id: 'consola', label: 'Consola principal', icon: LayoutDashboard },
   { id: 'mapas', label: 'Mapas', icon: Map },
   { id: 'reportes', label: 'Reportes', icon: FileChartColumn },
+  { id: 'geocercas', label: 'Geocercas', icon: MapPinned },
   { id: 'combustible', label: 'Control de combustible', icon: Fuel },
   { id: 'corte', label: 'Corte remoto', icon: Power },
   { id: 'modulos', label: 'Esquema de modulos', icon: GitBranch },

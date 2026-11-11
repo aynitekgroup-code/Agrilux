@@ -14,6 +14,8 @@ import FleetKpis from '../../components/gestion/fleet/FleetKpis';
 import FleetMap from '../../components/gestion/fleet/FleetMap';
 import VehicleList from '../../components/gestion/fleet/VehicleList';
 import FleetReports from '../../components/gestion/fleet/FleetReports';
+import FleetGeofenceReports from '../../components/gestion/fleet/FleetGeofenceReports';
+import FleetGeofenceSummary from '../../components/gestion/fleet/FleetGeofenceSummary';
 import VigiaFlota from '../../components/gestion/fleet/VigiaFlota';
 import RemoteCutModal from '../../components/gestion/fleet/RemoteCutModal';
 import FleetAlerts from '../../components/gestion/fleet/FleetAlerts';
@@ -295,6 +297,12 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             periodo={conDatosReales ? panel.periodo : null}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
+          <FleetGeofenceSummary
+            empresaId={empresa_activa_id}
+            periodo={conDatosReales ? panel.periodo : null}
+            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+            onVerReporte={() => setSection('geocercas')}
+          />
           <VehicleList
             vehicles={vehicles}
             selectedId={selectedVehicleId}
@@ -343,6 +351,20 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
           <VigiaFlota
+            empresaId={empresa_activa_id}
+            periodo={conDatosReales ? panel.periodo : null}
+            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+          />
+        </div>
+      ) : null}
+
+      {section === 'geocercas' ? (
+        <div className="space-y-4">
+          <SectionHeading
+            title="Reportes de geocercas"
+            description="Entradas y salidas de los eventos de Zonar y tiempo dentro de cada lote, calculados con PostGIS sobre las posiciones GPS del periodo cargado."
+          />
+          <FleetGeofenceReports
             empresaId={empresa_activa_id}
             periodo={conDatosReales ? panel.periodo : null}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}

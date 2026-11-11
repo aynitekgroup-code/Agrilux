@@ -3,7 +3,7 @@
  * Exporta datos de parcelas y diagnósticos a Excel
  */
 import * as XLSX from 'xlsx';
-import { etiquetaPeriodoReporte } from './agrotrackFlota';
+import { etiquetaPeriodoReporte, formatearFechaLarga } from './agrotrackFlota';
 
 export function exportarParcelasExcel(parcelas, registros) {
   const wb = XLSX.utils.book_new();
@@ -142,4 +142,126 @@ export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', p
 
   const etiquetaRango = (rangoTexto || 'todo').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
   XLSX.writeFile(wb, `Agrilux_Actividades_${etiquetaRango || 'rango'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/**
+ * Reporte de entradas y salidas de geocerca (FASE 3.5) a Excel: los eventos de
+ * Zonar agrupados por geocerca, por día o por mes, con la hoja de criterio
+ * para que el archivo se entienda solo.
+ * @param {Array} filas  filas de agrotrack_eventos_geocerca_flota
+ * @param {{agrupar?: string, rangoTexto?: string}} opciones
+ */
+export function exportarEventosGeocercaExcel(filas, { agrupar = 'geocerca', rangoTexto = '' } = {}) {
+  const wb = XLSX.utils.book_new();
+
+  // En 'geocerca' el grupo es el nombre tal cual; en día/mes se etiqueta como
+  // en el reporte de actividad (mismo texto en pantalla y en el archivo).
+  const etiquetaGrupo = (fila) => etiquetaPeriodoReporte({ periodo: fila.grupo }, agrupar);
+
+  const datos = (filas || []).map((f) => ({
+    'Grupo': etiquetaGrupo(f),
+    'Entradas': Number(f.entradas || 0),
+    'Salidas': Number(f.salidas || 0),
+    'Unidades': Number(f.unidades || 0),
+    'Última entrada': f.ultima_entrada ? formatearFechaLarga(f.ultima_entrada) : '—',
+  }));
+
+  // Totales al pie. Unidades no se suman: una placa puede aparecer en varios
+  // grupos y sumarla duplicaría el conteo.
+  const suma = (campo) => (filas || []).reduce((s, f) => s + Number(f[campo] || 0), 0);
+  datos.push({
+    'Grupo': 'TOTALES',
+    'Entradas': suma('entradas'),
+    'Salidas': suma('salidas'),
+    'Unidades': '',
+    'Última entrada': '',
+  });
+
+  const ws = XLSX.utils.json_to_sheet(datos);
+  ws['!cols'] = [{ wch: 26 }, { wch: 11 }, { wch: 11 }, { wch: 11 }, { wch: 24 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Eventos');
+
+  const criterio = [
+    { Concepto: 'Reporte', Detalle: 'Entradas y salidas de geocerca (Agrilux · réplica de Zonar)' },
+    { Concepto: 'Agrupación', Detalle: agrupar === 'dia' ? 'Por día' : agrupar === 'mes' ? 'Por mes' : 'Por geocerca' },
+    { Concepto: 'Rango', Detalle: rangoTexto || 'Todo el periodo cargado' },
+    { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones (agrotrack_eventos_geocerca_flota)' },
+    { Concepto: 'Eventos', Detalle: "Zonar: 'Entrada a Geocerca' / 'Salida de Geocerca' con pt_referencia (nombre de la geocerca)" },
+    { Concepto: 'Unidades', Detalle: 'Placas distintas que registraron una entrada' },
+    { Concepto: 'Salidas', Detalle: 'Pueden no cuadrar con las entradas: una unidad aún dentro deja la última entrada sin salida' },
+    { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
+    { Concepto: 'Generado', Detalle: new Date().toLocaleString('es-PE') },
+  ];
+  const wsCriterio = XLSX.utils.json_to_sheet(criterio);
+  wsCriterio['!cols'] = [{ wch: 16 }, { wch: 90 }];
+  XLSX.utils.book_append_sheet(wb, wsCriterio, 'Criterio');
+
+  const etiquetaRango = (rangoTexto || 'todo').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
+  XLSX.writeFile(wb, `Agrilux_Geocercas_Eventos_${etiquetaRango || 'rango'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/**
+ * Reporte de tiempo en cada lote (FASE 3.5) a Excel: permanencia, visitas y
+ * recorrido dentro de cada polígono (PostGIS), con la hoja de criterio.
+ * @param {Array} filas  filas de agrotrack_lotes_flota
+ * @param {{rangoTexto?: string}} opciones
+ */
+export function exportarLotesExcel(filas, { rangoTexto = '' } = {}) {
+  const wb = XLSX.utils.book_new();
+
+  const datos = (filas || []).map((f) => ({
+    'Lote': f.lote,
+    'División': f.division || '—',
+    'Anexo': f.anexo || '—',
+    'Área (ha)': f.area_ha == null ? '' : Number(f.area_ha),
+    'Unidades': Number(f.unidades || 0),
+    'Visitas': Number(f.visitas || 0),
+    'Permanencia (h)': horas(f.permanencia_segundos),
+    'Recorrido (km)': Number(f.km_recorridos || 0),
+    'Puntos': Number(f.puntos || 0),
+    'Vel. máx. (km/h)': f.vel_max_kmh == null ? '' : Number(f.vel_max_kmh),
+    'Primera visita': f.primera_visita ? formatearFechaLarga(f.primera_visita) : '—',
+    'Última visita': f.ultima_visita ? formatearFechaLarga(f.ultima_visita) : '—',
+  }));
+
+  const suma = (campo) => (filas || []).reduce((s, f) => s + Number(f[campo] || 0), 0);
+  datos.push({
+    'Lote': 'TOTALES',
+    'División': `${filas.length} lote(s) con actividad`,
+    'Anexo': '',
+    'Área (ha)': '',
+    'Unidades': '',
+    'Visitas': suma('visitas'),
+    'Permanencia (h)': horas(suma('permanencia_segundos')),
+    'Recorrido (km)': Number(suma('km_recorridos').toFixed(2)),
+    'Puntos': suma('puntos'),
+    'Vel. máx. (km/h)': '',
+    'Primera visita': '',
+    'Última visita': '',
+  });
+
+  const ws = XLSX.utils.json_to_sheet(datos);
+  ws['!cols'] = [
+    { wch: 24 }, { wch: 16 }, { wch: 14 }, { wch: 11 }, { wch: 10 }, { wch: 9 },
+    { wch: 16 }, { wch: 15 }, { wch: 9 }, { wch: 15 }, { wch: 22 }, { wch: 22 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'Lotes');
+
+  const criterio = [
+    { Concepto: 'Reporte', Detalle: 'Tiempo en cada lote (Agrilux · réplica de Zonar)' },
+    { Concepto: 'Rango', Detalle: rangoTexto || 'Todo el periodo cargado' },
+    { Concepto: 'Fuente', Detalle: 'public.agrotrack_geocercas + public.agrotrack_posiciones (agrotrack_lotes_flota)' },
+    { Concepto: 'Motor', Detalle: 'PostGIS: punto dentro del polígono (ST_Contains, EPSG:4326)' },
+    { Concepto: 'Visita', Detalle: 'Tramo de permanencia; un hueco de más de 10 minutos corta la visita' },
+    { Concepto: 'Recorrido', Detalle: 'Haversine entre puntos consecutivos, tramos <= 10 min, saltos >= 5 km descartados' },
+    { Concepto: 'Duplicados', Detalle: 'Puntos repetidos (misma fecha + secuencia) no cuentan dos veces' },
+    { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
+    { Concepto: 'Generado', Detalle: new Date().toLocaleString('es-PE') },
+  ];
+  const wsCriterio = XLSX.utils.json_to_sheet(criterio);
+  wsCriterio['!cols'] = [{ wch: 16 }, { wch: 90 }];
+  XLSX.utils.book_append_sheet(wb, wsCriterio, 'Criterio');
+
+  const etiquetaRango = (rangoTexto || 'todo').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
+  XLSX.writeFile(wb, `Agrilux_Geocercas_Lotes_${etiquetaRango || 'rango'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
