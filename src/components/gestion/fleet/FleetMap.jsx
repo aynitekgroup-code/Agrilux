@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CircleMarker, GeoJSON, MapContainer, Polyline, TileLayer, Tooltip, useMap } from 'react-leaflet';
+import { CircleMarker, GeoJSON, MapContainer, Popup, Polyline, TileLayer, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import {
   AlertCircle,
@@ -138,19 +138,44 @@ function textoResumenImportacion(resumen) {
   return `Importación correcta: ${partes.join(' · ')}.`;
 }
 
-function FitMapToGeofences({ geoJson, focusRequest, fitToken = 0 }) {
+function FitMapToGeofences({ geoJson, vehicles = [], focusRequest, fitToken = 0 }) {
   const map = useMap();
 
-  // Encuadra todas las geocercas cuando cambian los datos (o cuando el
+  // Firma estable de las posiciones de las unidades: evita re-encuadrar en
+  // cada render (el arreglo de vehículos puede cambiar de referencia sin
+  // cambiar coordenadas) y permite encuadrar también las máquinas al abrir
+  // (pedido del Ing. Carlos Perez: "al abrir se vea todas las unidades").
+  const unidadesFirma = useMemo(() => (
+    vehicles
+      .filter((v) => (
+        v?.lat != null && v?.lng != null
+        && Number.isFinite(Number(v.lat)) && Number.isFinite(Number(v.lng))
+        && Number(v.lat) !== 0 && Number(v.lng) !== 0
+      ))
+      .map((v) => `${v.id}:${Number(v.lat).toFixed(5)},${Number(v.lng).toFixed(5)}`)
+      .join('|')
+  ), [vehicles]);
+
+  // Encuadra geocercas + unidades cuando cambian los datos (o cuando el
   // asistente JARVIS pide "ajustar todo": fitToken cambia y re-encuadra).
   useEffect(() => {
-    const bounds = L.geoJSON(geoJson).getBounds();
+    const bounds = L.latLngBounds([]);
+    const geoBounds = L.geoJSON(geoJson).getBounds();
+    if (geoBounds.isValid()) bounds.extend(geoBounds);
+    vehicles.forEach((v) => {
+      const lat = Number(v?.lat);
+      const lng = Number(v?.lng);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0) {
+        bounds.extend([lat, lng]);
+      }
+    });
     if (bounds.isValid()) {
-      map.fitBounds(bounds.pad(0.06), { maxZoom: 16, animate: false });
+      map.fitBounds(bounds.pad(0.08), { maxZoom: 16, animate: false });
     } else {
       map.setView([-6.78, -79.83], 13, { animate: false });
     }
-  }, [geoJson, map, fitToken]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geoJson, unidadesFirma, fitToken, map]);
 
   // Hace zoom a la geocerca elegida cada vez que el usuario la selecciona
   // (aunque sea la misma que ya estaba seleccionada).
@@ -937,7 +962,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       {canImport ? (
         <p className="px-4 sm:px-5 pb-3 text-[11px] text-slate-500">
           ZIP con las capas <code>linderos</code>, <code>oficinas</code> y <code>distritos</code>
-          (.shp, .shx, .dbf, .prj y .cpg): solo se usa el campo nombre. Los linderos que ya
+          (.shp, .shx, .dbf, .prj y .cpg): solo se usa el campo nombre. Los campos que ya
           existen no se modifican (los 129 cargados) y la capa <code>divisiones</code> se ignora.
           Oficinas y distritos se ven en el mapa pero no entran en los reportes.
         </p>
@@ -1206,8 +1231,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               onPuntoDibujo={agregarPuntoDibujo}
             />
           ) : null}
-          {geoJsonBase.features.length > 0 ? (
-            <FitMapToGeofences geoJson={geoJsonBase} focusRequest={focusRequest} fitToken={fitToken} />
+          {geoJsonBase.features.length > 0 || vehicles.length > 0 ? (
+            <FitMapToGeofences geoJson={geoJsonBase} vehicles={vehicles} focusRequest={focusRequest} fitToken={fitToken} />
           ) : null}
           {rutaValidos.length > 0 ? (
             <>
@@ -1307,6 +1332,50 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                     ) : null}
                   </div>
                 </Tooltip>
+                {/* Ventana flotante (popup) con las características de la
+                    máquina al hacer clic. Se pintan solo los campos que
+                    existan: sirve igual para datos reales (placa, modelo,
+                    estado, velocidad, km, último evento) que para la demo. */}
+                <Popup className="fleet-unit-popup" maxWidth={260}>
+                  <div className="text-[12px] leading-snug space-y-1.5 min-w-[200px]">
+                    <p className="font-bold text-slate-900 text-[13px]">{vehicle.placa}</p>
+                    <p className="text-slate-600">{vehicle.descripcion || vehicle.modelo || '—'}</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ background: meta.dot }} />
+                      <span className="text-slate-700 font-medium">{meta.label}</span>
+                      {Number.isFinite(velocidad) && velocidad > 0 ? (
+                        <span className="text-slate-500">· {velocidad} km/h</span>
+                      ) : null}
+                    </div>
+                    {vehicle.marca || vehicle.tipo || vehicle.anio ? (
+                      <p className="text-slate-500">
+                        {[vehicle.marca, vehicle.tipo, vehicle.anio].filter(Boolean).join(' · ')}
+                      </p>
+                    ) : null}
+                    {vehicle.conductor_nombre ? (
+                      <p className="text-slate-500">Conductor: <span className="text-slate-700">{vehicle.conductor_nombre}</span></p>
+                    ) : null}
+                    {vehicle.ultimo_evento ? (
+                      <p className="text-slate-500">Último evento: <span className="text-slate-700">{vehicle.ultimo_evento}</span></p>
+                    ) : null}
+                    {Number.isFinite(Number(vehicle.km_recorridos)) && Number(vehicle.km_recorridos) > 0 ? (
+                      <p className="text-slate-500">Km recorridos: <span className="text-slate-700">{Number(vehicle.km_recorridos).toLocaleString('es-PE')} km</span></p>
+                    ) : null}
+                    {Number.isFinite(Number(vehicle.odometro_km)) && Number(vehicle.odometro_km) > 0 ? (
+                      <p className="text-slate-500">Odómetro: <span className="text-slate-700">{Number(vehicle.odometro_km).toLocaleString('es-PE')} km</span></p>
+                    ) : null}
+                    {vehicle.ultima_ubicacion ? (
+                      <p className="text-slate-500">Ubicación: <span className="text-slate-700">{vehicle.ultima_ubicacion}</span></p>
+                    ) : null}
+                    {vehicle.nivel_tanque_pct != null ? (
+                      <p className="text-slate-500">Tanque: <span className="text-slate-700">{vehicle.nivel_tanque_pct}%</span></p>
+                    ) : null}
+                    {fechaPosicion ? <p className="text-slate-500">{fechaPosicion}</p> : null}
+                    {fuentePosiciones !== 'real' ? (
+                      <p className="text-slate-400">GPS de demostración</p>
+                    ) : null}
+                  </div>
+                </Popup>
               </CircleMarker>
             );
           })}

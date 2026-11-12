@@ -21,7 +21,7 @@ const ZONAR_MAX_VERTICES = 200; // Valor supuesto: confirmar el límite real con
 export const GRUPOS_IMPORT = [
   {
     id: 'linderos',
-    etiqueta: 'Linderos',
+    etiqueta: 'Campos',
     test: (nombre) => nombre.includes('lindero'),
     tipo: 'autorizada',
     incluirReportes: true,

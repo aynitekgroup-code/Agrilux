@@ -39,7 +39,7 @@ export default function AsistenteMapa({ geofences = [], seleccion = null, onAcci
   const [mensajes, setMensajes] = useState([
     {
       rol: 'asistente',
-      texto: 'Hola, soy JARVIS. Pregúntame por las geocercas o dime qué hacer: "llévame a Medano", "solo oficinas", "¿cuántos linderos hay?".',
+      texto: 'Hola, soy JARVIS. Pregúntame por las geocercas o dime qué hacer: "llévame a Medano", "solo oficinas", "¿cuántos campos hay?".',
       notas: [],
     },
   ]);

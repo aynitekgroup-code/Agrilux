@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   Fuel,
   Power,
-  GitBranch,
   ShieldCheck,
   Map,
   MapPinned,
@@ -23,7 +22,6 @@ export const FLEET_SECTIONS = [
   { id: 'geocercas', label: 'Geocercas', icon: MapPinned },
   { id: 'combustible', label: 'Control de combustible', icon: Fuel },
   { id: 'corte', label: 'Corte remoto', icon: Power },
-  { id: 'modulos', label: 'Esquema de modulos', icon: GitBranch },
 ];
 
 function ContextChip({ icon: Icon, title, subtitle, tone }) {

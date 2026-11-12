@@ -28,6 +28,7 @@ const COLUMNAS = [
   { id: 'periodo', label: 'Período', numerica: false },
   { id: 'unidad', label: 'Unidad', numerica: false },
   { id: 'km_recorridos', label: 'Recorrido (km)', numerica: true },
+  { id: 'prendido_segundos', label: 'Horas prendido', numerica: true },
   { id: 'encendido_segundos', label: 'Encendido', numerica: true },
   { id: 'viaje_segundos', label: 'Hora de viaje', numerica: true },
   { id: 'ralenti_segundos', label: 'Ralentí', numerica: true },
@@ -86,7 +87,11 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
   const pendienteDeFecha = (modo === 'dia' && !dia) || (modo === 'mes' && !mes) || (modo === 'total' && !periodo?.desde);
 
   useEffect(() => {
-    if (!empresaId || pendienteDeFecha) return undefined;
+    if (!empresaId || pendienteDeFecha) {
+      // Nunca dejar "Calculando..." colgado (ver FleetEventsSummary).
+      setEstado((prev) => (prev === 'cargando' ? 'inactivo' : prev));
+      return undefined;
+    }
     let cancelado = false;
     setEstado('cargando');
     setError(null);
@@ -101,7 +106,13 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
     })
       .then((resultado) => {
         if (cancelado) return;
-        setFilas(resultado);
+        // Horas totales de prendido = ralentí + viaje (pedido por el
+        // Ing. Carlos Perez). La RPC ya garantiza encendido = viaje + ralentí,
+        // pero lo derivamos explícito para mostrarlo como columna propia.
+        setFilas(resultado.map((f) => ({
+          ...f,
+          prendido_segundos: Number(f.viaje_segundos || 0) + Number(f.ralenti_segundos || 0),
+        })));
         setEstado(resultado.length ? 'ok' : 'vacio');
         setRangoTexto(consulta.texto);
       })
@@ -136,6 +147,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
     const sum = (campo) => filas.reduce((s, f) => s + Number(f[campo] || 0), 0);
     return {
       km: sum('km_recorridos'),
+      prendido: sum('prendido_segundos'),
       encendido: sum('encendido_segundos'),
       viaje: sum('viaje_segundos'),
       ralenti: sum('ralenti_segundos'),
@@ -361,6 +373,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
                       ) : null}
                     </td>
                     <td className="px-3 py-2 text-right font-semibold">{numero(fila.km_recorridos, 1)}</td>
+                    <td className="px-3 py-2 text-right font-bold text-slate-800">{formatearDuracion(fila.prendido_segundos)}</td>
                     <td className="px-3 py-2 text-right">{formatearDuracion(fila.encendido_segundos)}</td>
                     <td className="px-3 py-2 text-right">{formatearDuracion(fila.viaje_segundos)}</td>
                     <td className="px-3 py-2 text-right">{formatearDuracion(fila.ralenti_segundos)}</td>
@@ -381,6 +394,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
                     Totales de {filas.length} fila{filas.length === 1 ? '' : 's'}
                   </td>
                   <td className="px-3 py-2.5 text-right">{numero(totales.km, 1)}</td>
+                  <td className="px-3 py-2.5 text-right">{formatearDuracion(totales.prendido)}</td>
                   <td className="px-3 py-2.5 text-right">{formatearDuracion(totales.encendido)}</td>
                   <td className="px-3 py-2.5 text-right">{formatearDuracion(totales.viaje)}</td>
                   <td className="px-3 py-2.5 text-right">{formatearDuracion(totales.ralenti)}</td>

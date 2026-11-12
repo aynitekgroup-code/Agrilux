@@ -251,7 +251,7 @@ function AppRoutes() {
               user && isAprobado ? <AgroTrackPomalca /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />
             <Route path="/gestion/reportes" element={
-              user && isAprobado ? <Navigate to="/gestion/vehiculos-flota?section=modulos" replace /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
+              user && isAprobado ? <Navigate to="/gestion/vehiculos-flota?section=reportes" replace /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />
             <Route path="/gestion/finanzas" element={<Navigate to="/gestion" replace />} />
             <Route path="/empresa/miembros" element={

@@ -166,6 +166,12 @@ alter table if exists public.agrotrack_geocercas
 --    Las salidas pueden no cuadrar con las entradas: el dispositivo registra
 --    el estado en cada reporte y un periodo abierto (unidad aún dentro) deja
 --    la última entrada sin salida correspondiente.
+--
+--    CORTE POR DÍAS (bug reportado por el Ing. Carlos Perez): si la máquina
+--    entró el día anterior y dentro del rango su primer evento es una salida,
+--    la entrada ocurría antes del rango y no aparecía (solo salía la salida).
+--    En ese caso se cuenta una ENTRADA CONTINUADA al inicio del rango
+--    (p_desde), de modo que entradas y salidas cuadren al cortar por días.
 -- ---------------------------------------------------------------------------
 drop function if exists public.agrotrack_eventos_geocerca_flota(uuid, timestamptz, timestamptz, text, integer);
 
@@ -189,7 +195,7 @@ stable
 security definer
 set search_path = public, pg_catalog, pg_temp
 as $$
-  with base as (
+  with base_eventos as (
     select
       p.fecha,
       p.placa,
@@ -208,6 +214,50 @@ as $$
         or lower(p.evento) like '%salida%geocerca%')
       and p.pt_referencia is not null
       and btrim(p.pt_referencia) <> ''
+  ),
+  -- Primer evento de cada placa+geocerca dentro del rango.
+  primero as (
+    select distinct on (f.placa, f.geocerca)
+      f.placa, f.geocerca, f.es_salida
+    from base_eventos f
+    order by f.placa, f.geocerca, f.fecha
+  ),
+  -- Último evento de cada par ANTES del rango (índice empresa+fecha recorta).
+  ultimo_antes as (
+    select distinct on (p.placa, btrim(p.pt_referencia))
+      p.placa,
+      btrim(p.pt_referencia) as geocerca,
+      lower(p.evento)        as evento
+    from public.agrotrack_posiciones p
+    where (select public.onboarding_es_miembro(p_empresa_id))
+      and p.empresa_id = p_empresa_id
+      and p_desde is not null
+      and p.fecha < p_desde
+      and (lower(p.evento) like '%entrada%geocerca%'
+        or lower(p.evento) like '%salida%geocerca%')
+      and p.pt_referencia is not null
+      and btrim(p.pt_referencia) <> ''
+    order by p.placa, btrim(p.pt_referencia), p.fecha desc
+  ),
+  -- Entradas continuadas: el par estaba dentro al abrir el rango (su último
+  -- evento previo fue una entrada) y su primer evento dentro es una salida.
+  continuadas as (
+    select u.placa, u.geocerca
+    from ultimo_antes u
+    where u.evento like '%entrada%geocerca%'
+      and exists (
+        select 1 from primero f
+        where f.placa = u.placa and f.geocerca = u.geocerca and f.es_salida
+      )
+  ),
+  base as (
+    select f.fecha, f.placa, f.geocerca, f.es_entrada, f.es_salida
+    from base_eventos f
+    union all
+    -- La entrada continuada cuenta al inicio del rango (p_desde).
+    select p_desde as fecha, c.placa, c.geocerca,
+           true as es_entrada, false as es_salida
+    from continuadas c
   )
   select
     case when p_agrupar in ('dia', 'mes') then p_agrupar else 'geocerca' end as grupo_tipo,
@@ -239,6 +289,9 @@ grant execute on function public.agrotrack_eventos_geocerca_flota(uuid, timestam
 --      unidades      placas distintas que entraron
 --      visitas       tramos de permanencia (entrada -> salida o fin del tramo)
 --      permanencia   segundos dentro del polígono (mismo corte de 10 min)
+--      apagado/      desglose de esa permanencia por el estado del evento:
+--      ralentí/      apagado (estacionado/apagado) + ralentí (encendido y
+--      viajando      <= 5 km/h) + viajando (encendido y > 5 km/h) = total
 --      km            recorrido dentro del polígono (haversine, saltos >= 5 km
 --                    descartados)
 --      puntos        posiciones leídas dentro (sin duplicados)
@@ -264,6 +317,11 @@ returns table (
   unidades            bigint,
   visitas             bigint,
   permanencia_segundos bigint,
+  -- Desglose pedido por el Ing. Carlos Perez: apagado + ralentí + viajando
+  -- = hora total en la geocerca (= permanencia_segundos).
+  apagado_segundos     bigint,
+  ralenti_segundos     bigint,
+  viaje_segundos       bigint,
   km_recorridos       numeric,
   puntos              bigint,
   vel_max_kmh         numeric,
@@ -302,7 +360,7 @@ as $$
       and jsonb_typeof(g.geometria->'bbox') = 'array'
   ),
   puntos as (
-    select p.id, p.placa, p.fecha, p.secuencia, p.latitud, p.longitud, p.velocidad
+    select p.id, p.placa, p.fecha, p.secuencia, p.latitud, p.longitud, p.velocidad, p.evento
     from public.agrotrack_posiciones p
     -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
     where (select public.onboarding_es_miembro(p_empresa_id))
@@ -319,7 +377,7 @@ as $$
       g.id as geocerca_id, g.nombre, g.division, g.anexo, g.area_declarada,
       g.geojson, g.poligono,
       p.id as punto_id, p.placa, p.fecha, p.secuencia,
-      p.latitud, p.longitud, p.velocidad
+      p.latitud, p.longitud, p.velocidad, p.evento
     from geocercas g
     join puntos p
       on p.latitud  between g.lat_min and g.lat_max
@@ -333,7 +391,7 @@ as $$
     select
       c.geocerca_id, c.nombre, c.division, c.anexo, c.area_declarada,
       c.punto_id, c.placa, c.fecha, c.secuencia,
-      c.latitud, c.longitud, c.velocidad
+      c.latitud, c.longitud, c.velocidad, c.evento
     from candidatos c
     where ST_Contains(c.poligono, ST_SetSRID(ST_MakePoint(c.longitud, c.latitud), 4326))
   ),
@@ -381,7 +439,14 @@ as $$
           cos(radians(c.prev_lat)) * cos(radians(c.latitud)) *
           power(sin(radians(c.longitud - c.prev_lon) / 2.0), 2)
         )))
-      end                                                        as dist_km
+      end                                                        as dist_km,
+      -- Estado del tramo = estado del punto final (mismo criterio único que
+      -- agrotrack_actividad_flota): apagado / ralentí / viajando.
+      (not (lower(coalesce(c.evento, '')) like '%estacionad%'
+         or lower(coalesce(c.evento, '')) like '%apagad%'))       as encendido,
+      (not (lower(coalesce(c.evento, '')) like '%estacionad%'
+         or lower(coalesce(c.evento, '')) like '%apagad%'))
+        and coalesce(c.velocidad, 0) > 5                          as es_viaje
     from con_prev c
   )
   select
@@ -395,6 +460,16 @@ as $$
     count(*) filter (where not t.es_duplicado and t.dt_segundos is null) as visitas,
     coalesce(sum(case when t.es_duplicado then 0 else coalesce(t.dt_segundos, 0) end), 0)::bigint
                                                                as permanencia_segundos,
+    -- Desglose pedido por el Ing. Carlos Perez: apagado + ralentí + viajando
+    -- = hora total en la geocerca (= permanencia). Misma base de sum, solo
+    -- que partida por el estado del tramo.
+    coalesce((sum(case when t.es_duplicado then 0 else coalesce(t.dt_segundos, 0) end)
+              filter (where not t.encendido))::bigint, 0)        as apagado_segundos,
+    coalesce((sum(case when t.es_duplicado then 0 else coalesce(t.dt_segundos, 0) end)
+              filter (where t.encendido and not t.es_viaje))::bigint, 0)
+                                                                as ralenti_segundos,
+    coalesce((sum(case when t.es_duplicado then 0 else coalesce(t.dt_segundos, 0) end)
+              filter (where t.es_viaje))::bigint, 0)            as viaje_segundos,
     -- Mismos límites de km que el resto de la flota: tramo <= 10 min y salto
     -- >= 5 km descartado.
     coalesce(round(sum(

@@ -24,6 +24,9 @@ export const LIMITE_ESTADO_UNIDADES = 500;
 
 function mensajeDeError(error, contexto) {
   const detalle = error?.message || String(error);
+  if (/failed to fetch|networkerror|network request failed/i.test(detalle)) {
+    return `${contexto}: sin conexión con Supabase. Revisa tu red y reintenta.`;
+  }
   if (
     error?.code === 'PGRST202' ||
     /could not find the function|function .* does not exist|does not exist/i.test(detalle)
@@ -46,8 +49,25 @@ function mensajeDeError(error, contexto) {
   return `${contexto}: ${detalle}`;
 }
 
+/** Tope por llamada RPC (ms): evita el "Calculando..." eterno. */
+const TIMEOUT_RPC_MS = 15000;
+
 async function llamarRpc(nombre, params, contexto) {
-  const { data, error } = await supabase.rpc(nombre, params);
+  // Sin este tope, si la red o la RPC no responden la tarjeta queda cargando
+  // para siempre (cuelgue reportado por el Ing. Carlos Perez).
+  const controller = new AbortController();
+  const reloj = setTimeout(() => controller.abort(), TIMEOUT_RPC_MS);
+  let data = null;
+  let error = null;
+  try {
+    ({ data, error } = await supabase.rpc(nombre, params).abortSignal(controller.signal));
+  } catch (e) {
+    error = controller.signal.aborted
+      ? { message: `sin respuesta en ${TIMEOUT_RPC_MS / 1000} s; revisa tu conexión` }
+      : e;
+  } finally {
+    clearTimeout(reloj);
+  }
   if (error) throw new Error(mensajeDeError(error, contexto));
   return data || [];
 }

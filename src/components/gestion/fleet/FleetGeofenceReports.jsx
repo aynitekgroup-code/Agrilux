@@ -47,7 +47,11 @@ function CardEventos({ empresaId, periodo, fuente }) {
   const [descargaError, setDescargaError] = useState(null);
 
   useEffect(() => {
-    if (!empresaId || pendienteDeFecha) return undefined;
+    if (!empresaId || pendienteDeFecha) {
+      // Nunca dejar "Calculando..." colgado (ver FleetEventsSummary).
+      setEstado((prev) => (prev === 'cargando' ? 'inactivo' : prev));
+      return undefined;
+    }
     let cancelado = false;
     setEstado('cargando');
     setError(null);
@@ -246,7 +250,11 @@ function CardLotes({ empresaId, periodo, fuente }) {
   const [descargaError, setDescargaError] = useState(null);
 
   useEffect(() => {
-    if (!empresaId || pendienteDeFecha) return undefined;
+    if (!empresaId || pendienteDeFecha) {
+      // Nunca dejar "Calculando..." colgado (ver FleetEventsSummary).
+      setEstado((prev) => (prev === 'cargando' ? 'inactivo' : prev));
+      return undefined;
+    }
     let cancelado = false;
     setEstado('cargando');
     setError(null);
@@ -273,12 +281,18 @@ function CardLotes({ empresaId, periodo, fuente }) {
     return {
       visitas: sum('visitas'),
       permanencia: sum('permanencia_segundos'),
+      apagado: sum('apagado_segundos'),
+      ralenti: sum('ralenti_segundos'),
+      viaje: sum('viaje_segundos'),
       km: sum('km_recorridos'),
       puntos: sum('puntos'),
     };
   }, [filas]);
 
   const puedeExportar = estado === 'ok' && filas.length > 0;
+  // Si la RPC en Supabase todavía no tiene las columnas del desglose (script
+  // sin actualizar), se muestran «—» con un aviso en vez de un 0 engañoso.
+  const conDesglose = filas.some((f) => f.apagado_segundos != null || f.ralenti_segundos != null || f.viaje_segundos != null);
   const mensajePendiente =
     rango === 'todo' && !periodo?.desde
       ? 'Esta empresa todavía no tiene periodo cargado en agrotrack_posiciones, así que no hay cifras que mostrar.'
@@ -346,7 +360,10 @@ function CardLotes({ empresaId, periodo, fuente }) {
                     <th className="px-3 py-2.5 font-bold text-left">División</th>
                     <th className="px-3 py-2.5 font-bold text-right">Unidades</th>
                     <th className="px-3 py-2.5 font-bold text-right">Visitas</th>
-                    <th className="px-3 py-2.5 font-bold text-right">Permanencia</th>
+                    <th className="px-3 py-2.5 font-bold text-right">Apagado</th>
+                    <th className="px-3 py-2.5 font-bold text-right">Ralentí</th>
+                    <th className="px-3 py-2.5 font-bold text-right">Viajando</th>
+                    <th className="px-3 py-2.5 font-bold text-right">Total en geocerca</th>
                     <th className="px-3 py-2.5 font-bold text-right">Recorrido (km)</th>
                     <th className="px-3 py-2.5 font-bold text-right">Puntos</th>
                     <th className="px-3 py-2.5 font-bold text-right">Vel. máx.</th>
@@ -364,7 +381,16 @@ function CardLotes({ empresaId, periodo, fuente }) {
                       <td className="px-3 py-2 text-slate-500">{fila.division || '—'}</td>
                       <td className="px-3 py-2 text-right">{numero(fila.unidades, 0)}</td>
                       <td className="px-3 py-2 text-right font-semibold">{numero(fila.visitas, 0)}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-emerald-700">
+                      <td className="px-3 py-2 text-right text-slate-500">
+                        {conDesglose ? formatearDuracion(fila.apagado_segundos) : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-right text-amber-700">
+                        {conDesglose ? formatearDuracion(fila.ralenti_segundos) : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-right text-emerald-700">
+                        {conDesglose ? formatearDuracion(fila.viaje_segundos) : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-right font-bold text-slate-800">
                         {formatearDuracion(fila.permanencia_segundos)}
                       </td>
                       <td className="px-3 py-2 text-right">{numero(fila.km_recorridos, 1)}</td>
@@ -381,6 +407,15 @@ function CardLotes({ empresaId, periodo, fuente }) {
                       Totales de {filas.length} lote{filas.length === 1 ? '' : 's'} con actividad
                     </td>
                     <td className="px-3 py-2.5 text-right">{numero(totales.visitas, 0)}</td>
+                    <td className="px-3 py-2.5 text-right text-slate-500">
+                      {conDesglose ? formatearDuracion(totales.apagado) : '—'}
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-amber-700">
+                      {conDesglose ? formatearDuracion(totales.ralenti) : '—'}
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-emerald-700">
+                      {conDesglose ? formatearDuracion(totales.viaje) : '—'}
+                    </td>
                     <td className="px-3 py-2.5 text-right">{formatearDuracion(totales.permanencia)}</td>
                     <td className="px-3 py-2.5 text-right">{numero(totales.km, 1)}</td>
                     <td className="px-3 py-2.5 text-right">{numero(totales.puntos, 0)}</td>
@@ -393,6 +428,12 @@ function CardLotes({ empresaId, periodo, fuente }) {
             {filas.length >= LIMITE_LOTES ? (
               <p className="px-4 py-2 text-[10px] text-amber-600 border-t border-slate-50">
                 Se alcanzó el tope de {LIMITE_LOTES} lotes (límite de PostgREST). Reduce el rango.
+              </p>
+            ) : null}
+            {!conDesglose ? (
+              <p className="px-4 py-2 text-[10px] text-amber-600 border-t border-slate-50">
+                El desglose apagado / ralentí / viajando no está disponible todavía: ejecuta la versión
+                actualizada de scripts/agrotrack-geocercas-reportes.sql en el SQL Editor de Supabase.
               </p>
             ) : null}
           </>
@@ -408,7 +449,8 @@ function CardLotes({ empresaId, periodo, fuente }) {
           'Aún no hay datos reales para esta empresa.'
         )}
         <span className="block mt-0.5">
-          Punto dentro del polígono (ST_Contains) · tramos ≤ 10 min · haversine con salto ≥ 5 km descartado · hora de Perú · orden: más tiempo primero.
+          Punto dentro del polígono (ST_Contains) · tramos ≤ 10 min · haversine con salto ≥ 5 km descartado ·
+          apagado + ralentí + viajando = total en la geocerca · hora de Perú · orden: más tiempo primero.
         </span>
       </p>
     </div>

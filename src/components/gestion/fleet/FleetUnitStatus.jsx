@@ -38,7 +38,11 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
   const [descargaError, setDescargaError] = useState(null);
 
   useEffect(() => {
-    if (!empresaId || pendienteDeFecha) return undefined;
+    if (!empresaId || pendienteDeFecha) {
+      // Nunca dejar "Calculando..." colgado (ver FleetEventsSummary).
+      setEstado((prev) => (prev === 'cargando' ? 'inactivo' : prev));
+      return undefined;
+    }
     let cancelado = false;
     setEstado('cargando');
     setError(null);
@@ -96,9 +100,9 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
             <MapPinned size={17} />
           </div>
           <div className="min-w-0">
-            <h2 className="text-base font-bold text-slate-900">Estado de unidades + geocerca</h2>
+            <h2 className="text-base font-bold text-slate-900">Status de maquinaria (estado de unidades + geocerca)</h2>
             <p className="text-xs text-slate-500">
-              Reporte 34 de Zonar: última posición, evento y dirección de cada placa, con la geocerca donde está ahora.
+              Reporte 34 de Zonar "Estado de unidades": última posición, evento y dirección de cada placa, con la geocerca donde está ahora.
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">

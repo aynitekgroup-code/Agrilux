@@ -7,17 +7,21 @@ import { contarVertices } from './geocercasGeometria.js';
 
 /** Etiqueta de cada tipo de geocerca para mostrarle a la IA y en la leyenda. */
 export const ETIQUETAS_GRUPO = {
-  autorizada: 'Linderos',
+  autorizada: 'Campos',
   oficina: 'Oficinas',
   distrito: 'Distritos',
   poligono: 'Manual',
 };
 
-/** Colores del mapa por grupo (coinciden con la leyenda). */
+/** Colores del mapa por grupo (coinciden con la leyenda).
+ *  Los campos (antes "linderos") van en violeta y los distritos en verde:
+ *  sobre la imagen satelital verde los campos se perdían (pedido del
+ *  Ing. Carlos Perez: "intercambia los colores de linderos con distritos,
+ *  tiene que visualizarse más los campos"). */
 export const COLORES_GRUPO = {
-  autorizada: { borde: '#15803D', relleno: '#22C55E' },
+  autorizada: { borde: '#7C3AED', relleno: '#A78BFA' },
   oficina: { borde: '#2563EB', relleno: '#60A5FA' },
-  distrito: { borde: '#7C3AED', relleno: '#A78BFA' },
+  distrito: { borde: '#15803D', relleno: '#22C55E' },
   poligono: { borde: '#0F766E', relleno: '#2DD4BF' },
   seleccion: { borde: '#B45309', relleno: '#F59E0B' },
 };
@@ -26,7 +30,7 @@ export const COLORES_GRUPO = {
 export const ACCIONES_VALIDAS = [
   'enfocar',         // { geocerca_id } zoom a la geocerca
   'seleccionar',     // { geocerca_id } seleccionarla (ficha + resalte)
-  'filtrar_grupo',   // { grupo } mostrar solo linderos/oficinas/distritos
+  'filtrar_grupo',   // { grupo } mostrar solo campos/oficinas/distritos
   'limpiar',         // quitar filtros y selección
   'ajustar_todo',    // encuadrar todas las geocercas visibles
 ];

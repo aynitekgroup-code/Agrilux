@@ -53,7 +53,13 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
   );
 
   useEffect(() => {
-    if (!empresaId || pendienteDeFecha) return undefined;
+    if (!empresaId || pendienteDeFecha) {
+      // Nunca dejar "Calculando..." colgado: si el rango aún no está listo
+      // (o cambió a uno pendiente), volvemos a inactivo para que la tarjeta
+      // muestre el mensaje de espera en lugar de girar para siempre.
+      setEstado((prev) => (prev === 'cargando' ? 'inactivo' : prev));
+      return undefined;
+    }
     let cancelado = false;
     setEstado('cargando');
     setError(null);

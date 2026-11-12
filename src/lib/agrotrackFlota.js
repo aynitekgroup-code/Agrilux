@@ -122,6 +122,9 @@ export function severidadDeEvento(evento) {
 
 function mensajeDeError(error, contexto) {
   const detalle = error?.message || String(error);
+  if (/failed to fetch|networkerror|network request failed/i.test(detalle)) {
+    return `${contexto}: sin conexión con Supabase. Revisa tu red y reintenta.`;
+  }
   if (
     error?.code === 'PGRST202' ||
     /could not find the function|function .* does not exist|does not exist/i.test(detalle)
@@ -138,7 +141,22 @@ function mensajeDeError(error, contexto) {
 }
 
 async function llamarRpc(nombre, params, contexto) {
-  const { data, error } = await supabase.rpc(nombre, params);
+  // Tope por llamada: sin él, si la red o la RPC no responden la tarjeta se
+  // queda en "Calculando..." para siempre (el Ing. Carlos Perez reportó ese
+  // cuelgue en Eventos resumidos). A los 15 s abortamos y mostramos error.
+  const controller = new AbortController();
+  const reloj = setTimeout(() => controller.abort(), TIMEOUT_RPC_MS);
+  let data = null;
+  let error = null;
+  try {
+    ({ data, error } = await supabase.rpc(nombre, params).abortSignal(controller.signal));
+  } catch (e) {
+    error = controller.signal.aborted
+      ? { message: `sin respuesta en ${TIMEOUT_RPC_MS / 1000} s; revisa tu conexión` }
+      : e;
+  } finally {
+    clearTimeout(reloj);
+  }
   if (error) throw new Error(mensajeDeError(error, contexto));
   return data || [];
 }
@@ -170,6 +188,20 @@ export async function obtenerAlertasFlota(empresaId, { desde = null, hasta = nul
     'agrotrack_alertas_flota',
     { p_empresa_id: empresaId, p_desde: desde, p_hasta: hasta, p_limite: limite },
     'No se pudieron cargar las alertas'
+  );
+}
+
+/**
+ * Conteo real de eventos por texto de la columna `evento` (agrupación de la
+ * tabla entera hecha por SQL): una fila { evento, total } por tipo. Va al
+ * reporte "Eventos" del catálogo; PostgREST nunca ve las 100 mil filas.
+ */
+export async function obtenerConteoEventos(empresaId) {
+  if (!empresaId) return [];
+  return llamarRpc(
+    'agrotrack_conteo_eventos',
+    { p_empresa_id: empresaId },
+    'No se pudo cargar el conteo de eventos'
   );
 }
 

@@ -90,6 +90,7 @@ export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', p
       'Placa': f.placa,
       'Unidad': f.unidad || f.placa,
       'Recorrido (km)': Number(f.km_recorridos || 0),
+      'Horas prendido (h)': horas(Number(f.viaje_segundos || 0) + Number(f.ralenti_segundos || 0)),
       'Encendido (h)': horas(encendido),
       'Hora de viaje (h)': horas(f.viaje_segundos),
       'Ralentí (h)': horas(ralenti),
@@ -109,6 +110,7 @@ export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', p
     'Placa': '',
     'Unidad': `${filas.length} fila(s)`,
     'Recorrido (km)': Number(suma('km_recorridos').toFixed(2)),
+    'Horas prendido (h)': horas(suma('viaje_segundos') + suma('ralenti_segundos')),
     'Encendido (h)': horas(totalEncendido),
     'Hora de viaje (h)': horas(suma('viaje_segundos')),
     'Ralentí (h)': horas(totalRalenti),
@@ -120,8 +122,8 @@ export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', p
 
   const ws = XLSX.utils.json_to_sheet(datos);
   ws['!cols'] = [
-    { wch: 14 }, { wch: 12 }, { wch: 30 }, { wch: 14 }, { wch: 14 },
-    { wch: 16 }, { wch: 12 }, { wch: 11 }, { wch: 15 }, { wch: 9 }, { wch: 12 },
+    { wch: 14 }, { wch: 12 }, { wch: 30 }, { wch: 14 }, { wch: 17 },
+    { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 11 }, { wch: 15 }, { wch: 9 }, { wch: 12 },
   ];
   XLSX.utils.book_append_sheet(wb, ws, 'Actividades');
 
@@ -218,7 +220,10 @@ export function exportarLotesExcel(filas, { rangoTexto = '' } = {}) {
     'Área (ha)': f.area_ha == null ? '' : Number(f.area_ha),
     'Unidades': Number(f.unidades || 0),
     'Visitas': Number(f.visitas || 0),
-    'Permanencia (h)': horas(f.permanencia_segundos),
+    'Apagado (h)': f.apagado_segundos == null ? '' : horas(f.apagado_segundos),
+    'Ralentí (h)': f.ralenti_segundos == null ? '' : horas(f.ralenti_segundos),
+    'Viajando (h)': f.viaje_segundos == null ? '' : horas(f.viaje_segundos),
+    'Total en geocerca (h)': horas(f.permanencia_segundos),
     'Recorrido (km)': Number(f.km_recorridos || 0),
     'Puntos': Number(f.puntos || 0),
     'Vel. máx. (km/h)': f.vel_max_kmh == null ? '' : Number(f.vel_max_kmh),
@@ -234,7 +239,10 @@ export function exportarLotesExcel(filas, { rangoTexto = '' } = {}) {
     'Área (ha)': '',
     'Unidades': '',
     'Visitas': suma('visitas'),
-    'Permanencia (h)': horas(suma('permanencia_segundos')),
+    'Apagado (h)': horas(suma('apagado_segundos')),
+    'Ralentí (h)': horas(suma('ralenti_segundos')),
+    'Viajando (h)': horas(suma('viaje_segundos')),
+    'Total en geocerca (h)': horas(suma('permanencia_segundos')),
     'Recorrido (km)': Number(suma('km_recorridos').toFixed(2)),
     'Puntos': suma('puntos'),
     'Vel. máx. (km/h)': '',
@@ -245,7 +253,8 @@ export function exportarLotesExcel(filas, { rangoTexto = '' } = {}) {
   const ws = XLSX.utils.json_to_sheet(datos);
   ws['!cols'] = [
     { wch: 24 }, { wch: 16 }, { wch: 14 }, { wch: 11 }, { wch: 10 }, { wch: 9 },
-    { wch: 16 }, { wch: 15 }, { wch: 9 }, { wch: 15 }, { wch: 22 }, { wch: 22 },
+    { wch: 12 }, { wch: 11 }, { wch: 12 }, { wch: 19 }, { wch: 15 }, { wch: 9 },
+    { wch: 15 }, { wch: 22 }, { wch: 22 },
   ];
   XLSX.utils.book_append_sheet(wb, ws, 'Lotes');
 
@@ -255,6 +264,7 @@ export function exportarLotesExcel(filas, { rangoTexto = '' } = {}) {
     { Concepto: 'Fuente', Detalle: 'public.agrotrack_geocercas + public.agrotrack_posiciones (agrotrack_lotes_flota)' },
     { Concepto: 'Motor', Detalle: 'PostGIS: punto dentro del polígono (ST_Contains, EPSG:4326)' },
     { Concepto: 'Visita', Detalle: 'Tramo de permanencia; un hueco de más de 10 minutos corta la visita' },
+    { Concepto: 'Desglose', Detalle: 'Apagado + Ralentí + Viajando = Total en geocerca (estado según el evento del punto final de cada tramo)' },
     { Concepto: 'Recorrido', Detalle: 'Haversine entre puntos consecutivos, tramos <= 10 min, saltos >= 5 km descartados' },
     { Concepto: 'Duplicados', Detalle: 'Puntos repetidos (misma fecha + secuencia) no cuentan dos veces' },
     { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },

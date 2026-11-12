@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, AlertTriangle, RotateCw, CalendarClock } from 'lucide-react';
+import { Loader2, AlertTriangle, RotateCw, CalendarClock, Database } from 'lucide-react';
 import { rangoDiaLima, rangoMesLima, formatearRango, ultimoDiaLima } from '../../../lib/agrotrackFlota';
 
 /**
@@ -153,4 +153,41 @@ export function CuerpoEstado({ pendienteDeFecha, mensajePendiente, estado, error
     );
   }
   return children;
+}
+
+/**
+ * Estado honesto de un reporte que todavía no tiene fuente real de datos:
+ * en lugar de cifras inventadas se explica qué falta. Compartido por la
+ * consola de flota y por ReportesPage (catálogo de módulos).
+ */
+export function PanelSinDatos({ titulo, descripcion, puntos = [], nota = null }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6">
+      <div className="flex items-start gap-3">
+        <span className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center shrink-0">
+          <Database size={18} />
+        </span>
+        <div className="min-w-0">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide">
+            Sin datos
+          </span>
+          <h3 className="mt-2 text-base font-bold text-slate-800">{titulo}</h3>
+          <p className="text-sm text-slate-500 mt-1 leading-relaxed max-w-3xl">{descripcion}</p>
+          {puntos.length ? (
+            <ul className="mt-3 space-y-1.5">
+              {puntos.map((punto) => (
+                <li key={punto} className="text-xs text-slate-500 flex items-start gap-2">
+                  <span className="mt-1.5 w-1 h-1 rounded-full bg-slate-300 shrink-0" />
+                  {punto}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {nota ? (
+            <p className="mt-3 text-[11px] text-slate-400 border-t border-slate-100 pt-3 leading-relaxed">{nota}</p>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
 }

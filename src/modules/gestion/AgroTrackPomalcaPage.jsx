@@ -22,6 +22,7 @@ import VigiaFlota from '../../components/gestion/fleet/VigiaFlota';
 import RemoteCutModal from '../../components/gestion/fleet/RemoteCutModal';
 import FleetAlerts from '../../components/gestion/fleet/FleetAlerts';
 import ModulesOverview from '../../components/gestion/fleet/ModulesOverview';
+import { PanelSinDatos } from '../../components/gestion/fleet/reportesComunes';
 import ReportesPage from './ReportesPage';
 import { FLEET } from '../../components/gestion/fleet/fleetTokens';
 
@@ -52,40 +53,10 @@ function SectionHeading({ title, description, children }) {
 }
 
 /**
- * Estado honesto de una sección que todavía no tiene fuente real de datos.
- * Reemplaza a los tableros demostrativos: no se muestran cifras inventadas.
+ * PanelSinDatos (estado honesto de una sección sin fuente real de datos) se
+ * importa de reportesComunes.jsx para que la consola y el catálogo de
+ * reportes se vean idénticos.
  */
-function PanelSinDatos({ titulo, descripcion, puntos = [], nota = null }) {
-  return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6">
-      <div className="flex items-start gap-3">
-        <span className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center shrink-0">
-          <Database size={18} />
-        </span>
-        <div className="min-w-0">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide">
-            Sin datos
-          </span>
-          <h3 className="mt-2 text-base font-bold text-slate-800">{titulo}</h3>
-          <p className="text-sm text-slate-500 mt-1 leading-relaxed max-w-3xl">{descripcion}</p>
-          {puntos.length ? (
-            <ul className="mt-3 space-y-1.5">
-              {puntos.map((punto) => (
-                <li key={punto} className="text-xs text-slate-500 flex items-start gap-2">
-                  <span className="mt-1.5 w-1 h-1 rounded-full bg-slate-300 shrink-0" />
-                  {punto}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {nota ? (
-            <p className="mt-3 text-[11px] text-slate-400 border-t border-slate-100 pt-3 leading-relaxed">{nota}</p>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
   const [searchParams] = useSearchParams();
@@ -347,7 +318,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
         <div className="space-y-4">
           <SectionHeading
             title="Reportes de flota"
-            description="Los 4 reportes pedidos por el Ing. Carlos Perez: actividad por día/mes (recorrido, encendido, hora de viaje y ralentí), eventos resumidos Stop/Idle/Drive y estado de unidades con su geocerca actual, todos exportables a Excel."
+            description="Los 4 reportes pedidos por el Ing. Carlos Perez: Actividad por día/mes (recorrido, horas prendido, hora de viaje y ralentí), Eventos resumidos Stop/Idle/Drive, Status de maquinaria (estado de unidades con su geocerca actual) y reportes de geocercas, todos con datos reales y exportables a Excel."
           />
           <FleetReports
             empresaId={empresa_activa_id}
@@ -371,6 +342,17 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             empresaId={empresa_activa_id}
             periodo={conDatosReales ? panel.periodo : null}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+          />
+          {/* Esquema de módulos fusionado dentro de Reportes (pedido por el
+              Ing. Carlos Perez: la pestaña "Esquema de modulos" desaparece y
+              su contenido vive aquí). ModulesOverview filtra el catálogo. */}
+          <ModulesOverview selectedId={selectedFleetModule} onSelect={setSelectedFleetModule} />
+          <ReportesPage
+            empresaId={empresa_activa_id}
+            periodo={conDatosReales ? panel.periodo : null}
+            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+            vehicles={vehiclesFuente}
+            selectedModuleId={selectedFleetModule}
           />
         </div>
       ) : null}
@@ -432,13 +414,6 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             ]}
             nota="Las órdenes simuladas que aparecen en la Consola principal se mantienen solo como demostración (así se pidió)."
           />
-        </div>
-      ) : null}
-
-      {section === 'modulos' ? (
-        <div className="space-y-4">
-          <ModulesOverview selectedId={selectedFleetModule} onSelect={setSelectedFleetModule} />
-          <ReportesPage selectedModuleId={selectedFleetModule} />
         </div>
       ) : null}
 
