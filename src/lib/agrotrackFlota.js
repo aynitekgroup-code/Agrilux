@@ -140,6 +140,9 @@ function mensajeDeError(error, contexto) {
   return `${contexto}: ${detalle}`;
 }
 
+/** Tope por llamada RPC (ms): evita el "Calculando..." eterno. */
+const TIMEOUT_RPC_MS = 15000;
+
 async function llamarRpc(nombre, params, contexto) {
   // Tope por llamada: sin él, si la red o la RPC no responden la tarjeta se
   // queda en "Calculando..." para siempre (el Ing. Carlos Perez reportó ese
