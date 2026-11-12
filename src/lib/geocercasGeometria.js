@@ -79,8 +79,38 @@ export function listarVertices(geometry) {
   return salida;
 }
 
-/* ---------- bbox ---------- */
+/** Área de un anillo en m² (shoelace sobre un plano local en su latitud). */
+function areaAnilloM2(ring) {
+  const abierto = anilloAbierto(ring);
+  if (abierto.length < 3) return 0;
+  const lat0 = (abierto.reduce((s, p) => s + p[1], 0) / abierto.length) * Math.PI / 180;
+  const kx = Math.cos(lat0) * Math.PI / 180 * 6371008.8;
+  const ky = Math.PI / 180 * 6371008.8;
+  let suma = 0;
+  for (let i = 0; i < abierto.length; i++) {
+    const [x1, y1] = abierto[i];
+    const [x2, y2] = abierto[(i + 1) % abierto.length];
+    suma += (x1 * kx) * (y2 * ky) - (x2 * kx) * (y1 * ky);
+  }
+  return Math.abs(suma) / 2;
+}
 
+/**
+ * Área total de la geometría en HECTÁREAS (exterior menos huecos, todas las
+ * partes sumadas). Aproximación sobre plano local: suficiente para la ficha
+ * del mapa (error < 0.5 % a la escala de un lote).
+ */
+export function areaHectareas(geometry) {
+  let m2 = 0;
+  partesDe(geometry).forEach((parte) => {
+    if (!parte.length) return;
+    m2 += areaAnilloM2(parte[0]);
+    for (let i = 1; i < parte.length; i++) m2 -= areaAnilloM2(parte[i]);
+  });
+  return Math.max(0, m2) / 10000;
+}
+
+/* ---------- bbox ---------- */
 /** [lonMin, latMin, lonMax, latMax] de todos los puntos de la geometría. */
 export function calcularBbox(geometry) {
   let lonMin = Infinity;

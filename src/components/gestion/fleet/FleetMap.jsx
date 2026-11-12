@@ -32,6 +32,9 @@ import {
   rellenarHueco,
 } from '../../../lib/geocercasGeometria';
 import { GeocercaEditorPanel, GeocercaVertexLayer } from './GeocercaEditor';
+import AsistenteMapa from './AsistenteMapa';
+import { ControlVistaSatelite, FichaGeocerca, LeyendaGrupos } from './MapaControles';
+import { COLORES_GRUPO, ETIQUETAS_GRUPO } from '../../../lib/asistenteMapa';
 import {
   formatearFechaHora,
   obtenerRecorridoFlota,
@@ -135,10 +138,11 @@ function textoResumenImportacion(resumen) {
   return `Importación correcta: ${partes.join(' · ')}.`;
 }
 
-function FitMapToGeofences({ geoJson, focusRequest }) {
+function FitMapToGeofences({ geoJson, focusRequest, fitToken = 0 }) {
   const map = useMap();
 
-  // Encuadra todas las geocercas cuando cambian los datos.
+  // Encuadra todas las geocercas cuando cambian los datos (o cuando el
+  // asistente JARVIS pide "ajustar todo": fitToken cambia y re-encuadra).
   useEffect(() => {
     const bounds = L.geoJSON(geoJson).getBounds();
     if (bounds.isValid()) {
@@ -146,7 +150,7 @@ function FitMapToGeofences({ geoJson, focusRequest }) {
     } else {
       map.setView([-6.78, -79.83], 13, { animate: false });
     }
-  }, [geoJson, map]);
+  }, [geoJson, map, fitToken]);
 
   // Hace zoom a la geocerca elegida cada vez que el usuario la selecciona
   // (aunque sea la misma que ya estaba seleccionada).
@@ -161,14 +165,27 @@ function FitMapToGeofences({ geoJson, focusRequest }) {
   return null;
 }
 
+// Tooltip del polígono (FASE 3.8): HTML con el nombre destacado y el grupo
+// coloreado; queda pegado al cursor para que sea fácil de leer.
 function featureTooltip(feature, layer) {
   const properties = feature.properties || {};
-  const details = [properties.nombre, properties.division, properties.anexo, properties.distrito]
+  const tipo = properties.tipo && COLORES_GRUPO[properties.tipo] ? properties.tipo : 'poligono';
+  const grupo = ETIQUETAS_GRUPO[tipo];
+  const color = COLORES_GRUPO[tipo].borde;
+  const extras = [properties.division, properties.anexo, properties.distrito]
     .filter(Boolean)
     .join(' · ');
-  if (details) {
-    layer.bindTooltip(details);
-    layer.bindPopup(details);
+  const html = `
+    <div style="font-family:inherit;line-height:1.35;min-width:120px">
+      <p style="font-weight:700;font-size:12.5px;color:#0F172A;margin:0">${properties.nombre || '(sin nombre)'}</p>
+      <p style="margin:2px 0 0;font-size:10.5px">
+        <span style="display:inline-block;padding:1px 7px;border-radius:999px;background:${color};color:#fff;font-weight:700">${grupo}</span>
+        ${extras ? `<span style="color:#475569;margin-left:4px">${extras}</span>` : ''}
+      </p>
+    </div>`;
+  if (properties.nombre) {
+    layer.bindTooltip(html, { sticky: true, direction: 'top', opacity: 1, className: 'fleet-geocerca-tooltip' });
+    layer.bindPopup(html);
   }
 }
 
@@ -219,6 +236,10 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const [focusRequest, setFocusRequest] = useState(null);
   const [listening, setListening] = useState(false);
   const [voiceMessage, setVoiceMessage] = useState('');
+  // FASE 3.8: mapa llamativo — filtro por grupo (leyenda / JARVIS) y vista satélite.
+  const [filtroGrupo, setFiltroGrupo] = useState('');
+  const [vistaSatelite, setVistaSatelite] = useState(false);
+  const [fitToken, setFitToken] = useState(0);
   // FASE 2: recorrido de la unidad seleccionada en un día calendario de Perú.
   const [rutaFecha, setRutaFecha] = useState('');
   const [rutaPuntos, setRutaPuntos] = useState(null); // null = sin cargar
@@ -268,6 +289,18 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       ),
     };
   }, [editando, editGeo, geoJsonBase, selectedGeofenceId]);
+
+  // FASE 3.8: lo visible = pintado menos el filtro de grupo (si lo hay).
+  const geoJsonVisible = useMemo(() => {
+    if (!filtroGrupo) return geoJson;
+    return {
+      ...geoJson,
+      features: geoJson.features.filter((feature) => {
+        const tipo = feature.properties?.tipo;
+        return (tipo && COLORES_GRUPO[tipo] ? tipo : 'poligono') === filtroGrupo;
+      }),
+    };
+  }, [geoJson, filtroGrupo]);
 
   const geofenceSummary = useMemo(() => {
     const grupos = new Map();
@@ -479,6 +512,39 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     setVoiceMessage('');
     setEditMensaje(null);
   };
+
+  /* ----- Acciones del asistente JARVIS (FASE 3.8) -----
+   * El chat le pide a la IA una acción; este callback la ejecuta en el mapa
+   * y devuelve una nota corta que JARVIS muestra debajo de su respuesta. */
+  const ejecutarAccionAsistente = useCallback((accion) => {
+    if (!accion || typeof accion !== 'object') return '';
+    if (accion.tipo === 'enfocar' || accion.tipo === 'seleccionar') {
+      const objetivo = geofences.find((g) => g.id === accion.geocerca_id);
+      if (!objetivo) throw new Error('No encontré esa geocerca en la empresa.');
+      focusGeofence(objetivo);
+      if (accion.tipo === 'seleccionar') setGeofenceSearch(objetivo.nombre || '');
+      return accion.tipo === 'enfocar'
+        ? `Llevándote a «${objetivo.nombre}».`
+        : `Seleccionada «${objetivo.nombre}».`;
+    }
+    if (accion.tipo === 'filtrar_grupo') {
+      const grupo = accion.grupo;
+      if (!grupo || !COLORES_GRUPO[grupo]) throw new Error('Ese grupo no existe.');
+      setFiltroGrupo(grupo);
+      return `Mostrando solo: ${ETIQUETAS_GRUPO[grupo]}.`;
+    }
+    if (accion.tipo === 'limpiar') {
+      setFiltroGrupo('');
+      clearSelection();
+      return 'Filtros y selección limpiados.';
+    }
+    if (accion.tipo === 'ajustar_todo') {
+      setFiltroGrupo('');
+      setFitToken(Date.now());
+      return 'Encuadrando todas las geocercas.';
+    }
+    return '';
+  }, [geofences, focusGeofence]);
 
   /* ----- Editor de geocercas (FASE 3.7) ----- */
 
@@ -950,16 +1016,19 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             <button
               type="button"
               onClick={toggleVoiceSearch}
-              className={`shrink-0 rounded-full p-1.5 transition-colors ${
+              className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full transition-all hover:scale-105 focus:outline-none focus:ring-4 ${
                 listening
-                  ? 'animate-pulse bg-red-100 text-red-700'
-                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  ? 'animate-pulse bg-gradient-to-br from-red-400 to-red-600 text-white shadow-[0_0_18px_rgba(239,68,68,0.6)] focus:ring-red-200'
+                  : 'bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 text-white shadow-[0_4px_16px_rgba(16,185,129,0.5)] focus:ring-emerald-200'
               }`}
               aria-label={listening ? 'Detener búsqueda por voz' : 'Buscar geocerca por voz'}
               aria-pressed={listening}
               title={SpeechRecognitionCtor ? 'Buscar por voz' : 'Tu navegador no soporta voz'}
             >
-              {SpeechRecognitionCtor ? <Mic size={16} /> : <MicOff size={16} />}
+              {SpeechRecognitionCtor ? <Mic size={21} /> : <MicOff size={21} />}
+              {!listening && SpeechRecognitionCtor ? (
+                <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/30" aria-hidden="true" />
+              ) : null}
             </button>
           </div>
 
@@ -1079,7 +1148,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </div>
       ) : null}
 
-      <div className="px-3 sm:px-5 pb-2">
+      <div className="relative px-3 sm:px-5 pb-2">
         <MapContainer
           center={[-6.78, -79.83]}
           zoom={12}
@@ -1087,20 +1156,32 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           style={{ width: '100%', height: 440, borderRadius: 14, background: '#E7EDE1' }}
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            key={vistaSatelite ? 'satelite' : 'calle'}
+            attribution={
+              vistaSatelite
+                ? 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics'
+                : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }
+            url={
+              vistaSatelite
+                ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+            }
           />
           <GeoJSON
-            key={`${empresaId || 'none'}-${mapRevision}-${editRevision}`}
-            data={geoJson}
+            key={`${empresaId || 'none'}-${mapRevision}-${editRevision}-${filtroGrupo || 'todos'}`}
+            data={geoJsonVisible}
             style={(feature) => {
-              const selected = feature?.properties?.id === selectedGeofenceId;
+              const properties = feature?.properties || {};
+              const selected = properties.id === selectedGeofenceId;
+              const tipo = properties.tipo && COLORES_GRUPO[properties.tipo] ? properties.tipo : 'poligono';
+              const paleta = selected ? COLORES_GRUPO.seleccion : COLORES_GRUPO[tipo];
               return {
-                color: selected ? '#B45309' : '#15803D',
-                weight: selected ? 4 : 1.5,
-                opacity: 0.9,
-                fillColor: selected ? '#F59E0B' : '#22C55E',
-                fillOpacity: selected ? 0.35 : 0.16,
+                color: paleta.borde,
+                weight: selected ? 4 : 2,
+                opacity: 0.95,
+                fillColor: paleta.relleno,
+                fillOpacity: selected ? 0.4 : 0.22,
               };
             }}
             onEachFeature={(feature, layer) => {
@@ -1126,7 +1207,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             />
           ) : null}
           {geoJsonBase.features.length > 0 ? (
-            <FitMapToGeofences geoJson={geoJsonBase} focusRequest={focusRequest} />
+            <FitMapToGeofences geoJson={geoJsonBase} focusRequest={focusRequest} fitToken={fitToken} />
           ) : null}
           {rutaValidos.length > 0 ? (
             <>
@@ -1229,6 +1310,25 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               </CircleMarker>
             );
           })}
+          {/* FASE 3.8: controles flotantes del mapa (leyenda, ficha, satélite, JARVIS). */}
+          {geofences.length > 0 ? (
+            <>
+              <LeyendaGrupos geofences={geofences} />
+              <ControlVistaSatelite
+                satelite={vistaSatelite}
+                onToggle={() => setVistaSatelite((valor) => !valor)}
+              />
+            </>
+          ) : null}
+          <FichaGeocerca
+            geocerca={selectedGeofence}
+            onCerrar={() => setSelectedGeofenceId('')}
+          />
+          <AsistenteMapa
+            geofences={geofences}
+            seleccion={selectedGeofence || null}
+            onAccion={ejecutarAccionAsistente}
+          />
         </MapContainer>
       </div>
 
