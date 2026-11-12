@@ -90,8 +90,9 @@ export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', p
       'Placa': f.placa,
       'Unidad': f.unidad || f.placa,
       'Recorrido (km)': Number(f.km_recorridos || 0),
+      // "Encendido" se quitó (7:47 a. m.): duplicaba "Horas prendido"
+      // (encendido = viaje + ralentí, criterio único del reporte).
       'Horas prendido (h)': horas(Number(f.viaje_segundos || 0) + Number(f.ralenti_segundos || 0)),
-      'Encendido (h)': horas(encendido),
       'Hora de viaje (h)': horas(f.viaje_segundos),
       'Ralentí (h)': horas(ralenti),
       '% ralentí': encendido > 0 ? Math.round((ralenti / encendido) * 1000) / 10 : 0,
@@ -111,7 +112,6 @@ export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', p
     'Unidad': `${filas.length} fila(s)`,
     'Recorrido (km)': Number(suma('km_recorridos').toFixed(2)),
     'Horas prendido (h)': horas(suma('viaje_segundos') + suma('ralenti_segundos')),
-    'Encendido (h)': horas(totalEncendido),
     'Hora de viaje (h)': horas(suma('viaje_segundos')),
     'Ralentí (h)': horas(totalRalenti),
     '% ralentí': totalEncendido > 0 ? Math.round((totalRalenti / totalEncendido) * 1000) / 10 : 0,
@@ -123,7 +123,7 @@ export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', p
   const ws = XLSX.utils.json_to_sheet(datos);
   ws['!cols'] = [
     { wch: 14 }, { wch: 12 }, { wch: 30 }, { wch: 14 }, { wch: 17 },
-    { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 11 }, { wch: 15 }, { wch: 9 }, { wch: 12 },
+    { wch: 16 }, { wch: 12 }, { wch: 11 }, { wch: 15 }, { wch: 9 }, { wch: 12 },
   ];
   XLSX.utils.book_append_sheet(wb, ws, 'Actividades');
 
@@ -210,7 +210,7 @@ export function exportarEventosGeocercaExcel(filas, { agrupar = 'geocerca', rang
  * @param {Array} filas  filas de agrotrack_lotes_flota
  * @param {{rangoTexto?: string}} opciones
  */
-export function exportarLotesExcel(filas, { rangoTexto = '' } = {}) {
+export function exportarLotesExcel(filas, { rangoTexto = '', placa = '', horaDesde = '', horaHasta = '' } = {}) {
   const wb = XLSX.utils.book_new();
 
   const datos = (filas || []).map((f) => ({
@@ -261,6 +261,8 @@ export function exportarLotesExcel(filas, { rangoTexto = '' } = {}) {
   const criterio = [
     { Concepto: 'Reporte', Detalle: 'Tiempo en cada lote (Agrilux · réplica de Zonar)' },
     { Concepto: 'Rango', Detalle: rangoTexto || 'Todo el periodo cargado' },
+    { Concepto: 'Unidad', Detalle: placa || 'Todas las unidades' },
+    { Concepto: 'Franja horaria', Detalle: (horaDesde || horaHasta) ? `${horaDesde || '00:00'} a ${horaHasta || '23:59'} (hora de Perú)` : 'Todo el día' },
     { Concepto: 'Fuente', Detalle: 'public.agrotrack_geocercas + public.agrotrack_posiciones (agrotrack_lotes_flota)' },
     { Concepto: 'Motor', Detalle: 'PostGIS: punto dentro del polígono (ST_Contains, EPSG:4326)' },
     { Concepto: 'Visita', Detalle: 'Tramo de permanencia; un hueco de más de 10 minutos corta la visita' },
@@ -365,6 +367,10 @@ export function exportarEstadoUnidadesExcel(filas, { rangoTexto = '', periodo = 
       'Odómetro actual': '—',
       'Geocerca': f.geocerca || 'Fuera de geocercas',
       'División': f.geocerca_division || '—',
+      // Fallback pedido por el Ing. Carlos Perez: si la última posición está
+      // fuera, la última geocerca de campo en la que estuvo y cuándo.
+      'Últ. geocerca (si está fuera)': f.geocerca ? '' : (f.geocerca_ultima || ''),
+      'Últ. geocerca fecha': (!f.geocerca && f.geocerca_ultima_fecha) ? formatearFechaLarga(f.geocerca_ultima_fecha) : '',
     };
   });
 
@@ -372,6 +378,7 @@ export function exportarEstadoUnidadesExcel(filas, { rangoTexto = '', periodo = 
   ws['!cols'] = [
     { wch: 12 }, { wch: 30 }, { wch: 22 }, { wch: 15 }, { wch: 45 },
     { wch: 22 }, { wch: 11 }, { wch: 17 }, { wch: 26 }, { wch: 18 },
+    { wch: 28 }, { wch: 22 },
   ];
   XLSX.utils.book_append_sheet(wb, ws, 'Estado unidades');
 
@@ -380,7 +387,7 @@ export function exportarEstadoUnidadesExcel(filas, { rangoTexto = '', periodo = 
     { Concepto: 'Rango', Detalle: rangoTexto || 'Todo el periodo cargado' },
     { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones + public.agrotrack_geocercas (agrotrack_estado_unidades_flota)' },
     { Concepto: 'Motor', Detalle: 'PostGIS: polígono que contiene la última posición (ST_Contains, EPSG:4326) con prefilter de bbox' },
-    { Concepto: 'Geocerca', Detalle: 'Nombre del polígono que contiene la última posición; "Fuera de geocercas" si no cae en ninguno' },
+    { Concepto: 'Geocerca', Detalle: 'Nombre del polígono que contiene la última posición; si está fuera, "Últ. geocerca" trae la última geocerca de campo en la que estuvo la unidad (evento pt_referencia); "Fuera de geocercas" solo si no hay ninguna' },
     { Concepto: 'Estado', Detalle: 'En ruta / Detenido / Sin conexión contra max(fecha) del periodo cargado (umbral 30 min), nunca contra la fecha de hoy' },
     { Concepto: 'Odómetro', Detalle: 'Sin dato: el archivo "Reporte por placa" de Zonar que importamos no incluye la columna de odómetro' },
     { Concepto: 'Orden', Detalle: 'Última posición más reciente primero' },

@@ -367,6 +367,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             empresaId={empresa_activa_id}
             periodo={conDatosReales ? panel.periodo : null}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+            vehicles={vehiclesFuente}
           />
         </div>
       ) : null}

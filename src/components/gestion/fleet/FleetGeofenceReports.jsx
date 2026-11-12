@@ -240,14 +240,23 @@ function CardEventos({ empresaId, periodo, fuente }) {
 }
 
 /** Tarjeta 2: tiempo dentro de cada lote (punto dentro del polígono, PostGIS). */
-function CardLotes({ empresaId, periodo, fuente }) {
+function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
   const { rango, setRango, dia, setDia, mes, setMes, consulta, pendienteDeFecha } = useRango(periodo);
+  const [placa, setPlaca] = useState('');
+  const [horaDesde, setHoraDesde] = useState('');
+  const [horaHasta, setHoraHasta] = useState('');
   const [estado, setEstado] = useState('inactivo');
   const [filas, setFilas] = useState([]);
   const [error, setError] = useState(null);
   const [rangoTexto, setRangoTexto] = useState('');
   const [intento, setIntento] = useState(0);
   const [descargaError, setDescargaError] = useState(null);
+
+  // Unidades reales para el selector (si no hay datos, no hay qué elegir).
+  const unidades = useMemo(
+    () => vehicles.map((v) => ({ placa: v.placa, descripcion: v.descripcion || '' })),
+    [vehicles]
+  );
 
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
@@ -258,7 +267,13 @@ function CardLotes({ empresaId, periodo, fuente }) {
     let cancelado = false;
     setEstado('cargando');
     setError(null);
-    obtenerLotesFlota(empresaId, { desde: consulta.desde, hasta: consulta.hasta })
+    obtenerLotesFlota(empresaId, {
+      desde: consulta.desde,
+      hasta: consulta.hasta,
+      placa,
+      horaDesde,
+      horaHasta,
+    })
       .then((resultado) => {
         if (cancelado) return;
         setFilas(resultado);
@@ -274,7 +289,7 @@ function CardLotes({ empresaId, periodo, fuente }) {
     return () => {
       cancelado = true;
     };
-  }, [empresaId, consulta, pendienteDeFecha, intento]);
+  }, [empresaId, consulta, placa, horaDesde, horaHasta, pendienteDeFecha, intento]);
 
   const totales = useMemo(() => {
     const sum = (campo) => filas.reduce((s, f) => s + Number(f[campo] || 0), 0);
@@ -302,7 +317,7 @@ function CardLotes({ empresaId, periodo, fuente }) {
     setDescargaError(null);
     try {
       const { exportarLotesExcel } = await import('../../../lib/exportExcel');
-      exportarLotesExcel(filas, { rangoTexto });
+      exportarLotesExcel(filas, { rangoTexto, placa, horaDesde, horaHasta });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
     }
@@ -339,7 +354,54 @@ function CardLotes({ empresaId, periodo, fuente }) {
         </div>
         {descargaError ? <p className="text-[10px] text-red-600">{descargaError}</p> : null}
 
-        <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} />
+        <div className="flex flex-wrap items-end gap-3">
+          <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} />
+          <label className="min-w-0">
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Máquina</span>
+            <select
+              value={placa}
+              onChange={(e) => setPlaca(e.target.value)}
+              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            >
+              <option value="">Todas las unidades</option>
+              {unidades.map((u) => (
+                <option key={u.placa} value={u.placa}>
+                  {u.descripcion ? `${u.placa} · ${u.descripcion}` : u.placa}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div>
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Horas del día</span>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="time"
+                value={horaDesde}
+                onChange={(e) => setHoraDesde(e.target.value)}
+                aria-label="Hora desde"
+                className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+              />
+              <span className="text-[10px] text-slate-400">a</span>
+              <input
+                type="time"
+                value={horaHasta}
+                onChange={(e) => setHoraHasta(e.target.value)}
+                aria-label="Hora hasta"
+                className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+              />
+              {horaDesde || horaHasta ? (
+                <button
+                  type="button"
+                  onClick={() => { setHoraDesde(''); setHoraHasta(''); }}
+                  className="px-2 py-1.5 rounded-lg text-[10px] font-semibold text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                  title="Quitar franja horaria"
+                >
+                  Quitar
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
       </div>
 
       <CuerpoEstado
@@ -348,7 +410,7 @@ function CardLotes({ empresaId, periodo, fuente }) {
         estado={estado}
         error={error}
         onReintentar={() => setIntento((n) => n + 1)}
-        mensajeVacio={`Ningún lote tuvo posiciones dentro de su polígono en ${rangoTexto || 'el rango elegido'}. Prueba con otro día/mes o con “Todo el periodo”.`}
+        mensajeVacio={`Ningún lote tuvo posiciones dentro de su polígono en ${rangoTexto || 'el rango elegido'}${placa ? ` para la unidad ${placa}` : ''}${horaDesde || horaHasta ? ` entre las ${horaDesde || '00:00'} y las ${horaHasta || '23:59'}` : ''}. Prueba con otro día/mes, con “Todo el periodo” o quitando los filtros.`}
       >
         {estado === 'ok' ? (
           <>
@@ -457,11 +519,11 @@ function CardLotes({ empresaId, periodo, fuente }) {
   );
 }
 
-export default function FleetGeofenceReports({ empresaId, periodo = null, fuente = 'real' }) {
+export default function FleetGeofenceReports({ empresaId, periodo = null, fuente = 'real', vehicles = [] }) {
   return (
     <div className="space-y-4">
       <CardEventos empresaId={empresaId} periodo={periodo} fuente={fuente} />
-      <CardLotes empresaId={empresaId} periodo={periodo} fuente={fuente} />
+      <CardLotes empresaId={empresaId} periodo={periodo} fuente={fuente} vehicles={vehicles} />
     </div>
   );
 }

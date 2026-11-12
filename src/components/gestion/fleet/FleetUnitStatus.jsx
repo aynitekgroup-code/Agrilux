@@ -36,6 +36,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
   const [error, setError] = useState(null);
   const [rangoTexto, setRangoTexto] = useState('');
   const [descargaError, setDescargaError] = useState(null);
+  const [generadoEn, setGeneradoEn] = useState(null);
 
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
@@ -52,6 +53,8 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
         setFilas(resultado);
         setEstado(resultado.length ? 'ok' : 'vacio');
         setRangoTexto(consulta.texto);
+        // Hora de generación del reporte (pedido por el Ing. Carlos Perez).
+        setGeneradoEn(new Date());
       })
       .catch((e) => {
         if (cancelado) return;
@@ -104,6 +107,11 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
             <p className="text-xs text-slate-500">
               Reporte 34 de Zonar "Estado de unidades": última posición, evento y dirección de cada placa, con la geocerca donde está ahora.
             </p>
+            {generadoEn ? (
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Generado: {generadoEn.toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
+              </p>
+            ) : null}
           </div>
           <div className="ml-auto flex items-center gap-2">
             {fuente === 'real' && rangoTexto ? (
@@ -185,6 +193,16 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
                               <span className="block text-[10px] text-slate-400">{fila.geocerca_division}</span>
                             ) : null}
                           </>
+                        ) : fila.geocerca_ultima ? (
+                          <>
+                            <span className="inline-flex items-center gap-1 font-semibold text-amber-700">
+                              <MapPinned size={11} className="text-amber-600 opacity-70" />
+                              Últ.: {fila.geocerca_ultima}
+                            </span>
+                            <span className="block text-[10px] text-slate-400">
+                              fuera ahora · última visita {fila.geocerca_ultima_fecha ? formatearFechaHora(fila.geocerca_ultima_fecha) : ''}
+                            </span>
+                          </>
                         ) : (
                           <span className="text-slate-400">Fuera de geocercas</span>
                         )}
@@ -232,7 +250,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
           'Aún no hay datos reales para esta empresa.'
         )}
         <span className="block mt-0.5">
-          Última posición del rango · geocerca = polígono (ST_Contains) que la contiene, «Fuera de geocercas» si no cae en ninguno · estado contra max(fecha) del periodo cargado · hora de Perú.
+          Última posición del rango · geocerca = polígono (ST_Contains) que la contiene; si está fuera, se muestra la última geocerca de campo en la que estuvo (evento pt_referencia) · «Fuera de geocercas» solo si no hay ninguna · estado contra max(fecha) del periodo cargado · hora de Perú.
         </span>
       </p>
     </div>

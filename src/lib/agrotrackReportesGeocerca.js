@@ -91,18 +91,29 @@ export async function obtenerEventosGeocerca(
 
 /**
  * Tiempo dentro de cada lote (punto dentro del polígono, PostGIS).
+ * @param {string|null} placa   filtrar una sola unidad ("la máquina")
+ * @param {string|null} horaDesde franja horaria del día en hora de Perú
+ * @param {string|null} horaHasta   (ej. '06:00'..'18:00', con minutos)
  * @returns filas { geocerca_id, lote, division, anexo, area_ha, unidades, visitas,
  *                  permanencia_segundos, km_recorridos, puntos, vel_max_kmh,
  *                  primera_visita, ultima_visita }
  */
 export async function obtenerLotesFlota(
   empresaId,
-  { desde = null, hasta = null, limite = LIMITE_LOTES } = {}
+  { desde = null, hasta = null, placa = '', horaDesde = '', horaHasta = '', limite = LIMITE_LOTES } = {}
 ) {
   if (!empresaId) return [];
+  // Los filtros nuevos se envían SOLO cuando tienen valor: así, mientras en
+  // Supabase no se haya ejecutado la versión actualizada del script, la
+  // llamada sigue resolviendo contra la firma anterior (4 argumentos) y el
+  // reporte no se rompe; al poner un filtro, PostgREST pide la firma nueva.
+  const params = { p_empresa_id: empresaId, p_desde: desde, p_hasta: hasta, p_limite: limite };
+  if (placa) params.p_placa = placa;
+  if (horaDesde) params.p_hora_desde = horaDesde;
+  if (horaHasta) params.p_hora_hasta = horaHasta;
   return llamarRpc(
     'agrotrack_lotes_flota',
-    { p_empresa_id: empresaId, p_desde: desde, p_hasta: hasta, p_limite: limite },
+    params,
     'No se pudo cargar el tiempo en cada lote'
   );
 }
@@ -110,8 +121,11 @@ export async function obtenerLotesFlota(
 /**
  * Estado de unidades (reporte 34 de Zonar): una fila por placa con su
  * posición más reciente del rango y la geocerca actual (PostGIS).
+ * Si la última posición está fuera, geocerca_ultima/geocerca_ultima_fecha
+ * traen la última geocerca de campo en la que estuvo (evento pt_referencia).
  * @returns filas { placa, unidad, ultima_fecha, ultimo_evento, ultima_velocidad,
- *                  direccion, latitud, longitud, geocerca, geocerca_division }
+ *                  direccion, latitud, longitud, geocerca, geocerca_division,
+ *                  geocerca_ultima, geocerca_ultima_fecha }
  */
 export async function obtenerEstadoUnidadesFlota(
   empresaId,

@@ -29,7 +29,6 @@ const COLUMNAS = [
   { id: 'unidad', label: 'Unidad', numerica: false },
   { id: 'km_recorridos', label: 'Recorrido (km)', numerica: true },
   { id: 'prendido_segundos', label: 'Horas prendido', numerica: true },
-  { id: 'encendido_segundos', label: 'Encendido', numerica: true },
   { id: 'viaje_segundos', label: 'Hora de viaje', numerica: true },
   { id: 'ralenti_segundos', label: 'Ralentí', numerica: true },
   { id: 'vel_max_kmh', label: 'Vel. máx.', numerica: true },
@@ -53,6 +52,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
   const [error, setError] = useState(null);
   const [rangoTexto, setRangoTexto] = useState('');
   const [descargaError, setDescargaError] = useState(null);
+  const [generadoEn, setGeneradoEn] = useState(null);
   const [resumenIA, setResumenIA] = useState(null);
   const [resumenCargando, setResumenCargando] = useState(false);
   const [resumenError, setResumenError] = useState(null);
@@ -115,6 +115,8 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
         })));
         setEstado(resultado.length ? 'ok' : 'vacio');
         setRangoTexto(consulta.texto);
+        // Hora de generación del reporte (pedido por el Ing. Carlos Perez).
+        setGeneradoEn(new Date());
       })
       .catch((e) => {
         if (cancelado) return;
@@ -148,7 +150,6 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
     return {
       km: sum('km_recorridos'),
       prendido: sum('prendido_segundos'),
-      encendido: sum('encendido_segundos'),
       viaje: sum('viaje_segundos'),
       ralenti: sum('ralenti_segundos'),
       alertas: sum('alertas'),
@@ -204,8 +205,13 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
           <div className="min-w-0">
             <h2 className="text-base font-bold text-slate-900">Reporte de actividad</h2>
             <p className="text-xs text-slate-500">
-              Recorrido, encendido, hora de viaje y ralentí por unidad, por día o por mes.
+              Recorrido, horas prendido, hora de viaje y ralentí por unidad, por día o por mes.
             </p>
+            {generadoEn ? (
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Generado: {generadoEn.toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
+              </p>
+            ) : null}
           </div>
           <div className="ml-auto flex items-center gap-2">
             {fuente === 'real' && rangoTexto ? (
@@ -374,7 +380,6 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
                     </td>
                     <td className="px-3 py-2 text-right font-semibold">{numero(fila.km_recorridos, 1)}</td>
                     <td className="px-3 py-2 text-right font-bold text-slate-800">{formatearDuracion(fila.prendido_segundos)}</td>
-                    <td className="px-3 py-2 text-right">{formatearDuracion(fila.encendido_segundos)}</td>
                     <td className="px-3 py-2 text-right">{formatearDuracion(fila.viaje_segundos)}</td>
                     <td className="px-3 py-2 text-right">{formatearDuracion(fila.ralenti_segundos)}</td>
                     <td className="px-3 py-2 text-right">{numero(fila.vel_max_kmh, 0)} km/h</td>
@@ -395,7 +400,6 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
                   </td>
                   <td className="px-3 py-2.5 text-right">{numero(totales.km, 1)}</td>
                   <td className="px-3 py-2.5 text-right">{formatearDuracion(totales.prendido)}</td>
-                  <td className="px-3 py-2.5 text-right">{formatearDuracion(totales.encendido)}</td>
                   <td className="px-3 py-2.5 text-right">{formatearDuracion(totales.viaje)}</td>
                   <td className="px-3 py-2.5 text-right">{formatearDuracion(totales.ralenti)}</td>
                   <td className="px-3 py-2.5 text-right">—</td>

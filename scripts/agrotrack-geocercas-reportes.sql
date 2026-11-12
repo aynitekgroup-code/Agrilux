@@ -299,14 +299,24 @@ grant execute on function public.agrotrack_eventos_geocerca_flota(uuid, timestam
 --
 --    Solo se listan los lotes con al menos una posición dentro: un lote sin
 --    actividad no aporta cifras y solo ensuciaría la tabla.
+--
+--    Filtros opcionales pedidos por el Ing. Carlos Perez (7:53 a. m.):
+--      p_placa      una sola unidad ("la máquina")
+--      p_hora_desde franja horaria del día en hora de Perú, con minutos:
+--                   p.ej. 06:00..18:00 analiza solo posiciones entre esas
+--                   dos horas (null = todo el día)
 -- ---------------------------------------------------------------------------
 drop function if exists public.agrotrack_lotes_flota(uuid, timestamptz, timestamptz, integer);
+drop function if exists public.agrotrack_lotes_flota(uuid, timestamptz, timestamptz, text, time, time, integer);
 
 create function public.agrotrack_lotes_flota(
-  p_empresa_id uuid,
-  p_desde      timestamptz default null,
-  p_hasta      timestamptz default null,
-  p_limite     integer     default 200
+  p_empresa_id  uuid,
+  p_desde       timestamptz default null,
+  p_hasta       timestamptz default null,
+  p_placa       text        default null,
+  p_hora_desde  time        default null,
+  p_hora_hasta  time        default null,
+  p_limite      integer     default 200
 )
 returns table (
   geocerca_id         uuid,
@@ -367,6 +377,13 @@ as $$
       and p.empresa_id = p_empresa_id
       and (p_desde is null or p.fecha >= p_desde)
       and (p_hasta is null or p.fecha <= p_hasta)
+      -- Filtros pedidos por el Ing. Carlos Perez: una máquina y/o una franja
+      -- horaria del día (hora de Perú, con minutos). null = sin filtro.
+      and (p_placa is null or p.placa = p_placa)
+      and (p_hora_desde is null
+        or (p.fecha at time zone 'America/Lima')::time >= p_hora_desde)
+      and (p_hora_hasta is null
+        or (p.fecha at time zone 'America/Lima')::time <= p_hora_hasta)
       and p.latitud is not null
       and p.longitud is not null
   ),
@@ -491,7 +508,7 @@ as $$
   limit greatest(coalesce(p_limite, 200), 1);
 $$;
 
-grant execute on function public.agrotrack_lotes_flota(uuid, timestamptz, timestamptz, integer)
+grant execute on function public.agrotrack_lotes_flota(uuid, timestamptz, timestamptz, text, time, time, integer)
   to anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
@@ -501,8 +518,12 @@ grant execute on function public.agrotrack_lotes_flota(uuid, timestamptz, timest
 --    mismo orden que el resto de las RPC: fecha, secuencia, id) y el nombre
 --    del polígono que la contiene, resuelto con PostGIS + el mismo prefilter
 --    de bbox que agrotrack_lotes_flota. Si la posición cae fuera de todos
---    los polígonos, geocerca queda en null (la UI lo muestra como
---    "Fuera de geocercas").
+--    los polígonos, geocerca queda en null y entra el FALLBACK pedido por el
+--    Ing. Carlos Perez ("falta ... la geocerca"): geocerca_ultima toma el
+--    pt_referencia del evento de Zonar más reciente de esa placa en el rango
+--    (limitado a geocercas de campo, incluir_reportes), de modo que una
+--    unidad estacionada fuera al cierre del día muestra la última geocerca
+--    en la que estuvo y cuándo (geocerca_ultima_fecha).
 --
 --    Rendimiento: son pocas placas (~20-30) contra 129 polígonos, con el
 --    bbox descartando casi todo antes de ST_Contains. El distinct on usa el
@@ -531,7 +552,11 @@ returns table (
   latitud           double precision,
   longitud          double precision,
   geocerca          text,           -- nombre del polígono que contiene la posición (null = fuera)
-  geocerca_division text
+  geocerca_division text,
+  -- Fallback (Ing. Carlos Perez): si está fuera, última geocerca de campo en
+  -- la que estuvo la unidad dentro del rango y cuándo.
+  geocerca_ultima       text,
+  geocerca_ultima_fecha timestamptz
 )
 language sql
 stable
@@ -590,7 +615,9 @@ as $$
     u.latitud,
     u.longitud,
     cg.nombre                                                  as geocerca,
-    cg.division                                                as geocerca_division
+    cg.division                                                as geocerca_division,
+    cg2.nombre                                                 as geocerca_ultima,
+    cg2.fecha                                                  as geocerca_ultima_fecha
   from ultimos u
   -- Geocerca actual: el primer polígono (orden alfabético, para que el
   -- resultado sea estable si dos se solapan) que contiene la última posición.
@@ -603,6 +630,29 @@ as $$
     order by g2.nombre
     limit 1
   ) cg on true
+  -- Fallback pedido por el Ing. Carlos Perez: si la última posición queda
+  -- fuera (unidad estacionada en el patio al cierre), se muestra la ÚLTIMA
+  -- geocerca de campo en la que estuvo: el pt_referencia del evento de Zonar
+  -- más reciente de la placa en el rango, cruzado contra las geocercas con
+  -- incluir_reportes (oficinas y distritos no entran en reportes).
+  left join lateral (
+    select g3.nombre, max(p2.fecha) as fecha
+    from public.agrotrack_posiciones p2
+    join geocercas g3
+      on btrim(p2.pt_referencia) = btrim(g3.nombre)
+    where cg.nombre is null
+      and p2.empresa_id = p_empresa_id
+      and p2.placa = u.placa
+      and p2.pt_referencia is not null
+      and btrim(p2.pt_referencia) <> ''
+      and (p_desde is null or p2.fecha >= p_desde)
+      and (p_hasta is null or p2.fecha <= p_hasta)
+      and p2.latitud is not null
+      and p2.longitud is not null
+    group by g3.nombre
+    order by max(p2.fecha) desc
+    limit 1
+  ) cg2 on cg.nombre is null
   -- Lo más reciente primero: la unidad que reportó hace menos tiempo arriba.
   order by u.fecha desc nulls last, u.placa
   limit greatest(coalesce(p_limite, 500), 1);
