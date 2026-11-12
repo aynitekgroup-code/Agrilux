@@ -69,10 +69,11 @@ export default function AsistenteMapa({ geofences = [], seleccion = null, onAcci
     setMensajes((prev) => [...prev, { rol: 'usuario', texto: pregunta, notas: [] }]);
     setCargando(true);
     try {
-      const res = await fetch('/api/asistente-mapa', {
+      const res = await fetch('/api/voice-assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          modo: 'mapa',
           mensaje: pregunta,
           historial: mensajes.slice(-6).map((m) => ({ rol: m.rol, texto: m.texto })),
           geocercas: resumenGeocercasParaIA(geofences),
