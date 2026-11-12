@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Download, Library, Radio } from 'lucide-react';
+import { Download, Library, Loader2, Radio, Sparkles, AlertTriangle } from 'lucide-react';
 import {
   obtenerActividadFlota,
   obtenerAlertasFlota,
@@ -8,6 +8,8 @@ import {
   formatearFechaHora,
   etiquetaPeriodoReporte,
 } from '../../lib/agrotrackFlota';
+import { armarContextoReporte } from '../../lib/reportesIa';
+import { llamarIaGestion } from '../../lib/agrotrackIa';
 import { obtenerEventosGeocerca, obtenerEstadoUnidadesFlota } from '../../lib/agrotrackReportesGeocerca';
 import {
   segundosDelRango,
@@ -324,6 +326,10 @@ export default function ReportesPage({
   const [filas, setFilas] = useState([]);
   const [error, setError] = useState(null);
   const [rangoTexto, setRangoTexto] = useState('');
+  // Explicación con IA del reporte (solo lectura, sobre las filas visibles).
+  const [explicacion, setExplicacion] = useState(null);
+  const [explicando, setExplicando] = useState(false);
+  const [errorExplicacion, setErrorExplicacion] = useState(null);
 
   const { rango, setRango, dia, setDia, mes, setMes, desdeHora, setDesdeHora, hastaHora, setHastaHora, consulta, pendienteDeFecha } = useRango(periodo);
 
@@ -363,6 +369,9 @@ export default function ReportesPage({
     let cancelado = false;
     setEstado('cargando');
     setError(null);
+    // Un reporte o rango nuevo invalida la explicación anterior de IA.
+    setExplicacion(null);
+    setErrorExplicacion(null);
 
     const cargar = () => {
       const { desde, hasta } = consulta;
@@ -441,6 +450,31 @@ export default function ReportesPage({
     URL.revokeObjectURL(url);
   };
 
+  // Explicación con IA del reporte YA calculado en SQL: se mandan solo las
+  // filas visibles comprimidas; la IA interpreta, no calcula ni inventa.
+  const explicarReporte = async () => {
+    if (!filasVisibles.length || explicando) return;
+    setExplicando(true);
+    setErrorExplicacion(null);
+    try {
+      const contexto = armarContextoReporte({
+        reporte: report.label,
+        grupo: report.group,
+        rango: rangoTexto || (sinRango ? 'todo el periodo cargado' : ''),
+        columnas: columnas.map(([, label]) => label),
+        filas: filasVisibles,
+        totalFilas: filasVisibles.length,
+      });
+      const data = await llamarIaGestion({ modo: 'reporte', contexto });
+      if (!data.texto) throw new Error('La IA no devolvió texto para este reporte.');
+      setExplicacion({ texto: data.texto, provider: data.provider });
+    } catch (e) {
+      setErrorExplicacion(e?.message || 'No se pudo explicar el reporte.');
+    } finally {
+      setExplicando(false);
+    }
+  };
+
   const unidades = useMemo(
     () => (vehicles || []).map((v) => ({ placa: v.placa, descripcion: v.descripcion || v.modelo || '' })),
     [vehicles],
@@ -516,14 +550,26 @@ export default function ReportesPage({
                       <p className="text-[11px] text-slate-400 mt-0.5">Rango: {rangoTexto}</p>
                     ) : null}
                   </div>
-                  <button
-                    type="button"
-                    onClick={exportCsv}
-                    disabled={estado !== 'ok' || !filasVisibles.length}
-                    className="inline-flex items-center gap-2 rounded-lg bg-forest px-3 py-2 text-xs font-semibold text-white hover:bg-forest-dark disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Download size={14} /> Exportar CSV
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={explicarReporte}
+                      disabled={estado !== 'ok' || !filasVisibles.length || explicando}
+                      className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      title="Interpretar este reporte con IA (solo lectura)"
+                    >
+                      {explicando ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                      {explicando ? 'Explicando…' : 'Explicar con IA'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={exportCsv}
+                      disabled={estado !== 'ok' || !filasVisibles.length}
+                      className="inline-flex items-center gap-2 rounded-lg bg-forest px-3 py-2 text-xs font-semibold text-white hover:bg-forest-dark disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Download size={14} /> Exportar CSV
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-end gap-3 mb-4">
@@ -614,6 +660,40 @@ export default function ReportesPage({
                     </p>
                   ) : null}
                 </CuerpoEstado>
+
+                {errorExplicacion ? (
+                  <div className="mt-4 flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-xs text-red-700">
+                    <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                    <p>No se pudo explicar el reporte: {errorExplicacion}</p>
+                  </div>
+                ) : null}
+
+                {explicacion ? (
+                  <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Sparkles size={14} className="text-emerald-600" />
+                      <p className="text-xs font-bold text-emerald-900">Qué dice este reporte</p>
+                      {explicacion.provider ? (
+                        <span className="ml-auto text-[10px] text-emerald-700/70 font-mono">{explicacion.provider}</span>
+                      ) : null}
+                    </div>
+                    <div className="space-y-1.5 text-xs text-slate-700 leading-relaxed">
+                      {explicacion.texto
+                        .split('\n')
+                        .map((linea) => linea.trim())
+                        .filter(Boolean)
+                        .map((linea, i) => (
+                          <p key={i} className={/^(•|-|\*|\d+[.)])/.test(linea) ? 'pl-3' : ''}>
+                            {linea}
+                          </p>
+                        ))}
+                    </div>
+                    <p className="mt-2 text-[10px] text-slate-500">
+                      Interpretación de las {filasVisibles.length} fila(s) ya calculadas en SQL con las columnas del
+                      reporte; la IA no recalcula cifras ni sustituye la revisión del responsable.
+                    </p>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

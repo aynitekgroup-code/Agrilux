@@ -325,6 +325,13 @@ export default async function handler(req, res) {
     return handlerMapa(req, res, { OPENROUTER_API_KEY, DEEPSEEK_API_KEY, GITHUB_TOKEN });
   }
 
+  // ── Modo GESTIÓN: IA de la sección Gestión/AgroTrack ──
+  // Mismo motivo que el modo mapa: no se pueden crear funciones nuevas.
+  // Modos: briefing | alertas | reporte | geocerca | corte.
+  if (MODOS_GESTION.has(req.body?.modo)) {
+    return handlerGestion(req, res, { OPENROUTER_API_KEY, DEEPSEEK_API_KEY, GITHUB_TOKEN });
+  }
+
   const { mensaje, historial = [], lat, lon, ubicacion, nombre, agentType, parcelaContext, ofertasRegistradas = [], productoRecomendado, misTiendas = [] } = req.body;
   if (!mensaje) return res.status(400).json({ error: 'Falta el campo mensaje' });
 
@@ -896,5 +903,239 @@ async function handlerMapa(req, res, { OPENROUTER_API_KEY, DEEPSEEK_API_KEY, GIT
     respuesta: 'No pude conectar con la IA en este momento. Intenta de nuevo en unos segundos.',
     acciones: [],
     provider: null,
+  });
+}
+
+/* ========================================================================== */
+/*  MODO GESTIÓN — IA de la sección Gestión (AgroTrack)                       */
+/*                                                                            */
+/*  Cinco casos de uso, todos con el MISMO contrato:                          */
+/*    briefing → texto (briefing del día)                                     */
+/*    alertas  → JSON  { resumen, grupos:[{clave, accion}] }                  */
+/*    reporte  → texto (interpretación de un reporte ya calculado en SQL)     */
+/*    geocerca → JSON  { nombre, puntos:[[lat,lon]], advertencia }            */
+/*    corte    → JSON  { veredicto, justificacion, riesgos[] }                */
+/*                                                                            */
+/*  REGLAS DE SEGURIDAD:                                                      */
+/*  - El cliente manda SOLO datos ya agregados (nunca filas crudas).          */
+/*  - La IA solo INTERPRETA y PROPONE: nunca guarda geocercas ni ejecuta     */
+/*    cortes. Toda acción pasa por confirmación humana en la UI.             */
+/*  - La respuesta se valida aquí y otra vez en el cliente antes de verse.   */
+/* ========================================================================== */
+
+const MODOS_GESTION = new Set(['briefing', 'alertas', 'reporte', 'geocerca', 'corte']);
+/** Modos que deben responder JSON (si no sale JSON, se responde con error). */
+const MODOS_GESTION_JSON = new Set(['alertas', 'geocerca', 'corte']);
+/** Tope del contexto que acepta este handler (más de esto se recorta). */
+const LIMITE_CONTEXTO_GESTION = 7000;
+
+const PROMPTS_GESTION = {
+  briefing: `Eres el analista de flota de Agrilux (AgroTrack), plataforma agrícola peruana.
+Recibes el RESUMEN DEL DÍA de una flota (cifras ya agregadas en la base de datos).
+Entrega un briefing matutino para el jefe de operaciones.
+
+REGLAS:
+- Español, tono directo y profesional. Máximo 220 palabras.
+- Usa EXCLUSIVAMENTE las cifras del contexto: no inventes placas, fechas ni números.
+- Horas en formato "8 h 15 min"; números con 1 decimal.
+- NO repitas la tabla: INTERPRETA.
+
+ESTRUCTURA EXACTA:
+1. Una línea de contexto (empresa, rango, unidades activas).
+2. "• Lo importante hoy" — 3 a 5 viñetas.
+3. "• Riesgos" — 2 a 3 viñetas (o "sin riesgos destacables").
+4. "• Hoy conviene" — 3 acciones concretas y medibles.
+Si falta algún dato, dilo con "sin datos": no lo deduzcas.`,
+
+  alertas: `Eres el analista de flota de Agrilux (AgroTrack). Recibes ALERTAS AGRUPADAS
+del periodo (cada grupo ya trae su clave, tipo, mensaje, severidad y total).
+Tu trabajo es PRIORIZAR: decir qué atender primero y qué hacer en una frase.
+
+REGLAS:
+- Español, máximo 1 resumen de 200 caracteres y 1 acción por grupo (máximo 15 grupos).
+- Usa SOLO las claves exactas del contexto; nunca inventes claves.
+- Ordena mentalmente por severidad y por total de alertas.
+- La acción debe ser concreta (revisar, llamar, detener, verificar…), no genérica.
+
+RESPUESTA OBLIGATORIA (solo JSON, sin markdown):
+{"resumen":"<lo más urgente en una frase>","grupos":[{"clave":"<clave exacta del contexto>","accion":"<qué hacer en una frase>"}]}`,
+
+  reporte: `Eres el analista de flota de Agrilux (AgroTrack). Recibes un REPORTE ya
+calculado en SQL (nombre, rango, columnas y filas) y debes interpretarlo.
+
+REGLAS:
+- Español, máximo 200 palabras, sin tablas ni JSON.
+- Usa SOLO las cifras del contexto.
+- Estructura: "Qué dice el reporte" (2-3 frases), "• Hallazgos" (3-4 viñetas),
+  "• Lo raro o preocupante" (1-3 viñetas) y "• Qué revisar" (2-3 acciones).
+- Si el reporte está vacío o es corto, dilo claramente sin inventar.`,
+
+  geocerca: `Eres el asistente cartográfico de Agrilux (AgroTrack). Recibes una INSTRUCCIÓN
+del usuario para crear una geocerca y un listado de las geocercas existentes
+(id, nombre y centro) con las que puedes orientarte.
+
+REGLAS:
+- Devuelve un polígono REALISTA cerca de lo pedido: 4 a 12 puntos [lat, lon].
+- Coordenadas válidas: latitud entre -90 y 90, longitud entre -180 y 180.
+- NO inventes coordenadas lejanas: quédate en la misma zona que las geocercas
+  del contexto (usa sus centros como referencia).
+- Un nombre corto y descriptivo (máximo 40 caracteres).
+- "advertencia": una frase con qué debe revisar una persona antes de guardar.
+- NUNCA guardes nada: solo propones. La creación la confirma el usuario.
+
+RESPUESTA OBLIGATORIA (solo JSON, sin markdown):
+{"nombre":"<nombre>","puntos":[[lat,lon],[lat,lon],[lat,lon],[lat,lon]],"advertencia":"<qué revisar>"}`,
+
+  corte: `Eres el asistente de seguridad de flota de Agrilux (AgroTrack). Recibes el
+estado de una unidad y el MOTIVO de una inmovilización remoto solicitada.
+Tu trabajo es evaluar el RIESGO antes de que un supervisor confirme.
+
+REGLAS CRÍTICAS:
+- TÚ NUNCA EJECUTAS NI AUTORIZAS el corte: solo evalúas y recomiendas.
+  La decisión final es siempre del supervisor (él confirma con su PIN).
+- veredicto: "apto" (condiciones seguras), "precaucion" (riesgo manejable) o
+  "no_apto" (unidad en movimiento, sin conexión, en carretera o emergencia).
+- justificacion: 2 a 3 frases con los datos del contexto (no inventes).
+- riesgos: 0 a 4 frases cortas y concretas.
+- Si el motivo es ambiguo o falta contexto, marca "precaucion".
+
+RESPUESTA OBLIGATORIA (solo JSON, sin markdown):
+{"veredicto":"apto|precaucion|no_apto","justificacion":"<2-3 frases>","riesgos":["<riesgo>"]}`,
+};
+
+/** Recorta y limpia el contexto que manda el cliente. */
+function prepararContextoGestion(contexto) {
+  const texto = typeof contexto === 'string' ? contexto : JSON.stringify(contexto ?? {});
+  return String(texto).slice(0, LIMITE_CONTEXTO_GESTION);
+}
+
+/** Valida el JSON de los modos estructurados antes de devolverlo. */
+function validarDatosGestion(modo, obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  const texto = (valor, max) => String(valor || '').replace(/\s+/g, ' ').trim().slice(0, max);
+
+  if (modo === 'alertas') {
+    const grupos = (Array.isArray(obj.grupos) ? obj.grupos : [])
+      .filter((g) => g && typeof g === 'object' && texto(g.clave, 120))
+      .map((g) => ({ clave: texto(g.clave, 120), accion: texto(g.accion, 220) }))
+      .filter((g) => g.accion)
+      .slice(0, 15);
+    const resumen = texto(obj.resumen, 300);
+    if (!resumen && !grupos.length) return null;
+    return { resumen, grupos };
+  }
+
+  if (modo === 'geocerca') {
+    const puntos = (Array.isArray(obj.puntos) ? obj.puntos : [])
+      .map((p) => (Array.isArray(p) && p.length >= 2 ? [Number(p[0]), Number(p[1])] : null))
+      .filter((p) => p && Number.isFinite(p[0]) && Number.isFinite(p[1])
+        && Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180)
+      .slice(0, 12);
+    if (puntos.length < 3) return null;
+    const nombre = texto(obj.nombre, 40);
+    if (!nombre) return null;
+    return { nombre, puntos, advertencia: texto(obj.advertencia, 300) };
+  }
+
+  if (modo === 'corte') {
+    const veredicto = ['apto', 'precaucion', 'no_apto'].includes(obj.veredicto)
+      ? obj.veredicto
+      : 'precaucion';
+    const justificacion = texto(obj.justificacion, 600);
+    if (!justificacion) return null;
+    const riesgos = (Array.isArray(obj.riesgos) ? obj.riesgos : [])
+      .map((r) => texto(r, 200))
+      .filter(Boolean)
+      .slice(0, 4);
+    return { veredicto, justificacion, riesgos };
+  }
+
+  return null;
+}
+
+async function handlerGestion(req, res, { OPENROUTER_API_KEY, DEEPSEEK_API_KEY, GITHUB_TOKEN }) {
+  const { modo, contexto } = req.body || {};
+  if (!MODOS_GESTION.has(modo)) {
+    return res.status(400).json({ error: `Modo de gestión no válido: ${String(modo)}` });
+  }
+  if (contexto === undefined || contexto === null || contexto === '') {
+    return res.status(400).json({ error: 'Falta el campo contexto' });
+  }
+
+  const esJSON = MODOS_GESTION_JSON.has(modo);
+  const messages = [
+    { role: 'system', content: PROMPTS_GESTION[modo] },
+    { role: 'user', content: prepararContextoGestion(contexto) },
+  ];
+
+  // Cadena de proveedores. El primero es el más barato (gpt-4o-mini): estas
+  // llamadas son cortas y frecuentes (briefing, alertas, reportes).
+  const intentos = [];
+  if (OPENROUTER_API_KEY) {
+    intentos.push(['openrouter-mini', () => llamarProviderMapa(
+      'https://openrouter.ai/api/v1/chat/completions',
+      OPENROUTER_API_KEY,
+      { 'HTTP-Referer': 'https://www.vitalfarmbright.store', 'X-Title': 'Agrilux-Gestion' },
+      { model: 'openai/gpt-4o-mini', messages, max_tokens: 900, temperature: 0.3 },
+    )]);
+    intentos.push(['openrouter-flash', () => llamarProviderMapa(
+      'https://openrouter.ai/api/v1/chat/completions',
+      OPENROUTER_API_KEY,
+      { 'HTTP-Referer': 'https://www.vitalfarmbright.store', 'X-Title': 'Agrilux-Gestion' },
+      { model: 'google/gemini-2.5-flash', messages, max_tokens: 900, temperature: 0.3 },
+    )]);
+  }
+  if (DEEPSEEK_API_KEY) {
+    intentos.push(['deepseek', () => llamarProviderMapa(
+      'https://api.deepseek.com/chat/completions',
+      DEEPSEEK_API_KEY,
+      {},
+      { model: 'deepseek-chat', messages, max_tokens: 900, temperature: 0.3 },
+    )]);
+  }
+  if (GITHUB_TOKEN) {
+    intentos.push(['github', () => llamarProviderMapa(
+      'https://models.inference.ai.azure.com/chat/completions',
+      GITHUB_TOKEN,
+      {},
+      { model: 'Phi-4-multimodal-instruct', messages, max_tokens: 900, temperature: 0.3 },
+    )]);
+  }
+
+  if (!intentos.length) {
+    return res.status(500).json({ error: 'No hay proveedores de IA configurados en el servidor.' });
+  }
+
+  let ultimoError = null;
+  for (const [provider, llamada] of intentos) {
+    try {
+      const texto = await llamada();
+
+      if (!esJSON) {
+        const limpio = String(texto).replace(/\s+/g, ' ').trim().slice(0, 4000);
+        if (!limpio) continue;
+        return res.status(200).json({ modo, texto: limpio, datos: null, provider });
+      }
+
+      const obj = extraerObjetoJSON(texto);
+      const datos = validarDatosGestion(modo, obj);
+      if (datos) {
+        return res.status(200).json({ modo, texto: '', datos, provider });
+      }
+      // JSON ilegible o incompleto: se intenta con el siguiente proveedor.
+      ultimoError = 'La IA devolvió una respuesta que no se pudo validar.';
+      console.warn(`voice-assistant modo ${modo} (${provider}) devolvió JSON inválido`);
+    } catch (e) {
+      ultimoError = e.message;
+      console.warn(`voice-assistant modo ${modo} (${provider}) falló:`, e.message);
+    }
+  }
+
+  return res.status(200).json({
+    modo,
+    texto: '',
+    datos: null,
+    provider: null,
+    error: ultimoError || 'No pude conectar con la IA en este momento. Intenta de nuevo en unos segundos.',
   });
 }

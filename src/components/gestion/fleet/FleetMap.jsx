@@ -34,7 +34,7 @@ import {
 import { GeocercaEditorPanel, GeocercaVertexLayer } from './GeocercaEditor';
 import AsistenteMapa from './AsistenteMapa';
 import { ControlVistaSatelite, FichaGeocerca, LeyendaGrupos } from './MapaControles';
-import { COLORES_GRUPO, ETIQUETAS_GRUPO } from '../../../lib/asistenteMapa';
+import { COLORES_GRUPO, ETIQUETAS_GRUPO, resumenGeocercasParaIA } from '../../../lib/asistenteMapa';
 import {
   formatearFechaHora,
   obtenerRecorridoFlota,
@@ -326,6 +326,10 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       }),
     };
   }, [geoJson, filtroGrupo]);
+
+  // Resumen compacto (id/nombre/centro) para la IA que propone geocercas
+  // por instrucción: NUNCA se envía la geometría completa.
+  const geocercasIA = useMemo(() => resumenGeocercasParaIA(geofences), [geofences]);
 
   const geofenceSummary = useMemo(() => {
     const grupos = new Map();
@@ -722,6 +726,24 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     setEditMensaje(null);
   };
 
+  // Propuesta de la IA (FASE: IA en Gestión): entra como BORRADOR en modo
+  // "dibujar" con el nombre precargado. La creación sigue siendo humana
+  // (el usuario revisa el polígono y pulsa "Crear geocerca").
+  const aplicarPropuestaIA = ({ nombre, puntos }) => {
+    if (!Array.isArray(puntos) || puntos.length < 3) return;
+    nombreAntesDeDibujar.current = editNombre;
+    setDibujo(puntos);
+    setEditNombre(nombre);
+    setEditModo('dibujo');
+    setEditMensaje({
+      tipo: 'info',
+      texto:
+        `Propuesta de la IA: "${nombre}" con ${puntos.length} puntos. Revísala en el mapa `
+        + '(puedes cambiar el nombre) y pulsa "Crear geocerca" para guardarla: la IA no escribe en la base.',
+    });
+    setEditRevision((revision) => revision + 1);
+  };
+
   const crearNueva = async () => {
     if (!empresaId) return;
     // Los puntos del dibujo van en [lat, lng] (orden del mapa); la geometría
@@ -957,6 +979,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         eliminando={editEliminando}
         onEliminar={eliminarSeleccion}
         onDibujar={() => cambiarModoEdicion('dibujo')}
+        geocercasIA={geocercasIA}
+        onPropuestaIA={aplicarPropuestaIA}
       />
 
       {canImport ? (

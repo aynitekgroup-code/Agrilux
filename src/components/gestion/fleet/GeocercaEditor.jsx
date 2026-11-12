@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { CircleMarker, Marker, Polygon, Polyline, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import {
@@ -10,11 +10,14 @@ import {
   Pencil,
   Plus,
   Save,
+  Sparkles,
   Trash2,
   Undo2,
   X,
 } from 'lucide-react';
 import { listarVertices } from '../../../lib/geocercasGeometria';
+import { armarContextoGeocerca, bboxDeCentros, validarPropuestaGeocerca } from '../../../lib/geocercaIa';
+import { llamarIaGestion } from '../../../lib/agrotrackIa';
 
 /**
  * Editor de geocercas (FASE 3.7), pedido por el Ing. Carlos Perez:
@@ -116,7 +119,48 @@ export function GeocercaEditorPanel({
   eliminando,
   onEliminar,
   onDibujar,
+  // IA en Gestión: propuesta de geocerca por instrucción (nunca guarda sola).
+  geocercasIA = [],
+  onPropuestaIA = null,
 }) {
+  const [instruccion, setInstruccion] = useState('');
+  const [proponiendoIa, setProponiendoIa] = useState(false);
+  const [errorIa, setErrorIa] = useState('');
+
+  /**
+   * Pide a la IA un polígono a partir de la instrucción. La propuesta se
+   * valida (coordenadas, zona y área) y entra como BORRADOR en el mapa:
+   * aquí NO se guarda nada; eso lo hace el usuario con "Crear geocerca".
+   */
+  const proponerConIa = async () => {
+    const texto = instruccion.trim();
+    if (texto.length < 4 || proponiendoIa || !onPropuestaIA) return;
+    setProponiendoIa(true);
+    setErrorIa('');
+    try {
+      const data = await llamarIaGestion({
+        modo: 'geocerca',
+        contexto: armarContextoGeocerca({ instruccion: texto, geocercas: geocercasIA }),
+      });
+      const propuesta = validarPropuestaGeocerca(data.datos, {
+        bbox: bboxDeCentros((geocercasIA || []).map((g) => g?.centro).filter(Boolean)),
+      });
+      if (!propuesta.valido) {
+        throw new Error(propuesta.errores.join(' ') || 'La IA no devolvió un polígono válido.');
+      }
+      onPropuestaIA({
+        nombre: propuesta.nombre,
+        puntos: propuesta.puntos,
+        advertencia: propuesta.advertencia,
+      });
+      setInstruccion('');
+    } catch (e) {
+      setErrorIa(e?.message || 'No se pudo proponer la geocerca.');
+    } finally {
+      setProponiendoIa(false);
+    }
+  };
+
   if (!puedeEditar) return null;
 
   if (!editando) {
@@ -274,6 +318,45 @@ export function GeocercaEditorPanel({
                 </ToolButton>
               ) : null}
             </div>
+
+            {/* Crear por instrucción con IA: propone el polígono, lo guardas tú. */}
+            {onPropuestaIA ? (
+              <div className="mt-2.5 rounded-xl border border-dashed border-amber-300 bg-white/70 p-2.5">
+                <label className="block text-[11px] font-semibold text-amber-900">
+                  ✨ Crear por instrucción (IA)
+                  <input
+                    type="text"
+                    value={instruccion}
+                    onChange={(event) => {
+                      setInstruccion(event.target.value);
+                      setErrorIa('');
+                    }}
+                    placeholder='p. ej. "un rectángulo de 200 m alrededor de la bodega de Chongoyape"'
+                    className="mt-1 w-full rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-xs font-normal text-slate-700 outline-none focus:border-amber-600"
+                    aria-label="Instrucción para la IA"
+                  />
+                </label>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={proponerConIa}
+                    disabled={proponiendoIa || instruccion.trim().length < 4}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-forest px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-forest-dark disabled:opacity-50"
+                  >
+                    {proponiendoIa ? <LoaderCircle size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                    {proponiendoIa ? 'Proponiendo…' : 'Proponer geocerca'}
+                  </button>
+                  <span className="text-[11px] text-amber-800/80">
+                    La IA solo propone: el polígono entra como borrador y lo guardas tú con "Crear geocerca".
+                  </span>
+                </div>
+                {errorIa ? (
+                  <p role="alert" className="mt-1.5 text-[11px] text-red-600">
+                    {errorIa}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
             <p className="mt-2 text-[11px] text-amber-800/80">
               {modo === 'mover' || modo === 'insertar' || modo === 'quitar'

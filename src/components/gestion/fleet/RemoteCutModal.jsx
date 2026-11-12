@@ -7,10 +7,23 @@ import {
   WifiOff,
   Gauge,
   Lock,
+  Loader2,
+  Sparkles,
   CheckCircle2,
   ChevronRight,
 } from 'lucide-react';
 import { FLEET, STATUS_META } from './fleetTokens';
+import { armarContextoCorte, validarEvaluacionCorte } from '../../../lib/corteIa';
+import { llamarIaGestion } from '../../../lib/agrotrackIa';
+
+/**
+ * Corte remoto (simulación) con guardrails de IA.
+ *
+ * REGLA DE ORO: la IA NUNCA ejecuta ni autoriza el corte. Solo hace una
+ * evaluación previa de riesgo y deja una justificación auditable en la
+ * orden; la decisión final es del supervisor (que confirma con su PIN) y
+ * puede saltarse un "no_apto" como decisión explícita y registrada.
+ */
 
 const STEPS = [
   { id: 1, label: 'Selección' },
@@ -50,9 +63,45 @@ export default function RemoteCutModal({ vehicles = [], initialVehicleId, respon
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [resultado, setResultado] = useState(null);
+  // Evaluación previa con IA (solo lectura: no ejecuta ni autoriza nada).
+  const [evaluacion, setEvaluacion] = useState(null);
+  const [evaluandoIa, setEvaluandoIa] = useState(false);
+  const [errorIa, setErrorIa] = useState('');
+  const [overrideIa, setOverrideIa] = useState(false);
 
   const vehicle = vehicles.find((v) => v.id === vehicleId) || null;
   const listo = Boolean(vehicle && vehicle.conectado && vehicle.velocidad_kmh === 0);
+  // Guardrail: si la IA marca "no_apto", el supervisor debe decidirlo
+  // explícitamente (queda en la orden) antes de pasar a la confirmación.
+  const bloqueadoPorIa = evaluacion?.veredicto === 'no_apto' && !overrideIa;
+
+  const evaluarConIa = async () => {
+    if (!vehicle || evaluandoIa) return;
+    setEvaluandoIa(true);
+    setErrorIa('');
+    try {
+      const data = await llamarIaGestion({
+        modo: 'corte',
+        contexto: armarContextoCorte({
+          vehiculo: vehicle,
+          motivo,
+          responsable,
+          hora: new Date().toLocaleString('es-PE'),
+        }),
+      });
+      const limpia = validarEvaluacionCorte(data.datos);
+      if (!limpia.valido) {
+        throw new Error(limpia.errores.join(' ') || 'La IA no devolvió una evaluación válida.');
+      }
+      setEvaluacion({ ...limpia, provider: data.provider });
+      setOverrideIa(false);
+    } catch (e) {
+      setEvaluacion(null);
+      setErrorIa(e?.message || 'No se pudo evaluar con la IA.');
+    } finally {
+      setEvaluandoIa(false);
+    }
+  };
 
   const reiniciar = () => {
     setStep(1);
@@ -61,6 +110,9 @@ export default function RemoteCutModal({ vehicles = [], initialVehicleId, respon
     setPin('');
     setError('');
     setResultado(null);
+    setEvaluacion(null);
+    setErrorIa('');
+    setOverrideIa(false);
   };
 
   const continuarVerificacion = () => {
@@ -88,6 +140,17 @@ export default function RemoteCutModal({ vehicles = [], initialVehicleId, respon
       motivo: motivo.trim(),
       hora: new Date().toLocaleString('es-PE'),
       responsable: responsable || 'Supervisor de flota',
+      // Justificación auditable de la evaluación previa (si se hizo) + si el
+      // supervisor decidió continuar pese a un "no_apto".
+      evaluacionIa: evaluacion
+        ? {
+            veredicto: evaluacion.veredicto,
+            justificacion: evaluacion.justificacion,
+            riesgos: evaluacion.riesgos,
+            provider: evaluacion.provider || null,
+            decidioContinuar: overrideIa,
+          }
+        : null,
     };
     setResultado(resultado);
     setStep(4);
@@ -137,7 +200,12 @@ export default function RemoteCutModal({ vehicles = [], initialVehicleId, respon
                     <button
                       key={v.id}
                       type="button"
-                      onClick={() => setVehicleId(v.id)}
+                      onClick={() => {
+                        setVehicleId(v.id);
+                        setEvaluacion(null);
+                        setErrorIa('');
+                        setOverrideIa(false);
+                      }}
                       className={`text-left rounded-xl border p-3 transition-colors ${active ? 'border-forest bg-emerald-50/60' : 'border-slate-200 hover:border-slate-300'}`}
                     >
                       <div className="flex items-center gap-2">
@@ -197,12 +265,106 @@ export default function RemoteCutModal({ vehicles = [], initialVehicleId, respon
                 </div>
               ) : null}
 
+              {/* Evaluación previa con IA: solo lectura, NUNCA ejecuta. */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-lg border border-slate-200 bg-white text-emerald-600 flex items-center justify-center shrink-0">
+                    <Sparkles size={14} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-slate-800">Evaluación previa con IA</p>
+                    <p className="text-[11px] text-slate-500">
+                      Revisa el riesgo antes de confirmar. No ejecuta ni autoriza el corte: decides tú.
+                    </p>
+                  </div>
+                  {!evaluacion ? (
+                    <button
+                      type="button"
+                      onClick={evaluarConIa}
+                      disabled={evaluandoIa}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 transition-colors"
+                    >
+                      {evaluandoIa ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                      {evaluandoIa ? 'Evaluando…' : 'Evaluar con IA'}
+                    </button>
+                  ) : null}
+                </div>
+
+                {errorIa ? <p className="text-[11px] text-red-600">{errorIa}</p> : null}
+
+                {evaluacion ? (
+                  <div className="space-y-1.5 rounded-lg border border-slate-200 bg-white p-2.5">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
+                          evaluacion.veredicto === 'apto'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : evaluacion.veredicto === 'no_apto'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {evaluacion.veredicto === 'apto'
+                          ? 'Condiciones aptas'
+                          : evaluacion.veredicto === 'no_apto'
+                            ? 'La IA desaconseja el corte'
+                            : 'Precaución'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={evaluarConIa}
+                        disabled={evaluandoIa}
+                        className="ml-auto text-[11px] font-semibold text-slate-500 hover:text-forest"
+                      >
+                        {evaluandoIa ? 'Reevaluando…' : 'Reevaluar'}
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-700 leading-relaxed">{evaluacion.justificacion}</p>
+                    {evaluacion.riesgos.length ? (
+                      <ul className="space-y-0.5 pt-1">
+                        {evaluacion.riesgos.map((riesgo) => (
+                          <li key={riesgo} className="flex items-start gap-1.5 text-[11px] text-slate-600">
+                            <span className="text-amber-600">⚠</span>
+                            <span>{riesgo}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <p className="text-[10px] text-slate-400 border-t border-slate-100 pt-1.5">
+                      Esta justificación queda registrada en la orden. La IA no ejecuta nada: el corte lo confirma el
+                      supervisor con su PIN.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+
+              {bloqueadoPorIa ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-red-700">
+                    La IA desaconseja el corte con estos datos. Corrige el motivo, espera a que la unidad esté
+                    detenida/conectada… o registra tu decisión explícita.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setOverrideIa(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-red-700 hover:bg-red-100"
+                  >
+                    Continuar igualmente (decisión del supervisor)
+                  </button>
+                </div>
+              ) : null}
+              {overrideIa ? (
+                <p className="text-[11px] font-semibold text-amber-700">
+                  Registrado: decides continuar pese a la evaluación negativa. Quedará anotado en la orden.
+                </p>
+              ) : null}
+
               <div className="flex justify-between gap-2 pt-1">
                 <button type="button" onClick={() => { setStep(1); setError(''); }} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Volver</button>
                 <button
                   type="button"
                   onClick={() => { setError(''); setStep(3); }}
-                  disabled={!listo}
+                  disabled={!listo || bloqueadoPorIa}
                   className="rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white hover:bg-forest-dark disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Continuar a confirmación
@@ -217,6 +379,32 @@ export default function RemoteCutModal({ vehicles = [], initialVehicleId, respon
                 <p className="text-sm font-semibold text-red-700">Vas a simular el corte de motor de {vehicle.placa}</p>
                 <p className="text-xs text-red-600/80 mt-0.5">El vehículo está detenido y conectado. La solicitud quedará registrada con fines demostrativos.</p>
               </div>
+
+              {/* Trazabilidad: la justificación de la IA queda en la orden. */}
+              {evaluacion ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                    Evaluación previa con IA · {evaluacion.veredicto === 'apto' ? 'condiciones aptas' : evaluacion.veredicto === 'no_apto' ? 'desaconsejado' : 'precaución'}
+                  </p>
+                  <p className="text-xs text-slate-700 mt-1 leading-relaxed">{evaluacion.justificacion}</p>
+                  {evaluacion.riesgos.length ? (
+                    <ul className="mt-1.5 space-y-0.5">
+                      {evaluacion.riesgos.map((riesgo) => (
+                        <li key={riesgo} className="text-[11px] text-slate-600">⚠ {riesgo}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {overrideIa ? (
+                    <p className="text-[11px] font-semibold text-amber-700 mt-1.5">
+                      El supervisor decidió continuar pese a la evaluación negativa de la IA.
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-[11px] text-slate-500">
+                  Sin evaluación previa con IA: el supervisor asume la revisión manual de las condiciones.
+                </div>
+              )}
 
               <label className="block">
                 <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Motivo de la inmovilización *</span>
@@ -269,6 +457,19 @@ export default function RemoteCutModal({ vehicles = [], initialVehicleId, respon
                 <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm"><dt className="text-slate-500">Solicitado por</dt><dd className="font-semibold text-slate-800">{resultado.responsable}</dd></div>
                 <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm"><dt className="text-slate-500">Fecha y hora</dt><dd className="font-semibold text-slate-800">{resultado.hora}</dd></div>
                 <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm"><dt className="text-slate-500">Estado</dt><dd className="font-semibold text-amber-700">Simulación · sin comando físico</dd></div>
+                {resultado.evaluacionIa ? (
+                  <div className="flex items-start justify-between gap-3 px-3 py-2 text-sm">
+                    <dt className="text-slate-500 shrink-0">Evaluación IA</dt>
+                    <dd className="font-semibold text-slate-800 text-right">
+                      {resultado.evaluacionIa.veredicto === 'apto'
+                        ? 'Condiciones aptas'
+                        : resultado.evaluacionIa.veredicto === 'no_apto'
+                          ? 'Desaconsejada'
+                          : 'Precaución'}
+                      {resultado.evaluacionIa.decidioContinuar ? ' · decidió continuar' : ''}
+                    </dd>
+                  </div>
+                ) : null}
               </dl>
 
               <div className="mt-4 flex flex-col sm:flex-row justify-center gap-2">

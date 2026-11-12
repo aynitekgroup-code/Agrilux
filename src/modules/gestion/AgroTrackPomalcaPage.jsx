@@ -19,6 +19,7 @@ import FleetUnitStatus from '../../components/gestion/fleet/FleetUnitStatus';
 import FleetGeofenceReports from '../../components/gestion/fleet/FleetGeofenceReports';
 import FleetGeofenceSummary from '../../components/gestion/fleet/FleetGeofenceSummary';
 import VigiaFlota from '../../components/gestion/fleet/VigiaFlota';
+import BriefingFlota from '../../components/gestion/fleet/BriefingFlota';
 import RemoteCutModal from '../../components/gestion/fleet/RemoteCutModal';
 import FleetAlerts from '../../components/gestion/fleet/FleetAlerts';
 import ModulesOverview from '../../components/gestion/fleet/ModulesOverview';
@@ -119,13 +120,13 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
 
   const registrarAbastecimiento = (registro) => setReadings((prev) => [registro, ...prev]);
 
-  const registrarOrden = (vehiculoId, accion, origen, estado) => {
+  const registrarOrden = (vehiculoId, accion, origen, estado, extra = {}) => {
     const now = new Date();
     const dia = String(now.getDate()).padStart(2, '0');
     const mes = String(now.getMonth() + 1).padStart(2, '0');
     const hora = now.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
     setCutOrders((prev) => [
-      { id: `ord-${Date.now()}`, hora: `${dia}/${mes} · ${hora}`, vehiculo_id: vehiculoId, accion, origen, estado },
+      { id: `ord-${Date.now()}`, hora: `${dia}/${mes} · ${hora}`, vehiculo_id: vehiculoId, accion, origen, estado, ...extra },
       ...prev,
     ]);
   };
@@ -134,7 +135,19 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
     const vehiculoId = resultado.vehiculo_id;
     setBlockedIds((prev) => (prev.includes(vehiculoId) ? prev : [...prev, vehiculoId]));
     setPendingIds((prev) => prev.filter((id) => id !== vehiculoId));
-    registrarOrden(vehiculoId, 'Bloqueo de motor', resultado.responsable || 'Supervisor de flota', 'Aplicada (demo)');
+    // Trazabilidad: la evaluación previa con IA (si se hizo) queda en la orden.
+    const evaluacion = resultado.evaluacionIa;
+    registrarOrden(
+      vehiculoId,
+      'Bloqueo de motor',
+      resultado.responsable || 'Supervisor de flota',
+      'Aplicada (demo)',
+      {
+        justificacionIa: evaluacion
+          ? `${evaluacion.veredicto}: ${evaluacion.justificacion}${evaluacion.decidioContinuar ? ' (el supervisor decidió continuar pese a la evaluación)' : ''}`
+          : null,
+      },
+    );
     setToast(`Corte simulado aplicado a ${resultado.placa}`);
   };
 
@@ -229,6 +242,16 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             notaPeriodo={conDatosReales ? textoPeriodoCargado(panel.periodo) : null}
             onReintentar={recargarPanel}
           />
+          {/* Briefing del día con IA (solo datos ya agregados del panel). */}
+          <BriefingFlota
+            empresaNombre={empresaActiva?.nombre || ''}
+            periodo={conDatosReales ? panel.periodo : null}
+            unidades={vehiclesFuente}
+            alertas={alertList}
+            cortesPendientes={pendingIds.length}
+            cortesAplicados={blockedIds.length}
+            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+          />
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
             <div className="xl:col-span-2 min-w-0">
               <FleetMap
@@ -251,6 +274,8 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
                 cargando={enCarga}
                 error={hayErrorPanel ? panel.error : null}
                 fuente={conDatosReales ? 'real' : 'demo'}
+                empresaNombre={empresaActiva?.nombre || ''}
+                rangoTexto={conDatosReales ? formatearRango(panel.periodo?.desde, panel.periodo?.hasta) : ''}
                 notaTope={
                   conDatosReales && panel.alertas.length >= LIMITE_ALERTAS_PANEL
                     ? `Se muestran las ${LIMITE_ALERTAS_PANEL} más recientes; hay más eventos en el periodo.`
