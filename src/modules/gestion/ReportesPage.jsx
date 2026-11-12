@@ -325,7 +325,7 @@ export default function ReportesPage({
   const [error, setError] = useState(null);
   const [rangoTexto, setRangoTexto] = useState('');
 
-  const { rango, setRango, dia, setDia, mes, setMes, consulta, pendienteDeFecha } = useRango(periodo);
+  const { rango, setRango, dia, setDia, mes, setMes, desdeHora, setDesdeHora, hastaHora, setHastaHora, consulta, pendienteDeFecha } = useRango(periodo);
 
   const availableGroups = MODULE_REPORT_GROUPS[selectedModuleId] || [];
   const availableReports = useMemo(
@@ -528,7 +528,7 @@ export default function ReportesPage({
 
                 <div className="flex flex-wrap items-end gap-3 mb-4">
                   {!sinRango ? (
-                    <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} />
+                    <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} desdeHora={desdeHora} setDesdeHora={setDesdeHora} hastaHora={hastaHora} setHastaHora={setHastaHora} />
                   ) : (
                     <p className="text-[11px] text-slate-400">Este reporte se calcula sobre todo el periodo cargado.</p>
                   )}

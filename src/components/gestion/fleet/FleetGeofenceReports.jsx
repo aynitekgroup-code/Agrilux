@@ -37,7 +37,7 @@ const AGRUPACIONES = [
 
 /** Tarjeta 1: entradas y salidas de geocerca (eventos de Zonar). */
 function CardEventos({ empresaId, periodo, fuente }) {
-  const { rango, setRango, dia, setDia, mes, setMes, consulta, pendienteDeFecha } = useRango(periodo);
+  const { rango, setRango, dia, setDia, mes, setMes, desdeHora, setDesdeHora, hastaHora, setHastaHora, consulta, pendienteDeFecha } = useRango(periodo);
   const [agrupar, setAgrupar] = useState('geocerca');
   const [estado, setEstado] = useState('inactivo');
   const [filas, setFilas] = useState([]);
@@ -132,7 +132,7 @@ function CardEventos({ empresaId, periodo, fuente }) {
         {descargaError ? <p className="text-[10px] text-red-600">{descargaError}</p> : null}
 
         <div className="flex flex-wrap items-end gap-3">
-          <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} />
+          <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} desdeHora={desdeHora} setDesdeHora={setDesdeHora} hastaHora={hastaHora} setHastaHora={setHastaHora} />
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Agrupación</p>
             <div className="flex gap-1.5">
@@ -241,7 +241,7 @@ function CardEventos({ empresaId, periodo, fuente }) {
 
 /** Tarjeta 2: tiempo dentro de cada lote (punto dentro del polígono, PostGIS). */
 function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
-  const { rango, setRango, dia, setDia, mes, setMes, consulta, pendienteDeFecha } = useRango(periodo);
+  const { rango, setRango, dia, setDia, mes, setMes, desdeHora, setDesdeHora, hastaHora, setHastaHora, consulta, pendienteDeFecha } = useRango(periodo);
   const [placa, setPlaca] = useState('');
   const [horaDesde, setHoraDesde] = useState('');
   const [horaHasta, setHoraHasta] = useState('');
@@ -355,7 +355,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
         {descargaError ? <p className="text-[10px] text-red-600">{descargaError}</p> : null}
 
         <div className="flex flex-wrap items-end gap-3">
-          <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} />
+          <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} desdeHora={desdeHora} setDesdeHora={setDesdeHora} hastaHora={hastaHora} setHastaHora={setHastaHora} />
           <label className="min-w-0">
             <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Máquina</span>
             <select

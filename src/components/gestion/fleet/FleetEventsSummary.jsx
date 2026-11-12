@@ -38,7 +38,7 @@ function CeldaTiempo({ segundos, pct, clase }) {
 }
 
 export default function FleetEventsSummary({ empresaId, periodo = null, fuente = 'real', vehicles = [] }) {
-  const { rango, setRango, dia, setDia, mes, setMes, consulta, pendienteDeFecha } = useRango(periodo);
+  const { rango, setRango, dia, setDia, mes, setMes, desdeHora, setDesdeHora, hastaHora, setHastaHora, consulta, pendienteDeFecha } = useRango(periodo);
   const [placa, setPlaca] = useState('');
   const [estado, setEstado] = useState('inactivo');
   const [intento, setIntento] = useState(0);
@@ -147,7 +147,7 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
         {descargaError ? <p className="text-[10px] text-red-600">{descargaError}</p> : null}
 
         <div className="flex flex-wrap items-end gap-3">
-          <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} />
+          <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} desdeHora={desdeHora} setDesdeHora={setDesdeHora} hastaHora={hastaHora} setHastaHora={setHastaHora} />
           <label className="min-w-0">
             <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Unidad</span>
             <select

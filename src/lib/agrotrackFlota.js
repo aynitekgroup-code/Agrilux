@@ -242,6 +242,25 @@ export function rangoDiaLima(fechaInput) {
   };
 }
 
+/**
+ * Rango libre con fecha Y hora en hora de Perú (UTC-5, sin horario de verano),
+ * pedido por el Ing. Carlos Perez ("dos buscadores de fechas con sus
+ * respectivas horas"). Entradas tipo datetime-local ("2026-11-05T06:30") ->
+ * ISO con offset -05:00 (el "hasta" entra a los 59 segundos, igual que
+ * rangoDiaLima). Si falta alguna entrada, desde/hasta quedan en null.
+ * @returns {{desde: string|null, hasta: string|null, texto: string}}
+ */
+export function rangoLibreLima(desdeInput, hastaInput) {
+  const armar = (valor, seg) =>
+    (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(valor || '')) ? `${valor}:${seg}-05:00` : null);
+  const desde = armar(desdeInput, '00');
+  const hasta = armar(hastaInput, '59');
+  const texto = desde && hasta
+    ? `${String(desdeInput).replace('T', ' ')} a ${String(hastaInput).replace('T', ' ')} (hora de Perú)`
+    : '';
+  return { desde, hasta, texto };
+}
+
 /** Último día (en hora de Perú) de un ISO, para precargar el selector de recorrido. */
 export function ultimoDiaLima(iso) {
   const value = fecha(iso);

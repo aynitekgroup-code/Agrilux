@@ -4,6 +4,7 @@ import {
   obtenerActividadFlota,
   rangoDiaLima,
   rangoMesLima,
+  rangoLibreLima,
   formatearDuracion,
   formatearRango,
   etiquetaPeriodoReporte,
@@ -22,6 +23,7 @@ const MODOS = [
   { id: 'dia', label: 'Por día' },
   { id: 'mes', label: 'Por mes' },
   { id: 'total', label: 'Todo el periodo' },
+  { id: 'libre', label: 'Desde / hasta' },
 ];
 
 const COLUMNAS = [
@@ -45,6 +47,10 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
   const [modo, setModo] = useState('dia');
   const [dia, setDia] = useState('');
   const [mes, setMes] = useState('');
+  // Rango libre con fecha Y hora (pedido por el Ing. Carlos Perez): dos
+  // buscadores datetime-local en hora de Perú.
+  const [desdeHora, setDesdeHora] = useState('');
+  const [hastaHora, setHastaHora] = useState('');
   const [placa, setPlaca] = useState('');
   const [estado, setEstado] = useState('inactivo');
   const [intento, setIntento] = useState(0);
@@ -65,6 +71,8 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
     if (!ultimo) return;
     setDia((prev) => prev || ultimo);
     setMes((prev) => prev || ultimo.slice(0, 7));
+    setDesdeHora((prev) => prev || `${ultimo}T00:00`);
+    setHastaHora((prev) => prev || `${ultimo}T23:59`);
   }, [periodo?.hasta]);
 
   // Unidades reales para el selector (si no hay datos, no hay qué elegir).
@@ -76,15 +84,22 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
   const consulta = useMemo(() => {
     if (modo === 'dia') return { ...rangoDiaLima(dia), agrupar: 'dia', texto: dia };
     if (modo === 'mes') return { ...rangoMesLima(mes), agrupar: 'mes', texto: mes };
+    if (modo === 'libre') {
+      // Rango libre con hora: se agrupa por día dentro de ese rango exacto.
+      const { desde, hasta, texto } = rangoLibreLima(desdeHora, hastaHora);
+      return { desde, hasta, agrupar: 'dia', texto };
+    }
     return {
       desde: periodo?.desde || null,
       hasta: periodo?.hasta || null,
       agrupar: 'unidad',
       texto: periodo?.desde ? formatearRango(periodo.desde, periodo.hasta) : '',
     };
-  }, [modo, dia, mes, periodo]);
+  }, [modo, dia, mes, desdeHora, hastaHora, periodo]);
 
-  const pendienteDeFecha = (modo === 'dia' && !dia) || (modo === 'mes' && !mes) || (modo === 'total' && !periodo?.desde);
+  const pendienteDeFecha = (modo === 'dia' && !dia) || (modo === 'mes' && !mes)
+    || (modo === 'libre' && (!desdeHora || !hastaHora))
+    || (modo === 'total' && !periodo?.desde);
 
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
@@ -281,6 +296,29 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
                 className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
               />
             </label>
+          ) : null}
+
+          {modo === 'libre' ? (
+            <>
+              <label className="min-w-0">
+                <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Desde · hora de Perú</span>
+                <input
+                  type="datetime-local"
+                  value={desdeHora}
+                  onChange={(e) => setDesdeHora(e.target.value)}
+                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
+              </label>
+              <label className="min-w-0">
+                <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Hasta · hora de Perú</span>
+                <input
+                  type="datetime-local"
+                  value={hastaHora}
+                  onChange={(e) => setHastaHora(e.target.value)}
+                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
+              </label>
+            </>
           ) : null}
 
           <label className="min-w-0">

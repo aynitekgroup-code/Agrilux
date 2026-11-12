@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, AlertTriangle, RotateCw, CalendarClock, Database } from 'lucide-react';
-import { rangoDiaLima, rangoMesLima, formatearRango, ultimoDiaLima } from '../../../lib/agrotrackFlota';
+import { rangoDiaLima, rangoMesLima, rangoLibreLima, formatearRango, ultimoDiaLima } from '../../../lib/agrotrackFlota';
 
 /**
  * src/components/gestion/fleet/reportesComunes.jsx
@@ -15,6 +15,7 @@ export const RANGOS = [
   { id: 'todo', label: 'Todo el periodo' },
   { id: 'dia', label: 'Por día' },
   { id: 'mes', label: 'Por mes' },
+  { id: 'libre', label: 'Desde / hasta' },
 ];
 
 /** Número localizado con el mínimo de decimales pedido. */
@@ -33,6 +34,10 @@ export function useRango(periodo) {
   const [rango, setRango] = useState('todo');
   const [dia, setDia] = useState('');
   const [mes, setMes] = useState('');
+  // Rango libre con hora (pedido por el Ing. Carlos Perez): dos buscadores de
+  // fecha+hora en formato datetime-local, interpretados en hora de Perú.
+  const [desdeHora, setDesdeHora] = useState('');
+  const [hastaHora, setHastaHora] = useState('');
 
   // Precarga con el último día (o mes) que trae datos reales.
   useEffect(() => {
@@ -41,26 +46,39 @@ export function useRango(periodo) {
     if (!ultimo) return;
     setDia((prev) => prev || ultimo);
     setMes((prev) => prev || ultimo.slice(0, 7));
+    // El rango libre arranca como ese último día completo (00:00 a 23:59).
+    setDesdeHora((prev) => prev || `${ultimo}T00:00`);
+    setHastaHora((prev) => prev || `${ultimo}T23:59`);
   }, [periodo?.hasta]);
 
   const consulta = useMemo(() => {
     if (rango === 'dia') return { ...rangoDiaLima(dia), texto: dia };
     if (rango === 'mes') return { ...rangoMesLima(mes), texto: mes };
+    if (rango === 'libre') return rangoLibreLima(desdeHora, hastaHora);
     return {
       desde: periodo?.desde || null,
       hasta: periodo?.hasta || null,
       texto: periodo?.desde ? formatearRango(periodo.desde, periodo.hasta) : '',
     };
-  }, [rango, dia, mes, periodo]);
+  }, [rango, dia, mes, desdeHora, hastaHora, periodo]);
 
   const pendienteDeFecha =
-    (rango === 'dia' && !dia) || (rango === 'mes' && !mes) || (rango === 'todo' && !periodo?.desde);
+    (rango === 'dia' && !dia) || (rango === 'mes' && !mes)
+    || (rango === 'libre' && (!desdeHora || !hastaHora))
+    || (rango === 'todo' && !periodo?.desde);
 
-  return { rango, setRango, dia, setDia, mes, setMes, consulta, pendienteDeFecha };
+  return {
+    rango, setRango, dia, setDia, mes, setMes,
+    desdeHora, setDesdeHora, hastaHora, setHastaHora,
+    consulta, pendienteDeFecha,
+  };
 }
 
-/** Botones del rango + date/month, compartidos por las tarjetas. */
-export function ControlesRango({ rango, setRango, dia, setDia, mes, setMes }) {
+/** Botones del rango + date/month/libre, compartidos por las tarjetas. */
+export function ControlesRango({
+  rango, setRango, dia, setDia, mes, setMes,
+  desdeHora = '', setDesdeHora = () => {}, hastaHora = '', setHastaHora = () => {},
+}) {
   return (
     <div className="flex flex-wrap items-end gap-3">
       <div>
@@ -103,6 +121,29 @@ export function ControlesRango({ rango, setRango, dia, setDia, mes, setMes }) {
             className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
           />
         </label>
+      ) : null}
+
+      {rango === 'libre' ? (
+        <>
+          <label className="min-w-0">
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Desde · hora de Perú</span>
+            <input
+              type="datetime-local"
+              value={desdeHora}
+              onChange={(e) => setDesdeHora(e.target.value)}
+              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            />
+          </label>
+          <label className="min-w-0">
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Hasta · hora de Perú</span>
+            <input
+              type="datetime-local"
+              value={hastaHora}
+              onChange={(e) => setHastaHora(e.target.value)}
+              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            />
+          </label>
+        </>
       ) : null}
     </div>
   );

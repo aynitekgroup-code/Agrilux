@@ -29,7 +29,7 @@ const COLUMNAS = [
 ];
 
 export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'real' }) {
-  const { rango, setRango, dia, setDia, mes, setMes, consulta, pendienteDeFecha } = useRango(periodo);
+  const { rango, setRango, dia, setDia, mes, setMes, desdeHora, setDesdeHora, hastaHora, setHastaHora, consulta, pendienteDeFecha } = useRango(periodo);
   const [estado, setEstado] = useState('inactivo');
   const [intento, setIntento] = useState(0);
   const [filas, setFilas] = useState([]);
@@ -37,6 +37,16 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
   const [rangoTexto, setRangoTexto] = useState('');
   const [descargaError, setDescargaError] = useState(null);
   const [generadoEn, setGeneradoEn] = useState(null);
+  // Filtros pedidos por el Ing. Carlos Perez (12:22 p. m.): buscar por
+  // máquina (placa) y por geocerca. Se aplican sobre las filas ya traídas
+  // por la RPC (una por placa), sin volver a llamar a la base.
+  const [filtroPlaca, setFiltroPlaca] = useState('');
+  const [filtroGeocerca, setFiltroGeocerca] = useState('');
+
+  // Geocerca "mostrada" de una fila: la actual (dentro del polígono) o, si
+  // está fuera, la última en la que estuvo (fallback de la RPC).
+  const geocercaMostrada = (f) => f.geocerca || f.geocerca_ultima || '';
+  const FUERA = '__fuera__';
 
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
@@ -67,17 +77,43 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
     };
   }, [empresaId, consulta, pendienteDeFecha, intento]);
 
+  // Opciones de los selectores de filtro, derivadas de los datos cargados.
+  const opcionesPlacas = useMemo(
+    () => [...new Set(filas.map((f) => f.placa))].sort((a, b) => a.localeCompare(b, 'es')),
+    [filas],
+  );
+  const opcionesGeocercas = useMemo(() => {
+    const set = new Set(filas.map(geocercaMostrada));
+    return [...set].sort((a, b) => String(a || 'zzz').localeCompare(String(b || 'zzz'), 'es'));
+  }, [filas]);
+
+  // Filas visibles con los filtros aplicados (la tabla, el pie y el Excel
+  // usan estas; sin filtros es exactamente lo que devolvió la RPC).
+  const filasVistas = useMemo(() => filas.filter((f) => {
+    if (filtroPlaca && f.placa !== filtroPlaca) return false;
+    if (filtroGeocerca) {
+      const g = geocercaMostrada(f);
+      if (filtroGeocerca === FUERA ? g !== '' : g !== filtroGeocerca) return false;
+    }
+    return true;
+  }), [filas, filtroPlaca, filtroGeocerca]);
+
+  const filtroTexto = [
+    filtroPlaca ? `máquina ${filtroPlaca}` : '',
+    filtroGeocerca ? `geocerca ${filtroGeocerca === FUERA ? 'sin geocerca' : filtroGeocerca}` : '',
+  ].filter(Boolean).join(' · ');
+
   // Cantidad de unidades en cada estado (el criterio es el de la consola).
   const conteos = useMemo(() => {
     const c = { en_ruta: 0, detenido: 0, offline: 0 };
-    filas.forEach((f) => {
+    filasVistas.forEach((f) => {
       const e = clasificarEstado(f, periodo?.hasta);
       c[e] = (c[e] || 0) + 1;
     });
     return c;
-  }, [filas, periodo?.hasta]);
+  }, [filasVistas, periodo?.hasta]);
 
-  const puedeExportar = estado === 'ok' && filas.length > 0;
+  const puedeExportar = estado === 'ok' && filasVistas.length > 0;
   const mensajePendiente =
     rango === 'todo' && !periodo?.desde
       ? 'Esta empresa todavía no tiene periodo cargado en agrotrack_posiciones, así que no hay estados que mostrar.'
@@ -89,7 +125,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
     setDescargaError(null);
     try {
       const { exportarEstadoUnidadesExcel } = await import('../../../lib/exportExcel');
-      exportarEstadoUnidadesExcel(filas, { rangoTexto, periodo });
+      exportarEstadoUnidadesExcel(filasVistas, { rangoTexto, periodo, filtro: filtroTexto });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
     }
@@ -131,7 +167,48 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
         </div>
         {descargaError ? <p className="text-[10px] text-red-600">{descargaError}</p> : null}
 
-        <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} />
+        <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} desdeHora={desdeHora} setDesdeHora={setDesdeHora} hastaHora={hastaHora} setHastaHora={setHastaHora} />
+
+        {estado === 'ok' && filas.length > 0 ? (
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="min-w-0">
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Máquina</span>
+              <select
+                value={filtroPlaca}
+                onChange={(e) => setFiltroPlaca(e.target.value)}
+                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+              >
+                <option value="">Todas las unidades</option>
+                {opcionesPlacas.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </label>
+            <label className="min-w-0">
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Geocerca</span>
+              <select
+                value={filtroGeocerca}
+                onChange={(e) => setFiltroGeocerca(e.target.value)}
+                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+              >
+                <option value="">Todas las geocercas</option>
+                {opcionesGeocercas.map((g) => (
+                  <option key={g || FUERA} value={g || FUERA}>{g || 'Fuera de geocercas'}</option>
+                ))}
+              </select>
+            </label>
+            {filtroPlaca || filtroGeocerca ? (
+              <button
+                type="button"
+                onClick={() => { setFiltroPlaca(''); setFiltroGeocerca(''); }}
+                className="px-2 py-1.5 rounded-lg text-[10px] font-semibold text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                title="Quitar filtros de máquina y geocerca"
+              >
+                Quitar filtros
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <CuerpoEstado
@@ -156,7 +233,14 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
                   </tr>
                 </thead>
                 <tbody>
-                  {filas.map((fila) => (
+                  {filasVistas.length === 0 ? (
+                    <tr>
+                      <td className="px-3 py-6 text-center text-slate-400" colSpan={COLUMNAS.length}>
+                        Ninguna unidad coincide con los filtros{filtroTexto ? ` (${filtroTexto})` : ''}. Quita el filtro para ver las {filas.length} unidades.
+                      </td>
+                    </tr>
+                  ) : null}
+                  {filasVistas.map((fila) => (
                     <tr key={fila.placa} className="border-b border-slate-50 hover:bg-slate-50/60">
                       <td className="px-3 py-2">
                         <span className="font-bold text-slate-800">{fila.placa}</span>
@@ -213,7 +297,8 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
                 <tfoot>
                   <tr className="bg-slate-50 text-slate-700 font-bold">
                     <td className="px-3 py-2.5" colSpan={2}>
-                      {filas.length} unidad{filas.length === 1 ? '' : 'es'} reportando
+                      {filasVistas.length} unidad{filasVistas.length === 1 ? '' : 'es'} reportando
+                      {filasVistas.length !== filas.length ? ` de ${filas.length}` : ''}
                     </td>
                     <td className="px-3 py-2.5" colSpan={2}>
                       <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-normal text-slate-500">

@@ -129,7 +129,7 @@ export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', p
 
   const criterio = [
     { Concepto: 'Reporte', Detalle: 'Actividades de flota (Agrilux · réplica de Zonar)' },
-    { Concepto: 'Agrupación', Detalle: modo === 'dia' ? 'Por día' : modo === 'mes' ? 'Por mes' : 'Todo el periodo' },
+    { Concepto: 'Agrupación', Detalle: modo === 'dia' ? 'Por día' : modo === 'mes' ? 'Por mes' : modo === 'libre' ? 'Por día dentro del rango Desde / hasta' : 'Todo el periodo' },
     { Concepto: 'Rango', Detalle: rangoTexto || 'Todo el histórico cargado' },
     { Concepto: 'Unidad', Detalle: placa || 'Todas las unidades' },
     { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones (agrotrack_actividad_flota)' },
@@ -349,9 +349,9 @@ export function exportarEventosResumidosExcel(filas, { totalSegundos = null, ran
  * Reporte 34 de Zonar "Estado de unidades" a Excel, con la columna extra de
  * geocerca actual y la hoja de criterio.
  * @param {Array} filas  filas de agrotrack_estado_unidades_flota
- * @param {{rangoTexto?: string, periodo?: {hasta: string|null}|null}} opciones
+ * @param {{rangoTexto?: string, periodo?: {hasta: string|null}|null, filtro?: string}} opciones
  */
-export function exportarEstadoUnidadesExcel(filas, { rangoTexto = '', periodo = null } = {}) {
+export function exportarEstadoUnidadesExcel(filas, { rangoTexto = '', periodo = null, filtro = '' } = {}) {
   const wb = XLSX.utils.book_new();
 
   const datos = (filas || []).map((f) => {
@@ -385,6 +385,7 @@ export function exportarEstadoUnidadesExcel(filas, { rangoTexto = '', periodo = 
   const criterio = [
     { Concepto: 'Reporte', Detalle: 'Estado de unidades + geocerca (Agrilux · réplica de Zonar, reporte 34)' },
     { Concepto: 'Rango', Detalle: rangoTexto || 'Todo el periodo cargado' },
+    { Concepto: 'Filtros', Detalle: filtro || 'Sin filtros: todas las unidades y geocercas' },
     { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones + public.agrotrack_geocercas (agrotrack_estado_unidades_flota)' },
     { Concepto: 'Motor', Detalle: 'PostGIS: polígono que contiene la última posición (ST_Contains, EPSG:4326) con prefilter de bbox' },
     { Concepto: 'Geocerca', Detalle: 'Nombre del polígono que contiene la última posición; si está fuera, "Últ. geocerca" trae la última geocerca de campo en la que estuvo la unidad (evento pt_referencia); "Fuera de geocercas" solo si no hay ninguna' },
