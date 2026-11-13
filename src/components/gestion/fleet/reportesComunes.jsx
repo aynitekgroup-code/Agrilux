@@ -26,6 +26,27 @@ export function numero(valor, decimales = 1) {
 }
 
 /**
+ * Cuánto tiempo hace desde una fecha ISO, en lenguaje llano:
+ * "hace 12 h 30 min" · "hace 45 min" · "hace 3 d 4 h" · "hace instantes".
+ * Lo usa el reporte "Unidades sin reportar" (Zonar) y su exportación a
+ * Excel, para que el texto en pantalla y en el archivo sean idénticos.
+ * @param {string} iso      fecha de la última comunicación (GPRS)
+ * @param {Date}   ahora    instante contra el que se compara (por defecto, hoy)
+ */
+export function haceCuanto(iso, ahora = new Date()) {
+  const t = Date.parse(iso || '');
+  if (!Number.isFinite(t)) return 'sin reporte';
+  const seg = Math.max(0, Math.floor((ahora.getTime() - t) / 1000));
+  const dias = Math.floor(seg / 86400);
+  const horas = Math.floor((seg % 86400) / 3600);
+  const minutos = Math.floor((seg % 3600) / 60);
+  if (dias > 0) return `hace ${dias} d ${horas} h`;
+  if (horas > 0) return `hace ${horas} h ${minutos} min`;
+  if (minutos > 0) return `hace ${minutos} min`;
+  return 'hace instantes';
+}
+
+/**
  * Selector de rango (todo / día / mes) de una tarjeta. Precarga el día y el
  * mes con el último dato real y expone `consulta` ({ desde, hasta, texto })
  * listo para la RPC.

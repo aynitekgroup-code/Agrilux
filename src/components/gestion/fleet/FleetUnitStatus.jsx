@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Database, FileSpreadsheet, MapPinned, Gauge } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Database, FileSpreadsheet, MapPinned, Gauge, RotateCw } from 'lucide-react';
 import { obtenerEstadoUnidadesFlota, LIMITE_ESTADO_UNIDADES } from '../../../lib/agrotrackReportesGeocerca';
 import { formatearFechaHora, clasificarEstado } from '../../../lib/agrotrackFlota';
 import { useRango, ControlesRango, CuerpoEstado, numero } from './reportesComunes';
@@ -27,6 +27,33 @@ const COLUMNAS = [
   { label: 'Odómetro', clase: 'text-right' },
   { label: 'Geocerca', clase: 'text-left' },
 ];
+
+/** Auto-refresco del reporte: cada 5 minutos se vuelve a llamar la RPC. */
+const AUTO_REFRESCO_MS = 5 * 60 * 1000;
+
+/**
+ * Chip "● En vivo": la hora actual de Perú, que se actualiza cada segundo.
+ * Vive en su propio componente para que el reloj NO re-renderice la tabla
+ * completa (hasta 500 filas) cada segundo.
+ */
+function RelojEnVivo() {
+  const [ahora, setAhora] = useState(() => new Date());
+  useEffect(() => {
+    const reloj = setInterval(() => setAhora(new Date()), 1000);
+    return () => clearInterval(reloj);
+  }, []);
+  return (
+    <>
+      {ahora.toLocaleTimeString('es-PE', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+        timeZone: 'America/Lima',
+      })}
+    </>
+  );
+}
 
 export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'real' }) {
   const { rango, setRango, dia, setDia, mes, setMes, desdeHora, setDesdeHora, hastaHora, setHastaHora, consulta, pendienteDeFecha } = useRango(periodo);
@@ -76,6 +103,25 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
       cancelado = true;
     };
   }, [empresaId, consulta, pendienteDeFecha, intento]);
+
+  // Auto-refresco cada 5 minutos: reutiliza el mismo mecanismo de recarga
+  // (incrementar `intento` vuelve a disparar el effect de arriba). Los refs
+  // dan acceso al estado actual SIN rearmar el intervalo en cada render, y el
+  // intervalo se limpia al desmontar. Si hay un error en curso (o ya hay una
+  // carga andando) NO se dispara: no se pisa el aviso de "Reintentar".
+  const estadoRef = useRef(estado);
+  const pendienteRef = useRef(pendienteDeFecha);
+  useEffect(() => { estadoRef.current = estado; }, [estado]);
+  useEffect(() => { pendienteRef.current = pendienteDeFecha; }, [pendienteDeFecha]);
+  useEffect(() => {
+    if (!empresaId) return undefined;
+    const reloj = setInterval(() => {
+      if (pendienteRef.current) return;
+      if (estadoRef.current === 'error' || estadoRef.current === 'cargando') return;
+      setIntento((n) => n + 1);
+    }, AUTO_REFRESCO_MS);
+    return () => clearInterval(reloj);
+  }, [empresaId]);
 
   // Opciones de los selectores de filtro, derivadas de los datos cargados.
   const opcionesPlacas = useMemo(
@@ -144,17 +190,37 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
               Reporte 34 de Zonar "Estado de unidades": última posición, evento y dirección de cada placa, con la geocerca donde está ahora.
             </p>
             {generadoEn ? (
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Generado: {generadoEn.toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
+              <p className="text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                  title="Reloj de Perú; el reporte se recarga solo cada 5 minutos"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
+                  En vivo <RelojEnVivo />
+                </span>
+                <span>
+                  Generado: {generadoEn.toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
+                  {' · '}se actualiza cada 5 min
+                </span>
               </p>
             ) : null}
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center gap-2">
             {fuente === 'real' && rangoTexto ? (
               <span className="hidden lg:inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                 <Database size={12} /> Datos reales: {rangoTexto}
               </span>
             ) : null}
+            <button
+              type="button"
+              onClick={() => setIntento((n) => n + 1)}
+              disabled={estado === 'cargando' || pendienteDeFecha}
+              title="Recargar el reporte ahora (también se recarga solo cada 5 minutos)"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <RotateCw size={13} className={estado === 'cargando' ? 'animate-spin' : ''} />
+              {estado === 'cargando' ? 'Actualizando…' : 'Actualizar ahora'}
+            </button>
             <button
               type="button"
               onClick={descargarExcel}

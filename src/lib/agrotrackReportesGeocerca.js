@@ -11,6 +11,11 @@
  *      (punto-dentro-de-polígono con PostGIS).
  *   3) agrotrack_estado_unidades_flota  : última posición de cada placa en el
  *      rango + la geocerca actual (polígono PostGIS que la contiene).
+ *   4) agrotrack_visitas_geocerca_flota : una fila por visita (entrada y
+ *      salida de cada polígono, estilo Zonar) con el desglose apagado /
+ *      ralentí / viajando y la marca "abierta" de las que siguen dentro.
+ *   5) agrotrack_guardar_respaldo_visitas: guarda en una tabla el respaldo
+ *      de las visitas de un rango (auditoría sin volver a calcular).
  *
  * Requiere: ejecutar scripts/agrotrack-geocercas-reportes.sql en Supabase
  * (crea la extensión postGIS en su sección 0).
@@ -137,4 +142,79 @@ export async function obtenerEstadoUnidadesFlota(
     { p_empresa_id: empresaId, p_desde: desde, p_hasta: hasta, p_limite: limite },
     'No se pudo cargar el estado de unidades'
   );
+}
+
+/** Tope de filas del reporte de visitas: PostgREST corta en 1000. */
+export const LIMITE_VISITAS_GEOCERCA = 1000;
+
+/**
+ * Llama una RPC cuyo primer parámetro es la empresa y que todavía puede no
+ * estar creada en la base. El nombre primario es `p_empresa_id` (el que
+ * usan TODAS las RPC de reportes, incluidas las nuevas del script); si
+ * PostgREST no encuentra la función con esa firma (PGRST202), se reintenta
+ * UNA vez con `p_empresa` (el nombre del contrato escrito): así, aunque el
+ * SQL haya quedado con la firma distinta, la tarjeta no se rompe. Si el
+ * script todavía no se ejecutó, el segundo intento falla igual y se muestra
+ * el aviso amable de "ejecuta scripts/agrotrack-geocercas-reportes.sql".
+ */
+async function llamarRpcEmpresa(nombre, params, contexto) {
+  try {
+    return await llamarRpc(nombre, params, contexto);
+  } catch (e) {
+    const mensaje = String(e?.message || '');
+    const faltaSql = mensaje.includes('Falta ejecutar scripts/agrotrack-geocercas-reportes.sql');
+    if (!faltaSql || !('p_empresa_id' in params)) throw e;
+    const { p_empresa_id, ...resto } = params;
+    return llamarRpc(nombre, { ...resto, p_empresa: p_empresa_id }, contexto);
+  }
+}
+
+/**
+ * Visitas por geocerca (FASE 4): una fila por visita, al estilo de Zonar.
+ * Contrato: agrotrack_visitas_geocerca_flota(p_empresa_id, p_desde, p_hasta,
+ * p_placa default null, p_geocerca default null). Los filtros opcionales solo
+ * se envían cuando tienen valor (misma estrategia que agrotrack_lotes_flota).
+ * @returns filas { placa, geocerca, entrada, salida, duracion_segundos,
+ *                  apagado_segundos, ralenti_segundos, viaje_segundos, abierta }
+ */
+export async function obtenerVisitasGeocerca(
+  empresaId,
+  { desde = null, hasta = null, placa = '', geocerca = '' } = {}
+) {
+  if (!empresaId) return [];
+  const params = { p_empresa_id: empresaId, p_desde: desde, p_hasta: hasta };
+  if (placa) params.p_placa = placa;
+  if (geocerca) params.p_geocerca = geocerca;
+  return llamarRpcEmpresa(
+    'agrotrack_visitas_geocerca_flota',
+    params,
+    'No se pudieron cargar las visitas por geocerca'
+  );
+}
+
+/** PostgREST devuelve el entero suelto o envuelto; aquí se normaliza a número. */
+function aEntero(valor) {
+  if (typeof valor === 'number') return Number.isFinite(valor) ? valor : 0;
+  if (typeof valor === 'string') return Number(valor) || 0;
+  if (Array.isArray(valor)) return aEntero(valor[0]);
+  if (valor && typeof valor === 'object') {
+    const clave = Object.keys(valor)[0];
+    return clave ? aEntero(valor[clave]) : 0;
+  }
+  return 0;
+}
+
+/**
+ * Guarda el respaldo de las visitas de un rango en la base (auditoría).
+ * @param {Array} filas  las filas visibles del rango (array JSON -> jsonb)
+ * @returns {Promise<number>} cuántas filas guardó la base
+ */
+export async function guardarRespaldoVisitas(empresaId, { desde = null, hasta = null, filas = [] } = {}) {
+  if (!empresaId) throw new Error('Selecciona una empresa activa para guardar el respaldo.');
+  const resultado = await llamarRpcEmpresa(
+    'agrotrack_guardar_respaldo_visitas',
+    { p_empresa_id: empresaId, p_desde: desde, p_hasta: hasta, p_filas: filas },
+    'No se pudo guardar el respaldo de visitas'
+  );
+  return aEntero(resultado);
 }

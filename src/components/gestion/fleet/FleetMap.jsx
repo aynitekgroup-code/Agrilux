@@ -33,14 +33,18 @@ import {
 } from '../../../lib/geocercasGeometria';
 import { GeocercaEditorPanel, GeocercaVertexLayer } from './GeocercaEditor';
 import AsistenteMapa from './AsistenteMapa';
-import { ControlVistaSatelite, FichaGeocerca, LeyendaGrupos } from './MapaControles';
+import { ControlVistaSatelite, FichaGeocerca, LeyendaGrupos, PanelGruposUnidades, PanelUnidadesGeocerca, TablaCoordenadas, TablaRecorrido } from './MapaControles';
 import { COLORES_GRUPO, ETIQUETAS_GRUPO, resumenGeocercasParaIA } from '../../../lib/asistenteMapa';
 import {
   formatearFechaHora,
-  obtenerRecorridoFlota,
-  rangoDiaLima,
+  formatearFechaLarga,
+  formatearRango,
+  rangoLibreLima,
   ultimoDiaLima,
 } from '../../../lib/agrotrackFlota';
+import { obtenerEstadoUnidadesFlota } from '../../../lib/agrotrackReportesGeocerca';
+import { cargarGruposUnidades, guardarGrupoUnidad, listaGruposConocidos } from '../../../lib/agrotrackGrupos';
+import { cargarPaginaRecorrido, planearPaginas, textoVentana } from '../../../lib/agrotrackMapaHistorico';
 import { STATUS_META } from './fleetTokens';
 import PosicionesImport from './PosicionesImport';
 
@@ -75,6 +79,43 @@ function parseGeometry(value) {
 
 function normalizeGeofence(row) {
   return { ...row, geometria: parseGeometry(row.geometria ?? row.poligono ?? row.geom) };
+}
+
+/* ---------- VIII: ¿está el punto dentro del polígono? ----------
+ * Se usa como respaldo cuando la RPC de estado de unidades no está
+ * disponible: con las coordenadas ya cargadas (39 unidades) el cruce es
+ * instantáneo y no hace ninguna consulta extra. */
+
+function puntoEnAnillo(lon, lat, anillo) {
+  if (!Array.isArray(anillo) || anillo.length < 3) return false;
+  let dentro = false;
+  for (let i = 0, j = anillo.length - 1; i < anillo.length; j = i++) {
+    const xi = Number(anillo[i]?.[0]);
+    const yi = Number(anillo[i]?.[1]);
+    const xj = Number(anillo[j]?.[0]);
+    const yj = Number(anillo[j]?.[1]);
+    if (!Number.isFinite(xi) || !Number.isFinite(yi) || !Number.isFinite(xj) || !Number.isFinite(yj)) continue;
+    const cruza = (yi > lat) !== (yj > lat)
+      && lon < ((xj - xi) * (lat - yi)) / (yj - yi || 1e-12) + xi;
+    if (cruza) dentro = !dentro;
+  }
+  return dentro;
+}
+
+function puntoEnParte(lon, lat, parte) {
+  if (!Array.isArray(parte) || !parte.length) return false;
+  // El primer anillo es el exterior; los demás son huecos.
+  if (!puntoEnAnillo(lon, lat, parte[0])) return false;
+  return !parte.slice(1).some((anillo) => puntoEnAnillo(lon, lat, anillo));
+}
+
+function puntoEnPoligono(lon, lat, geometria) {
+  if (!geometria || !Number.isFinite(lon) || !Number.isFinite(lat)) return false;
+  if (geometria.type === 'Polygon') return puntoEnParte(lon, lat, geometria.coordinates);
+  if (geometria.type === 'MultiPolygon') {
+    return (geometria.coordinates || []).some((parte) => puntoEnParte(lon, lat, parte));
+  }
+  return false;
 }
 
 // Busca por todas las palabras (en cualquier orden) y ordena: nombre exacto,
@@ -265,12 +306,35 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const [filtroGrupo, setFiltroGrupo] = useState('');
   const [vistaSatelite, setVistaSatelite] = useState(false);
   const [fitToken, setFitToken] = useState(0);
-  // FASE 2: recorrido de la unidad seleccionada en un día calendario de Perú.
-  const [rutaFecha, setRutaFecha] = useState('');
-  const [rutaPuntos, setRutaPuntos] = useState(null); // null = sin cargar
+  // VII: recorrido histórico paginado por VENTANAS TEMPORALES (fecha + hora
+  // en hora de Perú). La RPC no tiene offset, así que cada página es una
+  // ventana contigua del rango (ver src/lib/agrotrackMapaHistorico.js).
+  const [rutaDesde, setRutaDesde] = useState('');
+  const [rutaHasta, setRutaHasta] = useState('');
+  const [rutaPlan, setRutaPlan] = useState(null);        // { totalPaginas, paginas, ... }
+  const [rutaRangoTexto, setRutaRangoTexto] = useState('');
+  const [rutaPagina, setRutaPagina] = useState(1);
+  const [rutaPuntos, setRutaPuntos] = useState(null);    // null = sin cargar
   const [rutaCargando, setRutaCargando] = useState(false);
   const [rutaError, setRutaError] = useState('');
+  const [rutaMuestreada, setRutaMuestreada] = useState(false);
   const [rutaFitToken, setRutaFitToken] = useState(0);
+  // VI: última posición con dirección/geocerca actual (agrotrack_estado_unidades_flota).
+  const [estadoUnidades, setEstadoUnidades] = useState([]);
+  const [estadoCargando, setEstadoCargando] = useState(false);
+  const [estadoAviso, setEstadoAviso] = useState('');
+  // VI: grupos editables de las unidades (RPC nueva, con degradación amable).
+  const [gruposPorPlaca, setGruposPorPlaca] = useState({});
+  const [gruposCargando, setGruposCargando] = useState(false);
+  const [gruposEditables, setGruposEditables] = useState(false);
+  const [gruposAviso, setGruposAviso] = useState('');
+  const [gruposError, setGruposError] = useState('');
+  const [guardandoGrupo, setGuardandoGrupo] = useState(null);
+  // Exportaciones de las tablas nuevas (XLSX se importa bajo demanda).
+  const [exportandoCoordenadas, setExportandoCoordenadas] = useState(false);
+  const [errorExportarCoordenadas, setErrorExportarCoordenadas] = useState('');
+  const [exportandoRecorrido, setExportandoRecorrido] = useState(false);
+  const [errorExportarRecorrido, setErrorExportarRecorrido] = useState('');
   const fileInputRef = useRef(null);
   const recognitionRef = useRef(null);
   const applyVoiceRef = useRef(null);
@@ -345,11 +409,139 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     return [...grupos.entries()].sort(([a], [b]) => a.localeCompare(b, 'es'));
   }, [geofences]);
 
+  /* ----- VI / VIII: unidades con posición, estado enriquecido y grupos ----- */
+
+  // Marcadores reales del mapa (lat/lng válidos y distintos de cero): el
+  // localizador, la tabla de coordenadas y los marcadores usan ESTA lista,
+  // así "una fila por marcador visible" es literal.
+  const vehiclesConPosicion = useMemo(
+    () => vehicles.filter((vehicle) => (
+      vehicle?.lat != null && vehicle?.lng != null
+      && Number.isFinite(Number(vehicle.lat)) && Number.isFinite(Number(vehicle.lng))
+      && Number(vehicle.lat) !== 0 && Number(vehicle.lng) !== 0
+    )),
+    [vehicles],
+  );
+
+  // Última posición de cada placa con dirección y geocerca actual (RPC).
+  const estadoPorPlaca = useMemo(() => {
+    const mapa = new Map();
+    estadoUnidades.forEach((fila) => {
+      if (fila?.placa) mapa.set(fila.placa, fila);
+    });
+    return mapa;
+  }, [estadoUnidades]);
+
+  const gruposConocidos = useMemo(() => listaGruposConocidos(gruposPorPlaca), [gruposPorPlaca]);
+
+  const rangoCoordenadasTexto = useMemo(() => {
+    if (periodo?.desde) return formatearRango(periodo.desde, periodo.hasta);
+    if (fuentePosiciones === 'demo') return 'Datos de demostración';
+    return '';
+  }, [periodo, fuentePosiciones]);
+
+  // Filas de la tabla de coordenadas: una por marcador visible.
+  const filasCoordenadas = useMemo(
+    () => vehiclesConPosicion.map((vehicle) => {
+      const fila = estadoPorPlaca.get(vehicle.placa) || null;
+      const fechaIso = fila?.ultima_fecha
+        || (fuentePosiciones === 'real' ? vehicle.ultima_fecha : null)
+        || null;
+      const velocidadCruda = fila?.ultima_velocidad ?? vehicle.velocidad_kmh;
+      const velocidad = velocidadCruda == null || velocidadCruda === '' || !Number.isFinite(Number(velocidadCruda))
+        ? null
+        : Number(velocidadCruda);
+      return {
+        clave: vehicle.placa,
+        placa: vehicle.placa,
+        descripcion: vehicle.descripcion || '',
+        evento: fila?.ultimo_evento || vehicle.ultimo_evento || '',
+        fecha: fechaIso,
+        fechaTexto: fechaIso
+          ? formatearFechaHora(fechaIso)
+          : (vehicle.ultima_actualizacion || ''),
+        direccion: fila?.direccion || vehicle.ultima_ubicacion || '',
+        velocidad,
+        velocidadTexto: velocidad == null ? '—' : `${velocidad} km/h`,
+        contactoTexto: fechaIso
+          ? formatearFechaLarga(fechaIso)
+          : (vehicle.ultima_actualizacion || '—'),
+        latitud: Number(vehicle.lat),
+        longitud: Number(vehicle.lng),
+        latTexto: Number(vehicle.lat).toFixed(5),
+        lngTexto: Number(vehicle.lng).toFixed(5),
+      };
+    }),
+    [vehiclesConPosicion, estadoPorPlaca, fuentePosiciones],
+  );
+
+  const ventanaRutaTexto = useMemo(() => {
+    if (!rutaPlan) return '';
+    const ventana = rutaPlan.paginas[rutaPagina - 1];
+    return ventana ? textoVentana(ventana, formatearFechaHora) : '';
+  }, [rutaPlan, rutaPagina]);
+
   const filteredGeofences = useMemo(
     () => searchGeofences(geofences, geofenceSearch),
     [geofenceSearch, geofences],
   );
+
   const selectedGeofence = geofences.find((geofence) => geofence.id === selectedGeofenceId);
+
+  // VIII: unidades cuya última posición cae dentro de la geocerca elegida.
+  // Primero se usa la RPC de estado (trae dirección y fecha); si no está
+  // disponible se cruza con las coordenadas ya cargadas en el navegador.
+  const unidadesEnGeocerca = useMemo(() => {
+    if (!selectedGeofence?.geometria) return { estado: 'vacio', filas: [], error: '' };
+
+    const desdeEstado = estadoUnidades.length > 0;
+    const candidatos = (desdeEstado
+      ? estadoUnidades.map((f) => {
+        const partes = String(f.unidad || '').split('/');
+        return {
+          placa: f.placa,
+          descripcion: partes.length > 1 ? partes.slice(1).join('/').trim() : '',
+          lat: Number(f.latitud),
+          lng: Number(f.longitud),
+          direccion: f.direccion || '',
+          fecha: f.ultima_fecha || null,
+          velocidad: f.ultima_velocidad,
+        };
+      })
+      : vehiclesConPosicion.map((v) => ({
+        placa: v.placa,
+        descripcion: v.descripcion || '',
+        lat: Number(v.lat),
+        lng: Number(v.lng),
+        direccion: v.ultima_ubicacion || '',
+        fecha: fuentePosiciones === 'real' ? (v.ultima_fecha || null) : null,
+        velocidad: v.velocidad_kmh,
+      }))
+    ).filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng) && c.lat !== 0 && c.lng !== 0);
+
+    const dentro = candidatos.filter((c) =>
+      puntoEnPoligono(c.lng, c.lat, selectedGeofence.geometria));
+
+    const cargando = estadoCargando && fuentePosiciones === 'real';
+    // Sin ninguna candidata y con un aviso de la RPC: es un error, no un vacío.
+    if (!candidatos.length && estadoAviso && !cargando) {
+      return { estado: 'error', filas: [], error: estadoAviso };
+    }
+
+    return {
+      estado: cargando ? 'cargando' : dentro.length ? 'ok' : 'vacio',
+      filas: dentro.map((c) => ({
+        placa: c.placa,
+        descripcion: c.descripcion,
+        direccion: c.direccion,
+        fechaTexto: c.fecha ? formatearFechaLarga(c.fecha) : '—',
+        velocidadTexto: c.velocidad == null || !Number.isFinite(Number(c.velocidad))
+          ? '—'
+          : `${Number(c.velocidad)} km/h`,
+      })),
+      error: '',
+    };
+  }, [selectedGeofence, estadoUnidades, vehiclesConPosicion, estadoCargando, estadoAviso, fuentePosiciones]);
   const searchResults = geofenceSearch.trim() ? filteredGeofences.slice(0, 8) : [];
   const showResults = Boolean(geofenceSearch.trim()) && resultsOpen;
 
@@ -455,41 +647,132 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     }
   }, []);
 
-  /* ----- Recorrido (FASE 2) ----- */
+  /* ----- VI: última posición con dirección y geocerca actual ----- */
 
-  // Por defecto, el último día con datos del periodo cargado.
   useEffect(() => {
-    setRutaFecha((prev) => prev || ultimoDiaLima(periodo?.hasta) || ultimoDiaLima(periodo?.desde) || '');
+    let cancelado = false;
+    if (!empresaId || fuentePosiciones !== 'real') {
+      setEstadoUnidades([]);
+      setEstadoCargando(false);
+      setEstadoAviso('');
+      return undefined;
+    }
+    setEstadoCargando(true);
+    setEstadoAviso('');
+    obtenerEstadoUnidadesFlota(empresaId, {
+      desde: periodo?.desde || null,
+      hasta: periodo?.hasta || null,
+    })
+      .then((filas) => {
+        if (!cancelado) setEstadoUnidades(filas || []);
+      })
+      .catch((estadoError) => {
+        if (cancelado) return;
+        // Sin la RPC el mapa y las tablas siguen funcionando: solo faltan
+        // dirección y geocerca actual (se muestran como "—").
+        setEstadoUnidades([]);
+        setEstadoAviso(estadoError?.message || 'No se pudo cargar el estado de unidades.');
+      })
+      .finally(() => {
+        if (!cancelado) setEstadoCargando(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [empresaId, fuentePosiciones, periodo?.desde, periodo?.hasta]);
+
+  /* ----- VI: grupos editables de las unidades (RPC con fallback) ----- */
+
+  useEffect(() => {
+    let cancelado = false;
+    if (!empresaId) {
+      setGruposPorPlaca({});
+      setGruposEditables(false);
+      setGruposCargando(false);
+      setGruposAviso('');
+      return undefined;
+    }
+    setGruposCargando(true);
+    setGruposAviso('');
+    setGruposError('');
+    cargarGruposUnidades(empresaId)
+      .then((resultado) => {
+        if (cancelado) return;
+        setGruposPorPlaca(resultado.grupos);
+        setGruposEditables(resultado.disponible);
+        setGruposAviso(resultado.aviso || '');
+      })
+      .finally(() => {
+        if (!cancelado) setGruposCargando(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [empresaId]);
+
+  /** Asigna (o quita, con texto vacío) el grupo de una placa: optimista. */
+  const guardarGrupoDeUnidad = useCallback(async (placa, grupo) => {
+    if (!empresaId || !placa) return;
+    const limpio = String(grupo ?? '').trim();
+    const anterior = String(gruposPorPlaca[placa] ?? '').trim();
+    if (limpio === anterior) return;
+    setGruposError('');
+    setGuardandoGrupo(placa);
+    // Guardado optimista: se pinta ya; si la RPC falla se revierte.
+    setGruposPorPlaca((prev) => ({ ...prev, [placa]: limpio }));
+    try {
+      await guardarGrupoUnidad(empresaId, placa, limpio);
+    } catch (guardadoError) {
+      setGruposPorPlaca((prev) => {
+        const copia = { ...prev };
+        if (anterior) copia[placa] = anterior;
+        else delete copia[placa];
+        return copia;
+      });
+      setGruposError(guardadoError?.message || 'No se pudo guardar el grupo de la unidad.');
+    } finally {
+      setGuardandoGrupo(null);
+    }
+  }, [empresaId, gruposPorPlaca]);
+
+  /* ----- VII: recorrido histórico paginado por ventanas temporales ----- */
+
+  // Rango por defecto: el último día con datos del periodo cargado, de
+  // 00:00 a 23:59 en hora de Perú (mismo criterio de los reportes).
+  useEffect(() => {
+    const ultimo = ultimoDiaLima(periodo?.hasta) || ultimoDiaLima(periodo?.desde);
+    if (!ultimo) return;
+    setRutaDesde((prev) => prev || `${ultimo}T00:00`);
+    setRutaHasta((prev) => prev || `${ultimo}T23:59`);
   }, [periodo]);
 
-  // Al cambiar de empresa se limpia todo lo del recorrido anterior.
+  // Al cambiar de empresa o de unidad se limpia todo lo del recorrido anterior.
   useEffect(() => {
+    setRutaPlan(null);
     setRutaPuntos(null);
     setRutaError('');
     setRutaCargando(false);
-  }, [empresaId]);
+    setRutaPagina(1);
+    setRutaMuestreada(false);
+    setRutaRangoTexto('');
+  }, [empresaId, selectedId]);
 
-  // El recorrido dibujado pertenece a una unidad: si cambia la selección, se limpia.
-  useEffect(() => {
-    setRutaPuntos(null);
-    setRutaError('');
-  }, [selectedId]);
-
-  const cargarRecorrido = useCallback(async () => {
-    if (!empresaId || !selectedId || !rutaFecha) return;
-    const placa = selectedId;
-    const { desde, hasta } = rangoDiaLima(rutaFecha);
-    if (!desde) {
-      setRutaError('Elige un día válido para ver el recorrido.');
-      return;
-    }
+  /** Carga UNA página (ventana del plan). En el navegador solo vive esa página. */
+  const ejecutarPaginaRuta = useCallback(async (plan, indice) => {
+    const ventana = plan?.paginas?.[indice - 1];
+    if (!ventana || !empresaId || !selectedId) return;
     setRutaCargando(true);
     setRutaError('');
     try {
-      const puntos = await obtenerRecorridoFlota(empresaId, { placa, desde, hasta });
+      const { puntos, muestreada } = await cargarPaginaRecorrido(empresaId, {
+        placa: selectedId,
+        pagina: ventana,
+      });
       // Si mientras cargaba cambió la unidad, se descarta la respuesta vieja.
-      if (placa === activePlacaRef.current) {
+      if (selectedId === activePlacaRef.current) {
         setRutaPuntos(puntos || []);
+        setRutaPagina(indice);
+        setRutaMuestreada(muestreada);
         setRutaFitToken(Date.now());
       }
     } catch (routeError) {
@@ -498,11 +781,80 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     } finally {
       setRutaCargando(false);
     }
-  }, [empresaId, selectedId, rutaFecha]);
+  }, [empresaId, selectedId]);
+
+  const cargarRecorrido = useCallback(async () => {
+    if (!empresaId || !selectedId) return;
+    const { desde, hasta, texto } = rangoLibreLima(rutaDesde, rutaHasta);
+    if (!desde || !hasta) {
+      setRutaError('Elige la fecha y hora de inicio y de fin del recorrido (hora de Perú).');
+      return;
+    }
+    const plan = planearPaginas(desde, hasta);
+    if (!plan.ok) {
+      setRutaPlan(null);
+      setRutaPuntos(null);
+      setRutaError(plan.motivo || 'No se pudo preparar el rango del recorrido.');
+      return;
+    }
+    setRutaPlan(plan);
+    setRutaRangoTexto(texto);
+    await ejecutarPaginaRuta(plan, 1);
+  }, [empresaId, selectedId, rutaDesde, rutaHasta, ejecutarPaginaRuta]);
+
+  const cambiarPaginaRuta = useCallback((indice) => {
+    if (!rutaPlan) return;
+    const destino = Math.min(Math.max(1, Number(indice) || 1), rutaPlan.totalPaginas);
+    if (destino === rutaPagina || rutaCargando) return;
+    ejecutarPaginaRuta(rutaPlan, destino);
+  }, [rutaPlan, rutaPagina, rutaCargando, ejecutarPaginaRuta]);
 
   const limpiarRecorrido = () => {
+    setRutaPlan(null);
     setRutaPuntos(null);
     setRutaError('');
+    setRutaPagina(1);
+    setRutaMuestreada(false);
+    setRutaRangoTexto('');
+  };
+
+  /* ----- Exportaciones de las tablas nuevas (XLSX bajo demanda) ----- */
+
+  const exportarCoordenadas = async () => {
+    setExportandoCoordenadas(true);
+    setErrorExportarCoordenadas('');
+    try {
+      const { exportarCoordenadasUnidadesExcel } = await import('../../../lib/exportExcel');
+      exportarCoordenadasUnidadesExcel(filasCoordenadas, {
+        rangoTexto: rangoCoordenadasTexto,
+        fuente: fuentePosiciones,
+        unidades: filasCoordenadas.length,
+      });
+    } catch (exportError) {
+      setErrorExportarCoordenadas(exportError?.message || 'No se pudo generar el archivo de Excel.');
+    } finally {
+      setExportandoCoordenadas(false);
+    }
+  };
+
+  const exportarRecorridoPagina = async () => {
+    setExportandoRecorrido(true);
+    setErrorExportarRecorrido('');
+    try {
+      const { exportarRecorridoExcel } = await import('../../../lib/exportExcel');
+      exportarRecorridoExcel(rutaValidos, {
+        placa: selectedId,
+        rangoTexto: rutaRangoTexto,
+        pagina: rutaPagina,
+        totalPaginas: rutaPlan?.totalPaginas || 1,
+        ventanaTexto: ventanaRutaTexto,
+        muestreada: rutaMuestreada,
+      });
+    } catch (exportError) {
+      setErrorExportarRecorrido(exportError?.message || 'No se pudo generar el archivo de Excel.');
+    } finally {
+      setExportandoRecorrido(false);
+    }
   };
 
   // Puntos con coordenadas numéricas: un NaN o undefined rompe Leaflet.
@@ -1136,35 +1488,42 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         <div className="px-4 sm:px-5 pb-3">
           <div className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div className="min-w-0">
-              <p className="text-xs font-bold text-slate-700">Recorrido de la unidad</p>
+              <p className="text-xs font-bold text-slate-700">Recorrido histórico de la unidad</p>
               <p className="text-[11px] text-slate-500">
                 {selectedId ? `Unidad seleccionada: ${selectedId}` : 'Selecciona una unidad en el mapa o en la lista.'}
+                {' '}· rango con fecha y hora, paginado por ventanas.
               </p>
             </div>
-            <label className="ml-auto flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
-              Día (hora de Perú)
+            <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+              Desde · hora de Perú
               <input
-                type="date"
-                value={rutaFecha}
-                onChange={(event) => {
-                  setRutaFecha(event.target.value);
-                  setRutaPuntos(null);
-                  setRutaError('');
-                }}
+                type="datetime-local"
+                value={rutaDesde}
+                onChange={(event) => setRutaDesde(event.target.value)}
                 className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-normal text-slate-700 outline-none focus:border-emerald-500"
-                aria-label="Día del recorrido"
+                aria-label="Inicio del recorrido (fecha y hora)"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+              Hasta · hora de Perú
+              <input
+                type="datetime-local"
+                value={rutaHasta}
+                onChange={(event) => setRutaHasta(event.target.value)}
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-normal text-slate-700 outline-none focus:border-emerald-500"
+                aria-label="Fin del recorrido (fecha y hora)"
               />
             </label>
             <button
               type="button"
               onClick={cargarRecorrido}
-              disabled={rutaCargando || !selectedId || !rutaFecha}
+              disabled={rutaCargando || !selectedId || !rutaDesde || !rutaHasta}
               className="inline-flex items-center gap-1.5 rounded-lg bg-forest px-3 py-2 text-xs font-semibold text-white hover:bg-forest-dark disabled:opacity-50"
             >
               {rutaCargando ? <LoaderCircle size={14} className="animate-spin" /> : <MapPin size={14} />}
               {rutaCargando ? 'Cargando…' : 'Ver recorrido'}
             </button>
-            {rutaPuntos ? (
+            {rutaPlan ? (
               <button
                 type="button"
                 onClick={limpiarRecorrido}
@@ -1180,18 +1539,31 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               <span>{rutaError}</span>
             </p>
           ) : null}
-          {!rutaError && rutaPuntos && !rutaCargando && rutaPuntos.length === 0 ? (
-            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status">
-              No hay posiciones de {selectedId} el {rutaFecha}. Prueba con otro día dentro del periodo cargado.
+          {rutaMuestreada && rutaPuntos && !rutaError ? (
+            <p className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status">
+              <AlertCircle size={14} className="mt-0.5 shrink-0" />
+              <span>
+                Esta ventana superó el tope de 900 puntos y la RPC la muestreó. Reduce el rango
+                (por ejemplo a un día) para ver todos los puntos.
+              </span>
             </p>
           ) : null}
-          {!rutaError && rutaPuntos && rutaPuntos.length > 0 ? (
+          {rutaPlan && !rutaError ? (
             <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800" role="status">
-              Recorrido de {selectedId} · {rutaFecha} · {rutaPuntos.length} puntos GPS
-              {rutaPuntos.some((punto) => punto.es_alerta)
-                ? ` · ${rutaPuntos.filter((punto) => punto.es_alerta).length} con alerta de velocidad o pánico`
+              Rango {rutaRangoTexto} · Página {rutaPagina} de {rutaPlan.totalPaginas}
+              {ventanaRutaTexto ? ` · ventana ${ventanaRutaTexto}` : ''}
+              {rutaPuntos && rutaPuntos.length > 0
+                ? ` · ${rutaPuntos.length} puntos GPS${rutaPuntos.some((punto) => punto.es_alerta)
+                  ? ` · ${rutaPuntos.filter((punto) => punto.es_alerta).length} con alerta de velocidad o pánico`
+                  : ''}`
                 : ''}
               .
+            </p>
+          ) : null}
+          {!rutaError && rutaPuntos && !rutaCargando && rutaPuntos.length === 0 ? (
+            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status">
+              No hay posiciones de {selectedId} en {ventanaRutaTexto || 'esa ventana'}. Usa ◀ ▶ para
+              revisar otra página o cambia el rango.
             </p>
           ) : null}
         </div>
@@ -1239,8 +1611,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                 // En modo "insertar" o "dibujar" el clic lo maneja el mapa
                 // (agrega el punto): la selección no cambia.
                 if (editModo === 'insertar' || editModo === 'dibujo') return;
-                setEditMensaje(null);
-                setSelectedGeofenceId(feature.properties?.id || '');
+                // VIII: al elegir la geocerca (clic en el polígono) el mapa
+                // se ajusta a ella, igual que desde el buscador.
+                focusGeofence(feature.properties || {});
               });
             }}
           />
@@ -1322,18 +1695,30 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               />
             </>
           ) : null}
-          {vehicles.filter((vehicle) => (
-            vehicle?.lat != null && vehicle?.lng != null
-            && Number.isFinite(Number(vehicle.lat)) && Number.isFinite(Number(vehicle.lng))
-            && Number(vehicle.lat) !== 0 && Number(vehicle.lng) !== 0
-          )).map((vehicle) => {
+          {vehiclesConPosicion.map((vehicle) => {
             const meta = STATUS_META[vehicle.estado] || STATUS_META.offline;
             const latitud = Number(vehicle.lat);
             const longitud = Number(vehicle.lng);
+            const estadoPlaca = estadoPorPlaca.get(vehicle.placa) || null;
             const fechaPosicion = fuentePosiciones === 'real'
               ? (vehicle.ultima_fecha ? formatearFechaHora(vehicle.ultima_fecha) : '')
               : vehicle.ultima_actualizacion;
             const velocidad = Number(vehicle.velocidad_kmh);
+            const horasMotor = vehicle.horas_motor ?? vehicle.hrs_motor ?? vehicle.motor_horas;
+            // VI: campos del popup estilo Zonar que vienen de la RPC de estado
+            // (dirección, geocerca actual); si no hay RPC se completan con lo
+            // que ya traía el vehículo y lo que falte queda en "—".
+            const direccionPopup = estadoPlaca?.direccion
+              || (fuentePosiciones === 'real' ? vehicle.ultima_ubicacion : '');
+            const eventoPopup = vehicle.ultimo_evento || estadoPlaca?.ultimo_evento || '';
+            const fechaEvento = estadoPlaca?.ultima_fecha
+              ? formatearFechaHora(estadoPlaca.ultima_fecha)
+              : (fuentePosiciones === 'real' && vehicle.ultima_fecha
+                ? formatearFechaHora(vehicle.ultima_fecha)
+                : '');
+            const geocercaPopup = estadoPlaca?.geocerca
+              || (estadoPlaca?.geocerca_ultima ? `${estadoPlaca.geocerca_ultima} (últ. vez)` : '')
+              || '—';
             return (
               <CircleMarker
                 key={vehicle.id}
@@ -1371,6 +1756,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                         <span className="text-slate-500">· {velocidad} km/h</span>
                       ) : null}
                     </div>
+                    {direccionPopup ? (
+                      <p className="text-slate-500">Dirección: <span className="text-slate-700">{direccionPopup}</span></p>
+                    ) : null}
                     {vehicle.marca || vehicle.tipo || vehicle.anio ? (
                       <p className="text-slate-500">
                         {[vehicle.marca, vehicle.tipo, vehicle.anio].filter(Boolean).join(' · ')}
@@ -1379,8 +1767,11 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                     {vehicle.conductor_nombre ? (
                       <p className="text-slate-500">Conductor: <span className="text-slate-700">{vehicle.conductor_nombre}</span></p>
                     ) : null}
-                    {vehicle.ultimo_evento ? (
-                      <p className="text-slate-500">Último evento: <span className="text-slate-700">{vehicle.ultimo_evento}</span></p>
+                    {eventoPopup ? (
+                      <p className="text-slate-500">
+                        Último evento: <span className="text-slate-700">{eventoPopup}</span>
+                        {fechaEvento ? <span className="text-slate-500"> · {fechaEvento}</span> : null}
+                      </p>
                     ) : null}
                     {Number.isFinite(Number(vehicle.km_recorridos)) && Number(vehicle.km_recorridos) > 0 ? (
                       <p className="text-slate-500">Km recorridos: <span className="text-slate-700">{Number(vehicle.km_recorridos).toLocaleString('es-PE')} km</span></p>
@@ -1388,6 +1779,13 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                     {Number.isFinite(Number(vehicle.odometro_km)) && Number(vehicle.odometro_km) > 0 ? (
                       <p className="text-slate-500">Odómetro: <span className="text-slate-700">{Number(vehicle.odometro_km).toLocaleString('es-PE')} km</span></p>
                     ) : null}
+                    <p className="text-slate-500">Geocerca: <span className="text-slate-700">{geocercaPopup}</span></p>
+                    <p className="text-slate-500">
+                      Hrs. motor:{' '}
+                      <span className="text-slate-700">
+                        {horasMotor != null && Number.isFinite(Number(horasMotor)) ? `${Number(horasMotor)} h` : '—'}
+                      </span>
+                    </p>
                     {vehicle.ultima_ubicacion ? (
                       <p className="text-slate-500">Ubicación: <span className="text-slate-700">{vehicle.ultima_ubicacion}</span></p>
                     ) : null}
@@ -1424,6 +1822,75 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           />
         </MapContainer>
       </div>
+
+      {/* VI: localizador de unidades con grupos + tabla de coordenadas
+          (una fila por marcador visible, exportable a Excel). */}
+      {vehicles.length ? (
+        <>
+          {estadoAviso ? (
+            <p className="mx-4 sm:mx-5 mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800" role="status">
+              <AlertCircle size={13} className="mt-0.5 shrink-0" />
+              <span>{estadoAviso}</span>
+            </p>
+          ) : null}
+          <div className="grid grid-cols-1 gap-3 px-4 sm:px-5 pb-3 xl:grid-cols-2">
+            <PanelGruposUnidades
+              unidades={vehiclesConPosicion}
+              gruposPorPlaca={gruposPorPlaca}
+              gruposConocidos={gruposConocidos}
+              editable={gruposEditables && !gruposCargando}
+              cargando={gruposCargando}
+              aviso={gruposAviso && gruposAviso !== estadoAviso ? gruposAviso : ''}
+              error={gruposError}
+              guardandoPlaca={guardandoGrupo}
+              seleccionadoId={selectedId}
+              modoDescripcion={!gruposEditables && !gruposCargando}
+              onSeleccionar={(placa) => {
+                if (onSelect) onSelect(placa);
+              }}
+              onGuardar={guardarGrupoDeUnidad}
+            />
+            <TablaCoordenadas
+              filas={filasCoordenadas}
+              rangoTexto={rangoCoordenadasTexto}
+              exportando={exportandoCoordenadas}
+              errorExportar={errorExportarCoordenadas}
+              onExportar={exportarCoordenadas}
+            />
+          </div>
+        </>
+      ) : null}
+
+      {/* VII: tabla de la página (ventana) del recorrido cargada. */}
+      {rutaPlan ? (
+        <div className="px-4 sm:px-5 pb-3">
+          <TablaRecorrido
+            puntos={rutaValidos}
+            placa={selectedId}
+            pagina={rutaPagina}
+            totalPaginas={rutaPlan.totalPaginas}
+            ventanaTexto={ventanaRutaTexto}
+            muestreada={rutaMuestreada}
+            cargando={rutaCargando}
+            exportando={exportandoRecorrido}
+            errorExportar={errorExportarRecorrido}
+            onPagina={cambiarPaginaRuta}
+            onExportar={exportarRecorridoPagina}
+          />
+        </div>
+      ) : null}
+
+      {/* VIII: unidades dentro de la geocerca seleccionada. */}
+      {selectedGeofence?.geometria ? (
+        <div className="px-4 sm:px-5 pb-3">
+          <PanelUnidadesGeocerca
+            geocerca={selectedGeofence}
+            estado={unidadesEnGeocerca.estado}
+            unidades={unidadesEnGeocerca.filas}
+            error={unidadesEnGeocerca.error || ''}
+          />
+        </div>
+      ) : null}
 
       {geofences.length > 0 ? (
         <div className="px-4 sm:px-5 pb-3">
@@ -1517,7 +1984,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         {rutaPuntos && rutaPuntos.length > 0 ? (
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-block w-4 h-0.5 rounded bg-blue-600" />
-            Recorrido de {selectedId} · {rutaFecha}
+            Recorrido de {selectedId} · {rutaRangoTexto} · página {rutaPagina}/{rutaPlan?.totalPaginas || 1}
           </span>
         ) : null}
         {rutaPuntos && rutaPuntos.some((punto) => punto.es_alerta) ? (

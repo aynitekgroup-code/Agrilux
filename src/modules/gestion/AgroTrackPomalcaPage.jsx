@@ -16,6 +16,7 @@ import VehicleList from '../../components/gestion/fleet/VehicleList';
 import FleetReports from '../../components/gestion/fleet/FleetReports';
 import FleetEventsSummary from '../../components/gestion/fleet/FleetEventsSummary';
 import FleetUnitStatus from '../../components/gestion/fleet/FleetUnitStatus';
+import FleetSinReportar from '../../components/gestion/fleet/FleetSinReportar';
 import FleetGeofenceReports from '../../components/gestion/fleet/FleetGeofenceReports';
 import FleetGeofenceSummary from '../../components/gestion/fleet/FleetGeofenceSummary';
 import VigiaFlota from '../../components/gestion/fleet/VigiaFlota';
@@ -343,7 +344,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
         <div className="space-y-4">
           <SectionHeading
             title="Reportes de flota"
-            description="Los 4 reportes pedidos por el Ing. Carlos Perez: Actividad por día/mes (recorrido, horas prendido, hora de viaje y ralentí), Eventos resumidos Stop/Idle/Drive, Status de maquinaria (estado de unidades con su geocerca actual) y reportes de geocercas, todos con datos reales y exportables a Excel."
+            description="Los reportes pedidos por el Ing. Carlos Perez: Actividad por día/mes (recorrido, horas prendido, hora de viaje y ralentí), Eventos resumidos Stop/Idle/Drive, Status de maquinaria (estado de unidades con su geocerca actual), reportes de geocercas (con detalle de visitas y respaldo del rango) y Unidades sin reportar (Zonar: Unidades - Sin Reportar), todos con datos reales y exportables a Excel."
           />
           <FleetReports
             empresaId={empresa_activa_id}
@@ -361,6 +362,10 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
           <FleetUnitStatus
             empresaId={empresa_activa_id}
             periodo={conDatosReales ? panel.periodo : null}
+            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+          />
+          <FleetSinReportar
+            empresaId={empresa_activa_id}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
           <VigiaFlota

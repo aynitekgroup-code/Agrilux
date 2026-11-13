@@ -662,6 +662,581 @@ grant execute on function public.agrotrack_estado_unidades_flota(uuid, timestamp
   to anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
+-- 4) VISITAS POR GEOCERCA (observación IV del Ing. Carlos Perez): detalle,
+--    estilo Zonar, de cada visita (entrada -> salida) a un polígono dentro
+--    del rango, con fecha/hora de entrada, fecha/hora de salida, duración y
+--    el desglose apagado / ralentí / viajando de esa visita.
+--
+--    A diferencia de (1), que lee los eventos de Zonar, aquí la entrada y la
+--    salida se detectan con PostGIS: misma receta que agrotrack_lotes_flota
+--    (prefilter por bbox -> ST_Contains una sola vez por par) sobre las
+--    posiciones GPS del rango, y después las transiciones de estado
+--    dentro/fuera de cada par (placa, polígono).
+--
+--    CRITERIOS (los mismos del resto del archivo):
+--      * solo geocercas de campo (incluir_reportes), igual que (2) y (3): un
+--        distrito se tragaría todas las visitas;
+--      * umbral de viaje/ralentí = 5 km/h y encendido = viaje + ralentí,
+--        idéntico a agrotrack_lotes_flota;
+--      * continuidad <= 10 minutos: un hueco mayor de reportes DENTRO del
+--        polígono cierra la visita (igual que un lote con "visitas" nuevas);
+--      * duplicados (misma fecha + secuencia) no aportan tiempo;
+--      * día y mes en hora de Perú.
+--
+--    CORTE EN LOS BORDES DEL RANGO (lo pedido en la observación IV):
+--      * si la unidad ya estaba dentro al abrir p_desde (su última posición
+--        previa cae en el polígono, misma idea que "continuadas" de (1)),
+--        la ENTRADA se cuenta en p_desde;
+--      * si sigue dentro al cerrar el rango, la SALIDA se cuenta en p_hasta
+--        y abierta = true (la UI lo muestra como "En curso");
+--      * la salida normal es el primer punto en que la VIMOS fuera del
+--        polígono con continuidad (<= 10 min); si la perdimos de vista
+--        (hueco > 10 min), la salida queda en el último punto confirmado
+--        dentro, que es como también cierra agrotrack_lotes_flota.
+--      * sin p_hasta no se puede cerrar: salida = null y duracion = null
+--        (abierta = true). Por eso siempre conviene mandar el rango.
+--      * la visita exige al menos UNA posición de la unidad dentro del
+--        rango: si no reportó nada en el rango (aunque su última posición
+--        previa caiga en el polígono) no hay evidencia de que siguió ahí y
+--        NO se emite fila; un rastreador apagado dentro de un lote
+--        inventaría una visita fantasma todos los días. En cuanto la unidad
+--        reporta una vez (dentro o fuera), la visita ya aparece.
+--
+--    FILTROS: p_placa (una unidad) y p_geocerca (nombre del polígono,
+--    tolerante a mayúsculas/minúsculas y a los espacios de los extremos).
+--
+--    Orden: por entrada ascendente. Sin p_limite: un rango de día/mes queda
+--    muy por debajo de las 1000 filas que PostgREST devuelve; si un rango
+--    largo superara ese tope, PostgREST cortaría como en cualquier otra RPC
+--    (consultar por tramos de día/mes).
+-- ---------------------------------------------------------------------------
+drop function if exists public.agrotrack_visitas_geocerca_flota(uuid, timestamptz, timestamptz, text, text);
+
+create function public.agrotrack_visitas_geocerca_flota(
+  p_empresa_id uuid,
+  p_desde      timestamptz default null,
+  p_hasta      timestamptz default null,
+  p_placa      text        default null,
+  p_geocerca   text        default null
+)
+returns table (
+  placa             text,
+  geocerca          text,
+  entrada           timestamptz,
+  salida            timestamptz,
+  duracion_segundos integer,
+  apagado_segundos  integer,
+  ralenti_segundos  integer,
+  viaje_segundos    integer,
+  abierta           boolean
+)
+language sql
+stable
+security definer
+set search_path = public, extensions, pg_catalog, pg_temp
+as $$
+  -- Mismo bloque de geocercas que agrotrack_lotes_flota (129 filas
+  -- materializadas: el GeoJSON se convierte UNA sola vez y el bbox sirve de
+  -- prefilter). Aquí además admite el filtro por nombre.
+  with geocercas as materialized (
+    select
+      g.id,
+      g.nombre,
+      ((g.geometria->'bbox')->>0)::double precision            as lon_min,
+      ((g.geometria->'bbox')->>1)::double precision            as lat_min,
+      ((g.geometria->'bbox')->>2)::double precision            as lon_max,
+      ((g.geometria->'bbox')->>3)::double precision            as lat_max,
+      ST_SetSRID(ST_GeomFromGeoJSON(g.geometria::text), 4326)  as poligono
+    from public.agrotrack_geocercas g
+    where g.empresa_id = p_empresa_id
+      and g.activa is true
+      and g.incluir_reportes
+      and (p_geocerca is null
+        or lower(btrim(g.nombre)) = lower(btrim(p_geocerca)))
+      and g.geometria is not null
+      and jsonb_typeof(g.geometria) = 'object'
+      and (g.geometria->>'type') in ('Polygon', 'MultiPolygon')
+      and jsonb_typeof(g.geometria->'bbox') = 'array'
+  ),
+  puntos as (
+    select p.id, p.placa, p.fecha, p.secuencia, p.latitud, p.longitud,
+           p.velocidad, p.evento
+    from public.agrotrack_posiciones p
+    -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
+    where (select public.onboarding_es_miembro(p_empresa_id))
+      and p.empresa_id = p_empresa_id
+      and (p_placa is null or p.placa = p_placa)
+      and (p_desde is null or p.fecha >= p_desde)
+      and (p_hasta is null or p.fecha <= p_hasta)
+      and p.latitud is not null
+      and p.longitud is not null
+  ),
+  -- Última posición de cada placa ANTES de abrir el rango: de ahí sale si ya
+  -- estaba dentro (entrada continuada) y con qué estado de motor abría.
+  antes as (
+    select distinct on (p.placa)
+      p.placa, p.fecha, p.latitud, p.longitud, p.velocidad, p.evento
+    from public.agrotrack_posiciones p
+    where (select public.onboarding_es_miembro(p_empresa_id))
+      and p.empresa_id = p_empresa_id
+      and (p_placa is null or p.placa = p_placa)
+      and p_desde is not null
+      and p.fecha < p_desde
+      and p.latitud is not null
+      and p.longitud is not null
+    order by p.placa, p.fecha desc, coalesce(p.secuencia, 0) desc, p.id desc
+  ),
+  dentro_antes as (
+    select
+      a.placa,
+      g.id                                                          as geocerca_id,
+      g.nombre,
+      -- Estado del último punto DENTRO con el que se abre el rango (mismo
+      -- criterio de encendido/viaje que el resto del archivo).
+      (not (lower(coalesce(a.evento, '')) like '%estacionad%'
+         or lower(coalesce(a.evento, '')) like '%apagad%'))          as encendido_base,
+      (not (lower(coalesce(a.evento, '')) like '%estacionad%'
+         or lower(coalesce(a.evento, '')) like '%apagad%'))
+        and coalesce(a.velocidad, 0) > 5                            as viaje_base
+    from antes a
+    join geocercas g
+      on a.latitud  between g.lat_min and g.lat_max
+     and a.longitud between g.lon_min and g.lon_max
+     and ST_Contains(g.poligono, ST_SetSRID(ST_MakePoint(a.longitud, a.latitud), 4326))
+  ),
+  -- Prefilter de bbox barato antes de llamar a PostGIS (mismo patrón que (2)).
+  candidatos as (
+    select
+      g.id as geocerca_id, g.nombre, g.poligono,
+      p.id as punto_id, p.placa, p.fecha, p.secuencia,
+      p.latitud, p.longitud, p.velocidad, p.evento
+    from geocercas g
+    join puntos p
+      on p.latitud  between g.lat_min and g.lat_max
+     and p.longitud between g.lon_min and g.lon_max
+  ),
+  dentro as (
+    select c.geocerca_id, c.nombre, c.punto_id, c.placa, c.fecha, c.secuencia,
+           c.velocidad, c.evento
+    from candidatos c
+    where ST_Contains(c.poligono, ST_SetSRID(ST_MakePoint(c.longitud, c.latitud), 4326))
+  ),
+  -- Pares (placa, polígono) del reporte: con posiciones dentro del rango o
+  -- que ya estaban dentro al abrirlo.
+  claves as (
+    select distinct d.placa, d.geocerca_id, d.nombre from dentro d
+    union
+    select da.placa, da.geocerca_id, da.nombre from dentro_antes da
+  ),
+  pares as (
+    select
+      c.placa,
+      c.geocerca_id,
+      c.nombre,
+      (da.placa is not null)                          as dentro_inicio,
+      da.encendido_base,
+      da.viaje_base,
+      -- Arranque de la serie de estados: en la entrada real o, si la unidad
+      -- ya estaba dentro, en el propio p_desde.
+      case
+        when da.placa is not null then p_desde
+        else dmin.primera_dentro
+      end                                             as inicio_serie
+    from claves c
+    left join dentro_antes da
+      on da.placa = c.placa and da.geocerca_id = c.geocerca_id
+    left join (
+      select placa, geocerca_id, min(fecha) as primera_dentro
+      from dentro
+      group by placa, geocerca_id
+    ) dmin
+      on dmin.placa = c.placa and dmin.geocerca_id = c.geocerca_id
+  ),
+  -- Secuencia COMPLETA de posiciones de la placa desde la entrada (las de
+  -- FUERA también hacen falta: son las que permiten ver cuándo salió).
+  serie as (
+    select
+      p.geocerca_id, p.nombre as geocerca, p.placa,
+      p.dentro_inicio, p.encendido_base, p.viaje_base, p.inicio_serie,
+      pu.id as punto_id, pu.fecha, coalesce(pu.secuencia, 0) as secuencia,
+      pu.velocidad, pu.evento,
+      (dn.punto_id is not null)                       as dentro,
+      (not (lower(coalesce(pu.evento, '')) like '%estacionad%'
+         or lower(coalesce(pu.evento, '')) like '%apagad%')) as encendido,
+      (not (lower(coalesce(pu.evento, '')) like '%estacionad%'
+         or lower(coalesce(pu.evento, '')) like '%apagad%'))
+        and coalesce(pu.velocidad, 0) > 5             as es_viaje
+    from pares p
+    join puntos pu
+      on pu.placa = p.placa
+     and pu.fecha >= p.inicio_serie
+    left join dentro dn
+      on dn.punto_id = pu.id and dn.geocerca_id = p.geocerca_id
+  ),
+  con_prev as (
+    select
+      s.*,
+      lag(s.fecha)     over w as prev_fecha,
+      lag(s.dentro)    over w as prev_dentro,
+      lag(s.secuencia) over w as prev_sec,
+      lag(s.encendido) over w as prev_encendido,
+      lag(s.es_viaje)  over w as prev_es_viaje,
+      -- El sucesor decide si la visita se cierra o sigue abierta.
+      lead(s.fecha)    over w as sig_fecha,
+      lead(s.dentro)   over w as sig_dentro
+    from serie s
+    window w as (
+      partition by s.geocerca_id, s.placa
+      order by s.fecha, s.secuencia, s.punto_id
+    )
+  ),
+  marcas as (
+    select
+      c.*,
+      case
+        when c.prev_fecha is null then null
+        else extract(epoch from (c.fecha - c.prev_fecha))
+      end as dt_crudo,
+      (c.prev_fecha is not null
+        and c.prev_fecha = c.fecha
+        and c.secuencia = c.prev_sec)                as es_duplicado,
+      -- Hueco > 10 min desde un punto DENTRO: ahí se cierra la visita.
+      (c.dentro
+        and c.sig_fecha is not null
+        and extract(epoch from (c.sig_fecha - c.fecha)) > 600) as cierra_hueco,
+      -- Cada transición hacia dentro (o cada hueco > 10 min) abre una visita.
+      sum(case
+            when c.dentro and (c.prev_dentro is distinct from true
+                               or coalesce(extract(epoch from (c.fecha - c.prev_fecha)), 0) > 600)
+            then 1 else 0
+          end)
+        over (partition by c.geocerca_id, c.placa
+              order by c.fecha, c.secuencia, c.punto_id
+              rows unbounded preceding)              as visita_n
+    from con_prev c
+  ),
+  filas as (
+    select
+      m.*,
+      -- Segundos que aporta el tramo que termina en esta fila.
+      case
+        when m.prev_fecha is null then
+          -- Primera fila de la serie: solo cuenta si la visita ya estaba
+          -- abierta al entrar al rango (entrada continuada desde p_desde).
+          case when m.dentro_inicio
+               then extract(epoch from (m.fecha - m.inicio_serie))
+               else 0::double precision end
+        when m.es_duplicado then 0::double precision
+        when coalesce(m.dt_crudo, 0) > 600 then 0::double precision
+        else m.dt_crudo
+      end as seg,
+      -- Cierre "en curso": el último punto dentro lleva el tiempo hasta p_hasta.
+      case
+        when m.sig_fecha is null and m.dentro and m.visita_n > 0
+         and p_hasta is not null
+        then greatest(extract(epoch from (p_hasta - m.fecha)), 0)
+        else 0::double precision
+      end as seg_abierto,
+      -- ¿Este tramo pertenece a la visita?
+      --   * punto dentro con el anterior también dentro (o estado inicial
+      --     dentro al abrir el rango);
+      --   * el punto fuera que cierra la visita (hasta ahí estuvo dentro);
+      --   * la primera fila fuera de una visita continuada sin puntos dentro.
+      case
+        when m.visita_n > 0
+         and ((m.dentro and coalesce(m.prev_dentro, m.dentro_inicio))
+              or m.prev_dentro = true) then true
+        when m.visita_n = 0 and m.dentro_inicio
+         and m.prev_fecha is null and not m.dentro then true
+        else false
+      end as pertenece,
+      -- Estado del tramo = estado del ÚLTIMO punto dentro conocido (si el
+      -- tramo cierra en un punto fuera, manda el anterior, que estaba dentro;
+      -- si no hay puntos dentro en el rango, el estado con el que abría).
+      case
+        when m.dentro then m.encendido
+        when m.prev_dentro then coalesce(m.prev_encendido, m.encendido)
+        else coalesce(m.encendido_base, m.encendido)
+      end as tramo_encendido,
+      case
+        when m.dentro then m.es_viaje
+        when m.prev_dentro then coalesce(m.prev_es_viaje, m.es_viaje)
+        else coalesce(m.viaje_base, m.es_viaje)
+      end as tramo_viaje
+    from marcas m
+  ),
+  visitas as (
+    select
+      f.geocerca_id,
+      f.geocerca,
+      f.placa,
+      f.visita_n,
+      -- ENTRADA: primera posición dentro, o p_desde si ya estaba dentro.
+      case
+        when bool_or(f.prev_fecha is null and f.dentro_inicio)
+          then min(f.inicio_serie)
+        else min(f.fecha) filter (where f.dentro)
+      end as entrada,
+      -- SALIDA: primer punto fuera con continuidad; si no, el último punto
+      -- dentro cuando hubo un hueco; si no, sigue "en curso" hasta p_hasta.
+      case
+        when min(f.visita_n) = 0 then max(f.fecha)
+        else coalesce(
+          min(f.fecha) filter (
+            where not f.dentro and f.prev_dentro and coalesce(f.dt_crudo, 0) <= 600),
+          max(f.fecha) filter (where f.cierra_hueco),
+          p_hasta
+        )
+      end as salida,
+      (min(f.visita_n) > 0
+        and min(f.fecha) filter (
+              where not f.dentro and f.prev_dentro and coalesce(f.dt_crudo, 0) <= 600
+            ) is null
+        and max(f.fecha) filter (where f.cierra_hueco) is null) as abierta,
+      coalesce(sum(case
+        when not f.tramo_encendido
+        then (case when f.pertenece then f.seg else 0 end) + f.seg_abierto
+        else 0 end), 0)                                     as apagado_segundos,
+      coalesce(sum(case
+        when f.tramo_encendido and not f.tramo_viaje
+        then (case when f.pertenece then f.seg else 0 end) + f.seg_abierto
+        else 0 end), 0)                                     as ralenti_segundos,
+      coalesce(sum(case
+        when f.tramo_viaje
+        then (case when f.pertenece then f.seg else 0 end) + f.seg_abierto
+        else 0 end), 0)                                     as viaje_segundos
+    from filas f
+    where f.visita_n > 0
+      and (f.dentro or f.prev_dentro = true)   -- cierra la visita recién abierta
+       or (f.visita_n = 0 and f.dentro_inicio
+           and f.prev_fecha is null and not f.dentro)
+    group by f.geocerca_id, f.geocerca, f.placa, f.visita_n
+  ),
+  emitidas as (
+    select
+      v.placa, v.geocerca, v.entrada, v.salida,
+      case when v.salida is not null
+           then extract(epoch from (v.salida - v.entrada))::integer
+      end as duracion_segundos,
+      coalesce(v.apagado_segundos, 0)::integer  as apagado_segundos,
+      coalesce(v.ralenti_segundos, 0)::integer  as ralenti_segundos,
+      coalesce(v.viaje_segundos, 0)::integer    as viaje_segundos,
+      v.abierta
+    from visitas v
+    -- Aquí NO se emite nada más: una unidad que ya estaba dentro al abrir
+    -- p_desde pero no reportó NADA en el rango no genera visita. Sin
+    -- posiciones en el rango no hay evidencia de que siguió en el polígono
+    -- (un rastreador apagado dentro de un lote la inventaría todos los
+    -- días); sí la genera en cuanto reporta aunque sea una vez, y ahí la
+    -- entrada se recorta en p_desde (continuación) como en el resto.
+  )
+  select
+    e.placa                as placa,
+    e.geocerca             as geocerca,
+    e.entrada              as entrada,
+    e.salida               as salida,
+    e.duracion_segundos    as duracion_segundos,
+    e.apagado_segundos     as apagado_segundos,
+    e.ralenti_segundos     as ralenti_segundos,
+    e.viaje_segundos       as viaje_segundos,
+    e.abierta              as abierta
+  from emitidas e
+  -- Pedido: orden de salida por la fecha/hora de entrada.
+  order by e.entrada asc nulls last, e.geocerca, e.placa;
+$$;
+
+grant execute on function public.agrotrack_visitas_geocerca_flota(uuid, timestamptz, timestamptz, text, text)
+  to anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
+-- 5) RESPALDO EN BD de las visitas (observación IV del Ing. Carlos Perez):
+--    la consola puede guardar el resultado de agrotrack_visitas_geocerca_flota
+--    para volver a verlo (o exportarlo) sin recalcular.
+--
+--    Tabla NUEVA: no se crea ni se modifica ninguna política de RLS existente
+--    (no se toca RLS de ninguna tabla ni de ningún otro archivo). Al quedar
+--    sin RLS, el único acceso útil es la RPC security definer de abajo, que
+--    valida la membresía como el resto de las RPC de este archivo.
+--
+--    Idempotente: CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS /
+--    CREATE OR REPLACE FUNCTION.
+-- ---------------------------------------------------------------------------
+create table if not exists public.agrotrack_respaldo_visitas (
+  id                uuid primary key default gen_random_uuid(),
+  empresa_id        uuid not null,
+  rango_desde       timestamptz not null,
+  rango_hasta       timestamptz not null,
+  placa             text,
+  geocerca          text,
+  entrada           timestamptz,
+  salida            timestamptz,
+  duracion_segundos integer,
+  apagado_segundos  integer,
+  ralenti_segundos  integer,
+  viaje_segundos    integer,
+  guardado_en       timestamptz not null default now()
+);
+
+create index if not exists agrotrack_respaldo_visitas_empresa_rango_idx
+  on public.agrotrack_respaldo_visitas (empresa_id, rango_desde, rango_hasta);
+
+drop function if exists public.agrotrack_guardar_respaldo_visitas(uuid, timestamptz, timestamptz, jsonb);
+
+create function public.agrotrack_guardar_respaldo_visitas(
+  p_empresa_id uuid,
+  p_desde      timestamptz,
+  p_hasta      timestamptz,
+  p_filas      jsonb
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public, pg_catalog, pg_temp
+as $$
+declare
+  v_insertadas integer := 0;
+begin
+  if p_empresa_id is null or p_desde is null or p_hasta is null then
+    raise exception 'agrotrack_guardar_respaldo_visitas: empresa, desde y hasta son obligatorios';
+  end if;
+  -- El payload debe ser un ARRAY de filas: cualquier otra forma es un error
+  -- del llamador, no un respaldo vacío silencioso.
+  if p_filas is null or jsonb_typeof(p_filas) <> 'array' then
+    raise exception 'agrotrack_guardar_respaldo_visitas: p_filas debe ser un array JSON';
+  end if;
+  -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro no guarda nada.
+  if not (select public.onboarding_es_miembro(p_empresa_id)) then
+    return 0;
+  end if;
+
+  -- Borra el respaldo previo del MISMO corte: re-ejecutar con el mismo
+  -- (empresa, desde, hasta) reemplaza las filas y nunca duplica.
+  delete from public.agrotrack_respaldo_visitas r
+  where r.empresa_id = p_empresa_id
+    and r.rango_desde = p_desde
+    and r.rango_hasta = p_hasta;
+
+  insert into public.agrotrack_respaldo_visitas
+    (empresa_id, rango_desde, rango_hasta, placa, geocerca, entrada, salida,
+     duracion_segundos, apagado_segundos, ralenti_segundos, viaje_segundos)
+  select
+    p_empresa_id,
+    p_desde,
+    p_hasta,
+    left(nullif(btrim(f.elem ->> 'placa'), ''), 40),
+    left(nullif(btrim(f.elem ->> 'geocerca'), ''), 120),
+    case when coalesce(f.elem ->> 'entrada', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+         then (f.elem ->> 'entrada')::timestamptz end,
+    case when coalesce(f.elem ->> 'salida', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+         then (f.elem ->> 'salida')::timestamptz end,
+    case when coalesce(f.elem ->> 'duracion_segundos', '') ~ '^-?[0-9]+$'
+         then (f.elem ->> 'duracion_segundos')::integer end,
+    case when coalesce(f.elem ->> 'apagado_segundos', '') ~ '^-?[0-9]+$'
+         then (f.elem ->> 'apagado_segundos')::integer end,
+    case when coalesce(f.elem ->> 'ralenti_segundos', '') ~ '^-?[0-9]+$'
+         then (f.elem ->> 'ralenti_segundos')::integer end,
+    case when coalesce(f.elem ->> 'viaje_segundos', '') ~ '^-?[0-9]+$'
+         then (f.elem ->> 'viaje_segundos')::integer end
+  from jsonb_array_elements(p_filas) with ordinality as f(elem, ord)
+  -- Tope de 5000 filas por respaldo (un mes completo de visitas entra de sobra).
+  where f.ord <= 5000
+    and jsonb_typeof(f.elem) = 'object';
+
+  get diagnostics v_insertadas = row_count;
+  return v_insertadas;
+end;
+$$;
+
+grant execute on function public.agrotrack_guardar_respaldo_visitas(uuid, timestamptz, timestamptz, jsonb)
+  to anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
+-- 6) GRUPOS DE UNIDADES (observación VI del Ing. Carlos Perez): agrupar las
+--    placas en categorías propias (p. ej. "Cosechadoras", "Camiones",
+--    "Auxiliares") para poder filtrar los reportes por grupo.
+--
+--    Tabla NUEVA con clave (empresa_id, placa): una unidad tiene UN grupo por
+--    empresa. Tampoco aquí se toca RLS: no se crea ni se modifica ninguna
+--    política existente; el acceso útil es por las dos RPC security definer.
+-- ---------------------------------------------------------------------------
+create table if not exists public.agrotrack_grupos_unidades (
+  empresa_id     uuid not null,
+  placa          text not null,
+  grupo          text not null default '',
+  actualizado_en timestamptz not null default now(),
+  primary key (empresa_id, placa)
+);
+
+drop function if exists public.agrotrack_grupos_unidades(uuid);
+
+create function public.agrotrack_grupos_unidades(p_empresa_id uuid)
+returns table (placa text, grupo text)
+language sql
+stable
+security definer
+set search_path = public, pg_catalog, pg_temp
+as $$
+  select g.placa, g.grupo
+  from public.agrotrack_grupos_unidades g
+  -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
+  where (select public.onboarding_es_miembro(p_empresa_id))
+    and g.empresa_id = p_empresa_id
+    and btrim(g.grupo) <> ''
+  order by g.grupo, g.placa;
+$$;
+
+grant execute on function public.agrotrack_grupos_unidades(uuid)
+  to anon, authenticated, service_role;
+
+drop function if exists public.agrotrack_guardar_grupo_unidad(uuid, text, text);
+
+create function public.agrotrack_guardar_grupo_unidad(
+  p_empresa_id uuid,
+  p_placa      text,
+  p_grupo      text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public, pg_catalog, pg_temp
+as $$
+declare
+  v_placa text;
+  v_grupo text;
+begin
+  v_placa := nullif(btrim(coalesce(p_placa, '')), '');
+  if v_placa is null then
+    raise exception 'agrotrack_guardar_grupo_unidad: la placa es obligatoria';
+  end if;
+  -- Misma regla que la RLS: un no-miembro no escribe.
+  if not (select public.onboarding_es_miembro(p_empresa_id)) then
+    return;
+  end if;
+
+  -- Normalización: trim, máximo 60 caracteres y primera letra en mayúscula.
+  v_grupo := left(btrim(coalesce(p_grupo, '')), 60);
+  v_grupo := case
+    when v_grupo = '' then ''
+    else upper(left(v_grupo, 1)) || substr(v_grupo, 2)
+  end;
+
+  if v_grupo = '' then
+    -- Grupo vacío o null = quitar la asignación de esa unidad.
+    delete from public.agrotrack_grupos_unidades g
+    where g.empresa_id = p_empresa_id and g.placa = v_placa;
+  else
+    insert into public.agrotrack_grupos_unidades (empresa_id, placa, grupo)
+    values (p_empresa_id, v_placa, v_grupo)
+    on conflict (empresa_id, placa)
+    do update set grupo = excluded.grupo, actualizado_en = now();
+  end if;
+end;
+$$;
+
+grant execute on function public.agrotrack_guardar_grupo_unidad(uuid, text, text)
+  to anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
 -- Comprobaciones (opcionales): deben devolver 28 geocerca, ~129 lotes y
 -- una fila por placa con su geocerca actual.
 -- ---------------------------------------------------------------------------
