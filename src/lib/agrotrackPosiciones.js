@@ -6,58 +6,20 @@
  */
 import JSZip from 'jszip';
 import { supabase } from './supabase';
+import {
+  normalizeHeader,
+  parseFechaZonar,
+  separarUnidad,
+  cleanText,
+  numberOrNull,
+  armarSourceKey,
+} from './agrotrackParse.js';
+
+// Reexportados para no romper a quien los importe de este módulo.
+export { parseFechaZonar, separarUnidad };
 
 const POSICIONES_TABLE = 'agrotrack_posiciones';
 const BATCH_SIZE = 1000;
-const PERU_OFFSET = '-05:00'; // Zonar exporta la hora local sin zona horaria.
-
-const MONTHS = {
-  jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
-  jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
-  ene: '01', abr: '04', ago: '08', set: '09', dic: '12',
-};
-
-function normalizeHeader(value) {
-  return String(value ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase();
-}
-
-// "Nov 01 2026 12:01 AM" -> "2026-11-01T00:01:00-05:00"
-export function parseFechaZonar(value) {
-  const match = String(value ?? '')
-    .trim()
-    .match(/^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})\s+(\d{4})\s+(\d{1,2}):(\d{2})\s*([AaPp])\.?\s*[Mm]\.?$/);
-  if (!match) return null;
-  const month = MONTHS[match[1].toLowerCase()];
-  if (!month) return null;
-  let hour = Number(match[4]) % 12;
-  if (match[6].toLowerCase() === 'p') hour += 12;
-  const day = String(match[2]).padStart(2, '0');
-  return `${match[3]}-${month}-${day}T${String(hour).padStart(2, '0')}:${match[5]}:00${PERU_OFFSET}`;
-}
-
-// "BPH-767/SEGURIDAD" -> { placa: "BPH-767", descripcion: "SEGURIDAD" }
-export function separarUnidad(unidad) {
-  const text = String(unidad ?? '').trim();
-  const slash = text.indexOf('/');
-  const placa = (slash === -1 ? text : text.slice(0, slash)).trim().toUpperCase();
-  const descripcion = slash === -1 ? null : text.slice(slash + 1).trim() || null;
-  return { placa, descripcion };
-}
-
-function cleanText(value) {
-  const text = String(value ?? '').trim();
-  return text === '' ? null : text;
-}
-
-function numberOrNull(value) {
-  if (value === null || value === undefined || String(value).trim() === '') return null;
-  const parsed = Number(String(value).replace(',', '.'));
-  return Number.isFinite(parsed) ? parsed : null;
-}
 
 function buildRow(raw, columns, empresaId, userId) {
   const get = (name) => raw[columns[name]];
@@ -73,7 +35,7 @@ function buildRow(raw, columns, empresaId, userId) {
     return { error: 'coordenadas inválidas' };
   }
 
-  const sourceKey = [placa, fecha, evento, latitud.toFixed(7), longitud.toFixed(7)].join('|');
+  const sourceKey = armarSourceKey(placa, fecha, evento, latitud, longitud);
   return {
     row: {
       empresa_id: empresaId,

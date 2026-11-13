@@ -1,0 +1,19 @@
+{
+  "name": "agrilux-agente-zonar",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Agente local que descarga los reportes de Zonar (app.tsomobile.com) y los ingresa a Agrilux. Corre en la PC del usuario (sale con su IP).",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "configurar": "node configurar.mjs",
+    "descubrir": "node agente.mjs descubrir",
+    "correr": "node agente.mjs correr",
+    "instalar-tarea": "instalar-tarea.bat"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}
