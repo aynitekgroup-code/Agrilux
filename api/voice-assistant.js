@@ -327,7 +327,7 @@ export default async function handler(req, res) {
 
   // ── Modo GESTIÓN: IA de la sección Gestión/AgroTrack ──
   // Mismo motivo que el modo mapa: no se pueden crear funciones nuevas.
-  // Modos: briefing | alertas | reporte | geocerca | corte.
+  // Modos: briefing | alertas | reporte | geocerca | corte | preguntar.
   if (MODOS_GESTION.has(req.body?.modo)) {
     return handlerGestion(req, res, { OPENROUTER_API_KEY, DEEPSEEK_API_KEY, GITHUB_TOKEN });
   }
@@ -923,7 +923,7 @@ async function handlerMapa(req, res, { OPENROUTER_API_KEY, DEEPSEEK_API_KEY, GIT
 /*  - La respuesta se valida aquí y otra vez en el cliente antes de verse.   */
 /* ========================================================================== */
 
-const MODOS_GESTION = new Set(['briefing', 'alertas', 'reporte', 'geocerca', 'corte']);
+const MODOS_GESTION = new Set(['briefing', 'alertas', 'reporte', 'geocerca', 'corte', 'preguntar']);
 /** Modos que deben responder JSON (si no sale JSON, se responde con error). */
 const MODOS_GESTION_JSON = new Set(['alertas', 'geocerca', 'corte']);
 /** Tope del contexto que acepta este handler (más de esto se recorta). */
@@ -969,6 +969,20 @@ REGLAS:
 - Estructura: "Qué dice el reporte" (2-3 frases), "• Hallazgos" (3-4 viñetas),
   "• Lo raro o preocupante" (1-3 viñetas) y "• Qué revisar" (2-3 acciones).
 - Si el reporte está vacío o es corto, dilo claramente sin inventar.`,
+
+  preguntar: `Eres "Preguntar a Agrilux", el asistente de texto de la flota de Agrilux
+(AgroTrack). Recibes una PREGUNTA del usuario en lenguaje natural y el ESTADO
+ACTUAL de las unidades (ya calculado en SQL: placa, geocerca, evento, fecha en
+hora de Perú, velocidad y grupo).
+
+REGLAS:
+- Español, tono directo, máximo 120 palabras. Responde SOLO a la pregunta.
+- Usa EXCLUSIVAMENTE los datos del contexto: no inventes placas, geocercas,
+  fechas ni números.
+- Si los datos no alcanzan para responder, dilo claro: "con los datos
+  actuales no puedo responder eso" y sugiere qué sí puedes responder
+  (placa, grupo, geocerca, estado de la flota).
+- Sin tablas ni JSON; viñetas cortas si ayudan a leer.`,
 
   geocerca: `Eres el asistente cartográfico de Agrilux (AgroTrack). Recibes una INSTRUCCIÓN
 del usuario para crear una geocerca y un listado de las geocercas existentes

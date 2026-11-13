@@ -24,6 +24,7 @@ import BriefingFlota from '../../components/gestion/fleet/BriefingFlota';
 import RemoteCutModal from '../../components/gestion/fleet/RemoteCutModal';
 import FleetAlerts from '../../components/gestion/fleet/FleetAlerts';
 import ModulesOverview from '../../components/gestion/fleet/ModulesOverview';
+import PreguntarAgrilux from '../../components/gestion/PreguntarAgrilux';
 import { PanelSinDatos } from '../../components/gestion/fleet/reportesComunes';
 import ReportesPage from './ReportesPage';
 import { FLEET } from '../../components/gestion/fleet/fleetTokens';
@@ -458,9 +459,15 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
         />
       ) : null}
 
+      {/* Chat "Preguntar a Agrilux": asistente de texto (placas, grupos,
+          geocercas y resumen) con IA solo como fallback. */}
+      {empresa_activa_id ? (
+        <PreguntarAgrilux empresaId={empresa_activa_id} empresaNombre={empresaActiva?.nombre || ''} />
+      ) : null}
+
       {toast ? (
         <div
-          className="fixed right-5 bottom-5 z-50 flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm text-white shadow-lg"
+          className="fixed right-4 sm:right-5 bottom-5 sm:bottom-20 z-[1400] flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm text-white shadow-lg"
           style={{ background: FLEET.forest }}
           role="status"
         >
