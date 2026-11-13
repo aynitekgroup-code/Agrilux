@@ -3,9 +3,12 @@
  * Grupos editables de las unidades del localizador (observación VI).
  *
  * Contrato SQL (lo crea scripts/agrotrack-geocercas-reportes.sql en Supabase):
- *   agrotrack_grupos_unidades(p_empresa)                  -> { placa, grupo }
- *   agrotrack_guardar_grupo_unidad(p_empresa, p_placa, p_grupo)
+ *   agrotrack_grupos_unidades(p_empresa_id)               -> { placa, grupo }
+ *   agrotrack_guardar_grupo_unidad(p_empresa_id, p_placa, p_grupo)
  *       grupo vacío ("") = quitar la unidad de su grupo
+ * El nombre de empresa sigue la convención de todas las RPC vecinas
+ * (`p_empresa_id`); si una instalación vieja lo trae como `p_empresa`, se
+ * reintenta UNA vez con ese nombre antes de degradar.
  *
  * Compatibilidad mientras esas funciones todavía no existan (PGRST202):
  * la lectura devuelve `disponible: false` con un aviso amable y la UI
@@ -73,12 +76,27 @@ async function llamarRpc(nombre, params, contexto) {
   return data || [];
 }
 
+/**
+ * Llama una RPC con el nombre de parámetro de empresa correcto: el SQL del
+ * repo usa `p_empresa_id`; si esa firma no existe (contrato con `p_empresa`),
+ * se reintenta UNA vez con ese nombre. Cualquier otro error se propaga.
+ */
+async function llamarRpcEmpresa(nombre, paramsSinEmpresa, empresaId, contexto) {
+  try {
+    return await llamarRpc(nombre, { ...paramsSinEmpresa, p_empresa_id: empresaId }, contexto);
+  } catch (e) {
+    if (!e?.rpcFalta) throw e;
+    return llamarRpc(nombre, { ...paramsSinEmpresa, p_empresa: empresaId }, contexto);
+  }
+}
+
 /** Filas { placa, grupo } de la empresa. Lanza Error con `rpcFalta` si no existe la RPC. */
 export async function obtenerGruposUnidades(empresaId) {
   if (!empresaId) return [];
-  return llamarRpc(
+  return llamarRpcEmpresa(
     'agrotrack_grupos_unidades',
-    { p_empresa: empresaId },
+    {},
+    empresaId,
     'No se pudieron cargar los grupos de unidades',
   );
 }
@@ -89,9 +107,10 @@ export async function obtenerGruposUnidades(empresaId) {
  */
 export async function guardarGrupoUnidad(empresaId, placa, grupo) {
   if (!empresaId || !placa) throw new Error('Falta la empresa o la placa para guardar el grupo.');
-  await llamarRpc(
+  await llamarRpcEmpresa(
     'agrotrack_guardar_grupo_unidad',
-    { p_empresa: empresaId, p_placa: placa, p_grupo: String(grupo ?? '').trim() },
+    { p_placa: placa, p_grupo: String(grupo ?? '').trim() },
+    empresaId,
     'No se pudo guardar el grupo de la unidad',
   );
   return true;
@@ -168,7 +187,11 @@ export function agruparUnidades(unidades, gruposPorPlaca = {}, modoDescripcion =
     if (modoDescripcion) {
       clave = String(unidad?.descripcion || '').trim();
     } else {
-      clave = String(gruposPorPlaca?.[placa] ?? '').trim();
+      // Sin grupo asignado: se lista bajo su descripción actual (el código
+      // que ya trae la unidad) en vez de acumular todo en "Sin grupo"; al
+      // asignar un grupo, la unidad se mueve a ese grupo.
+      clave = String(gruposPorPlaca?.[placa] ?? '').trim()
+        || String(unidad?.descripcion || '').trim();
     }
     const bucket = clave || GRUPO_SIN_GRUPO;
     if (!buckets.has(bucket)) buckets.set(bucket, []);

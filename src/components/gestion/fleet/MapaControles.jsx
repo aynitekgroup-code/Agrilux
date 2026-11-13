@@ -303,6 +303,18 @@ export function PanelGruposUnidades({
 
   const totalVisibles = visibles.reduce((suma, grupo) => suma + grupo.unidades.length, 0);
 
+  // Unidades sin grupo asignado: se listan por su descripción hasta que se
+  // les asigne uno (el dato se guarda placa por placa en Supabase).
+  const sinAsignar = useMemo(
+    () => (editable
+      ? unidades.filter((unidad) => {
+        const placa = String(unidad?.placa || unidad?.id || '');
+        return placa && !String(gruposPorPlaca[placa] ?? '').trim();
+      }).length
+      : 0),
+    [unidades, gruposPorPlaca, editable],
+  );
+
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
       <div className="p-4 sm:p-5 border-b border-slate-50 space-y-3">
@@ -312,7 +324,7 @@ export function PanelGruposUnidades({
             <p className="text-xs text-slate-500">
               {cargando
                 ? 'Cargando grupos…'
-                : `${unidades.length} unidades en el mapa · ${grupos.length} grupo(s)${modoDescripcion ? ' (por descripción)' : ''}`}
+                : `${unidades.length} unidades en el mapa · ${grupos.length} grupo(s)${modoDescripcion ? ' (por descripción)' : ''}${sinAsignar ? ` · ${sinAsignar} sin grupo asignado (por descripción)` : ''}`}
             </p>
           </div>
           <label className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-1.5 focus-within:border-emerald-500">
