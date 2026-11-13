@@ -14,15 +14,17 @@
 --      pt_referencia = nombre del dispositivo). Agrupable por geocerca, por día
 --      o por mes.
 --   2) agrotrack_lotes_flota            : tiempo dentro de cada lote importado
---      (agrotrack_geocercas, 129 polígonos) calculado punto-dentro-de-polígono
---      con PostGIS sobre las posiciones GPS del periodo. Solo las geocercas de
---      campo: oficinas y distritos (FASE 3.7) quedan fuera con
---      incluir_reportes = false, para que un distrito no se coma el reporte.
+--      (agrotrack_geocercas) calculado punto-dentro-de-polígono con PostGIS
+--      sobre las posiciones GPS del periodo. Entran TODAS las geocercas
+--      activas, incluidas oficinas y distritos (decisión 13/11/2026, igual
+--      que en Zonar: su reporte "Geocercas entradas-salidas" también lista
+--      distritos). Nota: un distrito contiene varios lotes, así que el mismo
+--      tiempo puede contarse en el distrito y en el lote (Zonar lo hace igual).
 --   3) agrotrack_estado_unidades_flota  : estado de unidades (reporte 34 de
 --      Zonar): la última posición de cada placa en el rango (fecha, evento,
 --      dirección, velocidad, coordenadas) MÁS la geocerca actual: el polígono
 --      PostGIS que contiene esa posición (la columna extra que pidió el
---      Ing. Carlos Perez). Igual que en (2), solo geocercas de campo.
+--      Ing. Carlos Perez). Igual que en (2), todas las geocercas activas.
 --
 -- Mismo criterio que los reportes de actividad (FASE 3), para que las cifras
 -- sean comparables:
@@ -109,18 +111,27 @@ grant execute on function public.onboarding_es_admin(uuid) to authenticated, ano
 -- ---------------------------------------------------------------------------
 -- 0.5) Columna incluir_reportes (FASE 3.7: gestión de geocercas).
 --
---    true  (por defecto): geocerca de campo -> entra en "Tiempo en lote" y en
---                         "Geocerca actual", y se exporta a Zonar;
---    false:                oficinas / distritos -> solo se ven en el mapa.
+--    true  (por defecto): entra en "Tiempo en lote", "Geocerca actual",
+--                         eventos y visitas, y se exporta a Zonar;
+--    false:                queda fuera de los reportes (solo se ve en el mapa).
 --
---    Es lo que permite cargar esos grupos sin que un distrito (que contiene
---    todas las posiciones) se trague el reporte de tiempo en lote. La columna
---    la pone el importador de src/lib/agrotrackGeocercas.js.
+--    DECISIÓN 13/11/2026 (pedido del Ing. Carlos Perez): las oficinas y los
+--    distritos SÍ entran en todos los reportes de geocercas, igual que en
+--    Zonar. Por eso el UPDATE de abajo activa ese flag en los dos tipos; el
+--    importador (src/lib/geocercasImportacion.js) ya no los marca en false.
+--    Un distrito contiene varios lotes, así que su tiempo puede "duplicarse"
+--    contra el lote de adentro: es el mismo comportamiento de Zonar.
 --
---    Idempotente (IF NOT EXISTS) y NO toca RLS ni ninguna otra columna.
+--    Idempotente (IF NOT EXISTS / WHERE ... only) y NO toca RLS ni ninguna
+--    otra columna.
 -- ---------------------------------------------------------------------------
 alter table if exists public.agrotrack_geocercas
   add column if not exists incluir_reportes boolean not null default true;
+
+update public.agrotrack_geocercas
+   set incluir_reportes = true
+ where tipo in ('oficina', 'distrito')
+   and incluir_reportes is distinct from true;
 
 -- ---------------------------------------------------------------------------
 -- 0.6) Checks de forma / tipo ampliados (FASE 3.7: gestión de geocercas).
@@ -361,8 +372,8 @@ as $$
     from public.agrotrack_geocercas g
     where g.empresa_id = p_empresa_id
       and g.activa is true
-      -- Solo geocercas de campo: oficinas y distritos (incluir_reportes =
-      -- false, FASE 3.7) no entran en el reporte de tiempo en lote.
+      -- Filtra por incluir_reportes (todas activas tras el UPDATE de la
+      -- sección 0.5: oficinas y distritos también entran, decisión 13/11/2026).
       and g.incluir_reportes
       and g.geometria is not null
       and jsonb_typeof(g.geometria) = 'object'
@@ -521,7 +532,8 @@ grant execute on function public.agrotrack_lotes_flota(uuid, timestamptz, timest
 --    los polígonos, geocerca queda en null y entra el FALLBACK pedido por el
 --    Ing. Carlos Perez ("falta ... la geocerca"): geocerca_ultima toma el
 --    pt_referencia del evento de Zonar más reciente de esa placa en el rango
---    (limitado a geocercas de campo, incluir_reportes), de modo que una
+--    (limitado a las geocercas con incluir_reportes, hoy todas tras el UPDATE
+--    de la sección 0.5), de modo que una
 --    unidad estacionada fuera al cierre del día muestra la última geocerca
 --    en la que estuvo y cuándo (geocerca_ultima_fecha).
 --
@@ -597,8 +609,8 @@ as $$
     from public.agrotrack_geocercas g
     where g.empresa_id = p_empresa_id
       and g.activa is true
-      -- Solo geocercas de campo: oficinas y distritos (incluir_reportes =
-      -- false, FASE 3.7) no pueden ser la "geocerca actual" de una unidad.
+      -- Filtra por incluir_reportes (todas activas tras el UPDATE de la
+      -- sección 0.5: oficinas y distritos también pueden ser "geocerca actual").
       and g.incluir_reportes
       and g.geometria is not null
       and jsonb_typeof(g.geometria) = 'object'
@@ -634,7 +646,7 @@ as $$
   -- fuera (unidad estacionada en el patio al cierre), se muestra la ÚLTIMA
   -- geocerca de campo en la que estuvo: el pt_referencia del evento de Zonar
   -- más reciente de la placa en el rango, cruzado contra las geocercas con
-  -- incluir_reportes (oficinas y distritos no entran en reportes).
+  -- incluir_reportes (hoy todas: oficinas y distritos también entran).
   left join lateral (
     select g3.nombre, max(p2.fecha) as fecha
     from public.agrotrack_posiciones p2
@@ -674,8 +686,10 @@ grant execute on function public.agrotrack_estado_unidades_flota(uuid, timestamp
 --    dentro/fuera de cada par (placa, polígono).
 --
 --    CRITERIOS (los mismos del resto del archivo):
---      * solo geocercas de campo (incluir_reportes), igual que (2) y (3): un
---        distrito se tragaría todas las visitas;
+--      * filtra por incluir_reportes, igual que (2) y (3): tras el UPDATE de
+--        la sección 0.5 entran también oficinas y distritos (decisión
+--        13/11/2026, igual que Zonar). Un distrito que contiene varios lotes
+--        puede mostrar visitas "duplicadas" contra el lote de adentro;
 --      * umbral de viaje/ralentí = 5 km/h y encendido = viaje + ralentí,
 --        idéntico a agrotrack_lotes_flota;
 --      * continuidad <= 10 minutos: un hueco mayor de reportes DENTRO del

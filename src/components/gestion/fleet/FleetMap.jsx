@@ -1340,7 +1340,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           ZIP con las capas <code>linderos</code>, <code>oficinas</code> y <code>distritos</code>
           (.shp, .shx, .dbf, .prj y .cpg): solo se usa el campo nombre. Los campos que ya
           existen no se modifican (los 129 cargados) y la capa <code>divisiones</code> se ignora.
-          Oficinas y distritos se ven en el mapa pero no entran en los reportes.
+          Oficinas y distritos también entran en los reportes de geocercas
+          (igual que en Zonar): un distrito que contiene varios lotes puede
+          contar el mismo tiempo en el distrito y en el lote.
         </p>
       ) : null}
 

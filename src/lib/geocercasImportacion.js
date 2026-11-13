@@ -13,9 +13,12 @@ const ZONAR_MAX_VERTICES = 200; // Valor supuesto: confirmar el límite real con
 //   * linderos   -> solo se insertan los que falten: los 129 ya están cargados
 //                   y el archivo de topografía trae huecos, así que NO se
 //                   sobrescriben (pedido del Ing. Carlos Perez).
-//   * oficinas   -> se ven en el mapa, pero NO entran en los reportes
-//                   (incluir_reportes = false).
-//   * distritos  -> igual que oficinas.
+//   * oficinas   -> se ven en el mapa Y entran en los reportes de geocercas
+//                   (incluir_reportes = true): decisión 13/11/2026 del Ing.
+//                   Carlos Perez, igual que en Zonar.
+//   * distritos  -> igual que oficinas. Un distrito contiene varios lotes,
+//                   así que su tiempo puede "duplicarse" contra el lote de
+//                   adentro: es el mismo comportamiento de Zonar.
 //   * divisiones -> se ignora a pedido del Ing. Carlos Perez.
 // ---------------------------------------------------------------------------
 export const GRUPOS_IMPORT = [
@@ -32,7 +35,7 @@ export const GRUPOS_IMPORT = [
     etiqueta: 'Oficinas',
     test: (nombre) => nombre.includes('oficina'),
     tipo: 'oficina',
-    incluirReportes: false,
+    incluirReportes: true,
     soloNuevos: false,
   },
   {
@@ -40,7 +43,7 @@ export const GRUPOS_IMPORT = [
     etiqueta: 'Distritos',
     test: (nombre) => nombre.includes('distrito'),
     tipo: 'distrito',
-    incluirReportes: false,
+    incluirReportes: true,
     soloNuevos: false,
   },
 ];
