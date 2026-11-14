@@ -12,7 +12,6 @@ import RegistroUnirse from './pages/RegistroUnirse';
 import RegistroInvitar from './pages/RegistroInvitar';
 import RegistroSolicitudEnviada from './pages/RegistroSolicitudEnviada';
 import EmpresaMiembros from './pages/EmpresaMiembros';
-import EmpresaPlan from './pages/EmpresaPlan';
 import { Clock, Mail, LogOut, Building } from 'lucide-react';
 
 /**
@@ -232,16 +231,8 @@ function AppRoutes() {
               user && isAprobado ? <CicloCultivo /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />
 
-            {/* Gestión — requiere login + aprobación.
-                Al presionar "Gestión" en el sidebar se abre directamente la
-                consola Agrilux · AgroTrack Pomalca (lo pedido por el
-                Ing. Carlos Perez). La pantalla de bienvenida /
-                configuración de infraestructura queda en
-                /gestion/configuracion. */}
+            {/* Gestión — requiere login + aprobación */}
             <Route path="/gestion" element={
-              user && isAprobado ? <AgroTrackPomalca /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
-            } />
-            <Route path="/gestion/configuracion" element={
               user && isAprobado ? <Gestion /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />
             <Route path="/gestion/sensores-agricolas" element={
@@ -259,11 +250,7 @@ function AppRoutes() {
                 <EmpresaMiembros />
               </EmpresaGuard>
             } />
-            <Route path="/empresa/plan" element={
-              <EmpresaGuard>
-                <EmpresaPlan />
-              </EmpresaGuard>
-            } />
+            <Route path="/empresa/plan" element={<Navigate to="/empresa/miembros" replace />} />
 
             {/* Mercado desactivado: las rutas antiguas vuelven al diagnóstico */}
             <Route path="/mercado" element={<Navigate to="/" replace />} />

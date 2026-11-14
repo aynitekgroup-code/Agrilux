@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS codigos_invitacion (
   usos_maximos INTEGER NOT NULL DEFAULT 1,
   usos_consumidos INTEGER NOT NULL DEFAULT 0,
   revocado BOOLEAN NOT NULL DEFAULT FALSE,
-  creado_por UUID NOT NULL REFERENCES usuarios(id),
+  creado_por TEXT NOT NULL REFERENCES usuarios(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -148,7 +148,7 @@ CREATE TABLE IF NOT EXISTS empresa_solicitudes (
     CHECK (estado IN ('pendiente', 'aprobado', 'rechazado')),
   creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   revisado_en TIMESTAMPTZ,
-  revisado_por UUID REFERENCES usuarios(id),
+  revisado_por TEXT REFERENCES usuarios(id),
   CONSTRAINT empresa_solicitudes_user_id_uuid_check
     CHECK (user_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
 );
@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS invitacion_canjes (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   invitacion_id UUID NOT NULL REFERENCES codigos_invitacion(id) ON DELETE CASCADE,
   reserva_id UUID,
-  usuario_id UUID REFERENCES usuarios(id),
+  usuario_id TEXT REFERENCES usuarios(id),
   email_usado TEXT NOT NULL,
   fecha_intento TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   estado_intento TEXT NOT NULL

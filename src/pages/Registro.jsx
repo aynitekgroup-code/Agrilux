@@ -14,6 +14,7 @@ import DOMPurify from 'dompurify';
 import { supabase } from '../lib/supabase';
 
 const ERRORES = {
+  'email_already_registered':       'Este correo ya está registrado.',
   'auth/email-already-in-use':     'Este correo ya está registrado.',
   'auth/invalid-email':            'El correo no es válido.',
   'auth/weak-password':            'La contraseña debe tener al menos 6 caracteres.',
@@ -421,7 +422,7 @@ export default function Registro() {
                       >
                         <div className="flex items-center gap-3">
                           <Building size={18} className="text-primary" />
-                          <span className="text-sm font-semibold text-gray-800">Crear una empresa</span>
+                          <span className="text-sm font-semibold text-gray-800">Registrar una empresa</span>
                         </div>
                         <span className="text-xs text-gray-400">Registrar tu empresa y tu cuenta</span>
                       </button>

@@ -252,17 +252,7 @@ export default function WebLayout({ children }) {
                         className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg"
                       >
                         <Users size={18} />
-                        Miembros de empresa
-                      </button>
-                      <button
-                        onClick={() => {
-                          setMenuOpen(false);
-                          navigate('/empresa/plan');
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg"
-                      >
-                        <Shield size={18} />
-                        Mi membresía
+                        Trabajadores de empresa
                       </button>
                     </>
                   )}

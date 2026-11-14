@@ -54,7 +54,7 @@ SET search_path = pg_catalog, public
 AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
-    IF NEW.id <> auth.uid()
+    IF NEW.id <> auth.uid()::text
        OR NEW.rol IS DISTINCT FROM 'agricultor'
        OR NEW.status NOT IN ('aprobado', 'pendiente') THEN
       RAISE EXCEPTION 'Perfil de usuario no autorizado';
@@ -216,16 +216,16 @@ BEGIN
     RETURN QUERY SELECT NULL::uuid, NULL::uuid, NULL::uuid, false;
     RETURN;
   END IF;
-  UPDATE public.codigos_invitacion
+  UPDATE public.codigos_invitacion ci
   SET estado_reserva = 'reservada',
       reserva_id = v_reserva,
       reservado_por = auth.uid(),
       reservado_en = now(),
       reserva_expira_en = now() + interval '10 minutes'
-  WHERE id = (
+  WHERE ci.id = (
     SELECT ci.id
     FROM public.codigos_invitacion ci
-    WHERE ci.token_hash = encode(trim(p_token_plano), 'sha256')
+    WHERE ci.token_hash = encode(digest(trim(p_token_plano), 'sha256'), 'hex')
       AND ci.estado_reserva = 'disponible'
       AND ci.revocado IS FALSE
       AND ci.expira_en > now()
@@ -234,7 +234,7 @@ BEGIN
     FOR UPDATE SKIP LOCKED
     LIMIT 1
   )
-  RETURNING id, empresa_id INTO v_id, v_empresa;
+  RETURNING ci.id, ci.empresa_id INTO v_id, v_empresa;
 
   RETURN QUERY SELECT v_reserva, v_empresa, v_id, v_id IS NOT NULL;
 END;
@@ -297,20 +297,17 @@ BEGIN
   VALUES (auth.uid(), trim(p_nombre), lower(trim(p_email_usado)), p_ubicacion, p_whatsapp, 'agricultor', 'aprobado', 'invitation')
   ON CONFLICT (id) DO NOTHING;
 
-  INSERT INTO public.empresa_miembros (empresa_id, user_id, nombre, email, rol, activo, created_at)
-  VALUES (v_inv.empresa_id, auth.uid()::text, trim(p_nombre), lower(trim(p_email_usado)), v_inv.rol_asignado, true, now())
-  ON CONFLICT (empresa_id, user_id) WHERE activo IS TRUE DO NOTHING
-  RETURNING id INTO v_member;
+  SELECT id INTO v_member
+  FROM public.empresa_miembros em
+  WHERE em.empresa_id = v_inv.empresa_id
+    AND em.user_id = auth.uid()::text
+    AND em.activo IS TRUE
+  LIMIT 1;
 
-  -- Si no se pudo crear la membresía (condición de carrera o conflicto), verificar si ya existe
-  -- La comprobación incluye user_id para evitar recuperar la membresía de otro usuario de la misma empresa
   IF v_member IS NULL THEN
-    SELECT id INTO v_member
-    FROM public.empresa_miembros
-    WHERE empresa_id = v_inv.empresa_id
-      AND user_id = auth.uid()::text
-      AND activo IS TRUE
-    LIMIT 1;
+    INSERT INTO public.empresa_miembros (empresa_id, user_id, nombre, email, rol, activo, created_at)
+    VALUES (v_inv.empresa_id, auth.uid()::text, trim(p_nombre), lower(trim(p_email_usado)), v_inv.rol_asignado, true, now())
+    RETURNING id INTO v_member;
   END IF;
 
   -- Si no hay miembro válido, abortar todo sin consumir la invitación
@@ -352,20 +349,17 @@ BEGIN
   INSERT INTO public.empresas (nombre, ruc, telefono, ubicacion, created_by, campana_activa)
   VALUES (trim(p_nombre_empresa), nullif(trim(p_ruc), ''), p_telefono, p_ubicacion_empresa, auth.uid()::text, '2026-A')
   RETURNING id INTO v_empresa;
-  INSERT INTO public.empresa_miembros (empresa_id, user_id, nombre, email, rol, activo, created_at)
-  VALUES (v_empresa, auth.uid()::text, trim(p_nombre), lower(trim(p_email)), 'administrador', true, now())
-  ON CONFLICT (empresa_id, user_id) WHERE activo IS TRUE DO NOTHING
-  RETURNING id INTO v_member;
+  SELECT id INTO v_member
+  FROM public.empresa_miembros em
+  WHERE em.empresa_id = v_empresa
+    AND em.user_id = auth.uid()::text
+    AND em.activo IS TRUE
+  LIMIT 1;
 
-  -- Si no se pudo crear la membresía, verificar si ya existe una activa
-  -- La comprobación incluye user_id para evitar recuperar la membresía de otro usuario de la misma empresa
   IF v_member IS NULL THEN
-    SELECT id INTO v_member
-    FROM public.empresa_miembros
-    WHERE empresa_id = v_empresa
-      AND user_id = auth.uid()::text
-      AND activo IS TRUE
-    LIMIT 1;
+    INSERT INTO public.empresa_miembros (empresa_id, user_id, nombre, email, rol, activo, created_at)
+    VALUES (v_empresa, auth.uid()::text, trim(p_nombre), lower(trim(p_email)), 'administrador', true, now())
+    RETURNING id INTO v_member;
   END IF;
 
   -- Si no hay membresía activa, abortar: no hay empresa sin administrador
@@ -399,7 +393,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
-DECLARE v_old public.empresa_miembros; v_new public.empresa_miembros;
+DECLARE v_old public.empresa_miembros; v_new public.empresa_miembros; v_admin_count integer;
 BEGIN
   SELECT * INTO v_old FROM public.empresa_miembros WHERE id = p_miembro_id FOR UPDATE;
   IF NOT FOUND OR NOT public.onboarding_es_admin(v_old.empresa_id) THEN RAISE EXCEPTION 'No autorizado'; END IF;
@@ -409,14 +403,13 @@ BEGIN
         p_nuevo_activo IS FALSE OR
         (p_nuevo_rol IS NOT NULL AND p_nuevo_rol <> 'administrador')
       ) THEN
-    DECLARE admin_count integer;
-    SELECT count(*) INTO admin_count
+    SELECT count(*) INTO v_admin_count
     FROM public.empresa_miembros
     WHERE empresa_id = v_old.empresa_id
       AND rol = 'administrador'
       AND activo IS TRUE
       AND id <> p_miembro_id;
-    IF admin_count = 0 THEN
+    IF v_admin_count = 0 THEN
       RAISE EXCEPTION 'No se puede desactivar o cambiar el rol del último administrador activo de la empresa';
     END IF;
   END IF;
@@ -482,19 +475,17 @@ BEGIN
   VALUES (trim(p_nombre_empresa), nullif(trim(p_ruc), ''), p_telefono, p_ubicacion_empresa, p_usuario_id::text, '2026-A')
   RETURNING id INTO v_empresa;
 
-  INSERT INTO public.empresa_miembros (empresa_id, user_id, nombre, email, rol, activo, created_at)
-  VALUES (v_empresa, p_usuario_id::text, trim(p_usuario_nombre), lower(trim(p_usuario_email)), 'administrador', true, now())
-  ON CONFLICT (empresa_id, user_id) WHERE activo IS TRUE DO NOTHING
-  RETURNING id INTO v_member;
+  SELECT id INTO v_member
+  FROM public.empresa_miembros em
+  WHERE em.empresa_id = v_empresa
+    AND em.user_id = p_usuario_id::text
+    AND em.activo IS TRUE
+  LIMIT 1;
 
-  -- Si no se pudo crear la membresía, verificar si ya existe una activa
   IF v_member IS NULL THEN
-    SELECT id INTO v_member
-    FROM public.empresa_miembros
-    WHERE empresa_id = v_empresa
-      AND user_id = p_usuario_id::text
-      AND activo IS TRUE
-    LIMIT 1;
+    INSERT INTO public.empresa_miembros (empresa_id, user_id, nombre, email, rol, activo, created_at)
+    VALUES (v_empresa, p_usuario_id::text, trim(p_usuario_nombre), lower(trim(p_usuario_email)), 'administrador', true, now())
+    RETURNING id INTO v_member;
   END IF;
 
   -- Si no hay membresía activa, abortar
