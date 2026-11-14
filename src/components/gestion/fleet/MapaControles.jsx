@@ -445,8 +445,6 @@ export function TablaCoordenadas({
   const muchas = filas.length > 100;
   // Tabla limitada a 15 filas; el pie y el Excel usan el total completo.
   const { filasVistas, expandido, alternar, total } = useLimiteFilas(filas);
-<<<<<<< HEAD
-=======
   // Buscador de unidades dentro de la tabla: escribe la placa y aparece el
   // listado; al pulsar una fila el mapa vuela hasta la unidad.
   const [busqueda, setBusqueda] = useState('');
@@ -459,7 +457,6 @@ export function TablaCoordenadas({
         .some((campo) => String(campo).toLowerCase().includes(term)))
       .slice(0, 8);
   }, [busqueda, filas]);
->>>>>>> pruebas-local-lindher
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
       <div className="p-4 sm:p-5 border-b border-slate-50 flex flex-wrap items-center gap-2">

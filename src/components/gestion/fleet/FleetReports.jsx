@@ -12,11 +12,7 @@ import {
   LIMITE_FILAS_ACTIVIDAD,
 } from '../../../lib/agrotrackFlota';
 import { generarResumenFlota } from '../../../lib/agrotrackInsights';
-<<<<<<< HEAD
 import { rangoRapido, useLimiteFilas, BotonVerMas } from './reportesComunes';
-=======
-import { useLimiteFilas, BotonVerMas } from './reportesComunes';
->>>>>>> pruebas-local-lindher
 
 /**
  * Reporte de actividad de flota (FASE 3).
