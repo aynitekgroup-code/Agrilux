@@ -9,6 +9,7 @@ import {
   FileSpreadsheet,
   Layers,
   LoaderCircle,
+  MapPinned,
   Search,
   Satellite,
   X,
@@ -439,10 +440,23 @@ export function TablaCoordenadas({
   exportando = false,
   errorExportar = '',
   onExportar = () => {},
+  onEnfocar = () => {},
 }) {
   const muchas = filas.length > 100;
   // Tabla limitada a 15 filas; el pie y el Excel usan el total completo.
   const { filasVistas, expandido, alternar, total } = useLimiteFilas(filas);
+  // Buscador de unidades dentro de la tabla: escribe la placa y aparece el
+  // listado; al pulsar una fila el mapa vuela hasta la unidad.
+  const [busqueda, setBusqueda] = useState('');
+  const resultados = useMemo(() => {
+    const term = busqueda.trim().toLowerCase();
+    if (!term) return [];
+    return filas
+      .filter((f) => [f.placa, f.descripcion, f.evento, f.direccion, f.geocerca]
+        .filter(Boolean)
+        .some((campo) => String(campo).toLowerCase().includes(term)))
+      .slice(0, 8);
+  }, [busqueda, filas]);
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
       <div className="p-4 sm:p-5 border-b border-slate-50 flex flex-wrap items-center gap-2">
@@ -466,6 +480,51 @@ export function TablaCoordenadas({
         <p className="px-4 pt-2 text-[10px] text-red-600" role="alert">{errorExportar}</p>
       ) : null}
 
+      <div className="relative border-b border-slate-100 px-4 py-2.5">
+        <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2">
+          <Search size={13} className="shrink-0 text-slate-400" aria-hidden="true" />
+          <input
+            type="search"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar unidad por placa, descripción, evento o geocerca…"
+            aria-label="Buscar unidad en las coordenadas"
+            className="w-full bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400"
+            autoComplete="off"
+          />
+          {busqueda ? (
+            <button type="button" onClick={() => setBusqueda('')} aria-label="Limpiar búsqueda" className="shrink-0 text-slate-400 hover:text-slate-600">
+              <X size={13} />
+            </button>
+          ) : null}
+        </div>
+        {resultados.length ? (
+          <ul className="absolute left-4 right-4 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+            {resultados.map((r) => (
+              <li key={r.clave || r.placa}>
+                <button
+                  type="button"
+                  onClick={() => { onEnfocar(r.placa); setBusqueda(''); }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-slate-50"
+                >
+                  <MapPinned size={13} className="shrink-0 text-forest" />
+                  <span className="min-w-0">
+                    <span className="block font-semibold text-slate-800">{r.placa}{r.descripcion ? ` · ${r.descripcion}` : ''}</span>
+                    <span className="block truncate text-[10px] text-slate-400">
+                      {r.geocerca ? `Geocerca: ${r.geocerca}` : 'Fuera de geocercas'}{r.fechaTexto ? ` · ${r.fechaTexto}` : ''}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : busqueda.trim() ? (
+          <p className="absolute left-4 right-4 top-full z-20 mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-400 shadow-lg">
+            Ninguna unidad coincide con «{busqueda.trim()}».
+          </p>
+        ) : null}
+      </div>
+
       {filas.length ? (
         <>
           <div className="max-h-80 overflow-auto">
@@ -476,6 +535,7 @@ export function TablaCoordenadas({
                   <th className="px-3 py-2.5 font-bold text-left">Evento</th>
                   <th className="px-3 py-2.5 font-bold text-left">Fecha</th>
                   <th className="px-3 py-2.5 font-bold text-left">Dirección</th>
+                  <th className="px-3 py-2.5 font-bold text-left">Geocerca</th>
                   <th className="px-3 py-2.5 font-bold text-right">Vel.</th>
                   <th className="px-3 py-2.5 font-bold text-left">Últ. contacto</th>
                   <th className="px-3 py-2.5 font-bold text-right">Latitud</th>
@@ -486,15 +546,28 @@ export function TablaCoordenadas({
                 {filasVistas.map((fila) => (
                   <tr key={fila.clave || fila.placa} className="border-b border-slate-50 hover:bg-slate-50/60">
                     <td className="px-3 py-2">
-                      <span className="block font-semibold text-slate-800">{fila.placa}</span>
-                      {fila.descripcion ? (
-                        <span className="block text-[10px] text-slate-400">{fila.descripcion}</span>
-                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => onEnfocar(fila.placa)}
+                        title="Centrar en el mapa"
+                        className="block text-left hover:text-forest focus:outline-none focus:ring-2 focus:ring-forest/30 rounded"
+                      >
+                        <span className="block font-semibold text-slate-800 hover:text-forest inline-flex items-center gap-1">
+                          <MapPinned size={11} className="text-forest opacity-80" />
+                          {fila.placa}
+                        </span>
+                        {fila.descripcion ? (
+                          <span className="block text-[10px] text-slate-400">{fila.descripcion}</span>
+                        ) : null}
+                      </button>
                     </td>
                     <td className="px-3 py-2 text-slate-600">{fila.evento || '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-slate-600">{fila.fechaTexto || '—'}</td>
                     <td className="max-w-[220px] truncate px-3 py-2 text-slate-600" title={fila.direccion || ''}>
                       {fila.direccion || '—'}
+                    </td>
+                    <td className="max-w-[160px] truncate px-3 py-2 text-slate-600" title={fila.geocerca || '—'}>
+                      {fila.geocerca || '—'}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{fila.velocidadTexto}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-slate-500">{fila.contactoTexto || '—'}</td>
@@ -600,6 +673,7 @@ export function TablaRecorrido({
                 <th className="px-3 py-2.5 font-bold text-left">Fecha</th>
                 <th className="px-3 py-2.5 font-bold text-left">Evento</th>
                 <th className="px-3 py-2.5 font-bold text-left">Dirección</th>
+                <th className="px-3 py-2.5 font-bold text-left">Geocerca</th>
                 <th className="px-3 py-2.5 font-bold text-right">Vel.</th>
                 <th className="px-3 py-2.5 font-bold text-right">Latitud</th>
                 <th className="px-3 py-2.5 font-bold text-right">Longitud</th>
@@ -613,6 +687,9 @@ export function TablaRecorrido({
                   <td className="px-3 py-2 text-slate-700">{punto.evento || '—'}</td>
                   <td className="max-w-[220px] truncate px-3 py-2 text-slate-600" title={punto.direccion || ''}>
                     {punto.direccion || '—'}
+                  </td>
+                  <td className="max-w-[140px] truncate px-3 py-2 text-slate-600" title={punto.geocerca || '—'}>
+                    {punto.geocerca || '—'}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {punto.velocidad == null ? '—' : `${Number(punto.velocidad)} km/h`}

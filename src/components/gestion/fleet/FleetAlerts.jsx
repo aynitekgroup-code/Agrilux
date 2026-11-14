@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Bell, Check, AlertTriangle, RotateCw, Database, Sparkles, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Bell, Check, AlertTriangle, RotateCw, Database, Sparkles, Loader2, ChevronDown, ChevronUp, Search, X } from 'lucide-react';
 import { SEVERITY_META } from './fleetTokens';
 import {
   priorizarAlertas,
@@ -35,9 +35,15 @@ export default function FleetAlerts({
   const [cargandoIa, setCargandoIa] = useState(false);
   const [errorIa, setErrorIa] = useState('');
   const [expandido, setExpandido] = useState('');
+  const [busqueda, setBusqueda] = useState('');
 
   const pendientes = alerts.filter((a) => !a.atendida).length;
   const visibles = filtro === 'pendientes' ? alerts.filter((a) => !a.atendida) : alerts;
+
+  const placa = (id) => {
+    const v = vehicles.find((item) => item.id === id);
+    return v ? v.placa : id;
+  };
 
   // Grupos de la vista "agrupadas": primero lo pendiente, y si no hay, todo.
   const grupos = useMemo(() => {
@@ -45,10 +51,20 @@ export default function FleetAlerts({
     return priorizarAlertas(base.length ? base : alerts);
   }, [alerts]);
 
-  const placa = (id) => {
-    const v = vehicles.find((item) => item.id === id);
-    return v ? v.placa : id;
-  };
+  // Buscador de alertas: placa, tipo, mensaje, fecha u origen (en
+  // "agrupadas" aplica al tipo/mensaje del grupo y a sus placas).
+  const busquedaNorm = busqueda.trim().toLowerCase();
+  const coincide = (valor) => valor != null && String(valor).toLowerCase().includes(busquedaNorm);
+  const visiblesFiltradas = busquedaNorm
+    ? visibles.filter((a) =>
+        coincide(placa(a.vehiculo_id)) || coincide(a.tipo) || coincide(a.mensaje)
+        || coincide(a.fecha) || coincide(a.origen) || coincide(a.severidad))
+    : visibles;
+  const gruposFiltrados = busquedaNorm
+    ? grupos.filter((g) =>
+        coincide(g.tipo) || coincide(g.mensaje)
+        || g.unidades.some((unidad) => coincide(placa(unidad))))
+    : grupos;
 
   const priorizarConIa = async () => {
     if (!grupos.length || cargandoIa) return;
@@ -86,7 +102,7 @@ export default function FleetAlerts({
     const pendientesIds = grupo.ids.filter((id) => !atendidas.has(id));
 
     return (
-      <div key={grupo.clave} className="p-3.5 flex gap-2.5">
+      <div key={grupo.clave} className="rounded-xl border border-slate-100 bg-white shadow-sm p-3 flex gap-2.5">
         <span className="w-1 rounded-full shrink-0" style={{ background: sev.stripe }} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -163,20 +179,48 @@ export default function FleetAlerts({
             {cargando ? '…' : pendientes}
           </span>
         </div>
-        <div className="mt-3 flex gap-1.5 flex-wrap">
-          {filtros.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => setFiltro(f.id)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors ${
-                filtro === f.id ? 'bg-forest text-white' : 'bg-slate-50 text-slate-500 hover:text-forest'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <div className="flex gap-1.5 flex-wrap">
+            {filtros.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFiltro(f.id)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors ${
+                  filtro === f.id ? 'bg-forest text-white' : 'bg-slate-50 text-slate-500 hover:text-forest'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div className="relative ml-auto w-full sm:w-60">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+            <input
+              type="search"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar placa, tipo, mensaje…"
+              aria-label="Buscar alerta"
+              className="w-full rounded-lg border border-slate-200 bg-slate-50/60 pl-8 pr-7 py-1.5 text-xs text-slate-700 outline-none focus:border-forest focus:bg-white"
+            />
+            {busqueda ? (
+              <button
+                type="button"
+                onClick={() => setBusqueda('')}
+                aria-label="Limpiar búsqueda"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X size={13} />
+              </button>
+            ) : null}
+          </div>
         </div>
+        {busqueda.trim() ? (
+          <p className="mt-2 text-[10px] font-semibold text-slate-400">
+            Mostrando {filtro === 'agrupadas' ? gruposFiltrados.length : visiblesFiltradas.length} de {filtro === 'agrupadas' ? grupos.length : visibles.length} alerta{filtro === 'agrupadas' || visibles.length === 1 ? 's' : 's'}
+          </p>
+        ) : null}
 
         {filtro === 'agrupadas' && grupos.length ? (
           <button
@@ -195,11 +239,11 @@ export default function FleetAlerts({
         ) : null}
       </div>
 
-      <div className="flex-1 overflow-y-auto max-h-[560px] divide-y divide-slate-50">
+      <div className="flex-1 overflow-y-auto max-h-72 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 content-start p-3">
         {cargando ? (
-          <div className="p-4 space-y-3">
+          <div className="col-span-full space-y-2">
             {[0, 1, 2].map((item) => (
-              <div key={item} className="flex gap-2.5 animate-pulse">
+              <div key={item} className="flex gap-2.5 animate-pulse rounded-xl border border-slate-100 p-3">
                 <span className="w-1 rounded-full bg-slate-100 shrink-0" />
                 <div className="flex-1 space-y-2">
                   <div className="h-3 w-24 rounded bg-slate-100" />
@@ -213,7 +257,7 @@ export default function FleetAlerts({
         ) : null}
 
         {!cargando && error ? (
-          <div className="p-6 text-center">
+          <div className="col-span-full p-6 text-center">
             <p className="text-sm font-semibold text-slate-600">No se pudieron cargar las alertas</p>
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">{error}</p>
             {onReintentar ? (
@@ -230,7 +274,7 @@ export default function FleetAlerts({
 
         {/* Resumen de priorización con IA (solo lectura: no cambia datos). */}
         {!cargando && !error && filtro === 'agrupadas' && (resumenIa || errorIa) ? (
-          <div className="p-3.5 bg-slate-50/70">
+          <div className="md:col-span-2 xl:col-span-3 p-3 bg-slate-50/70 rounded-xl border border-slate-100">
             {resumenIa ? (
               <p className="text-xs font-semibold text-slate-700 leading-relaxed">
                 <Sparkles size={12} className="inline text-emerald-600 mr-1" />
@@ -242,14 +286,14 @@ export default function FleetAlerts({
         ) : null}
 
         {!cargando && !error && filtro === 'agrupadas'
-          ? grupos.map(renderGrupo)
+          ? gruposFiltrados.map(renderGrupo)
           : null}
 
         {!cargando && !error && filtro !== 'agrupadas'
-          ? visibles.map((alert) => {
+          ? visiblesFiltradas.map((alert) => {
           const sev = SEVERITY_META[alert.severidad] || SEVERITY_META.info;
           return (
-            <div key={alert.id} className={`p-3.5 flex gap-2.5 ${alert.atendida ? 'opacity-55' : ''}`}>
+            <div key={alert.id} className={`rounded-xl border border-slate-100 bg-white shadow-sm p-3 flex gap-2.5 ${alert.atendida ? 'opacity-55' : ''}`}>
               <span className="w-1 rounded-full shrink-0" style={{ background: sev.stripe }} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -278,16 +322,24 @@ export default function FleetAlerts({
           );
         })
           : null}
-        {!cargando && !error && filtro !== 'agrupadas' && visibles.length === 0 ? (
-          <div className="p-8 text-center">
-            <p className="text-sm font-semibold text-slate-600">Sin alertas pendientes</p>
-            <p className="text-xs text-slate-400 mt-1">La operación está al día.</p>
+        {!cargando && !error && filtro !== 'agrupadas' && visiblesFiltradas.length === 0 ? (
+          <div className="col-span-full p-6 text-center">
+            <p className="text-sm font-semibold text-slate-600">
+              {busqueda.trim() ? `Sin resultados para «${busqueda.trim()}»` : 'Sin alertas pendientes'}
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              {busqueda.trim() ? 'Prueba con otra placa, tipo, mensaje o fecha.' : 'La operación está al día.'}
+            </p>
           </div>
         ) : null}
-        {!cargando && !error && filtro === 'agrupadas' && grupos.length === 0 ? (
-          <div className="p-8 text-center">
-            <p className="text-sm font-semibold text-slate-600">Sin alertas para agrupar</p>
-            <p className="text-xs text-slate-400 mt-1">La operación está al día.</p>
+        {!cargando && !error && filtro === 'agrupadas' && gruposFiltrados.length === 0 ? (
+          <div className="col-span-full p-6 text-center">
+            <p className="text-sm font-semibold text-slate-600">
+              {busqueda.trim() ? `Sin resultados para «${busqueda.trim()}»` : 'Sin alertas para agrupar'}
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              {busqueda.trim() ? 'Prueba con otra placa o tipo de alerta.' : 'La operación está al día.'}
+            </p>
           </div>
         ) : null}
       </div>

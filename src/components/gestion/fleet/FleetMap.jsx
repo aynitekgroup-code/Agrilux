@@ -118,6 +118,46 @@ function puntoEnPoligono(lon, lat, geometria) {
   return false;
 }
 
+// Área planimetría (shoelace) de un polígono (o de todos los anillos de un
+// MultiPolygon): se usa para preferir la geocerca más pequeña que contiene
+// el punto (un lote antes que el distrito que lo engloba).
+function areaPoligono(geometria) {
+  if (!geometria) return Infinity;
+  const anillos = geometria.type === 'Polygon'
+    ? geometria.coordinates
+    : geometria.type === 'MultiPolygon'
+      ? geometria.coordinates.flat()
+      : [];
+  let area = 0;
+  anillos.forEach((anillo) => {
+    let a = 0;
+    for (let i = 0, j = anillo.length - 1; i < anillo.length; j = i++) {
+      a += (anillo[i][0] * anillo[j][1]) - (anillo[j][0] * anillo[i][1]);
+    }
+    area += Math.abs(a) / 2;
+  });
+  return area;
+}
+
+// Nombre de la geocerca más pequeña cuyo polígono contiene el punto, o
+// null si cae fuera de todas. Se calcula en el cliente sobre los polígonos
+// ya cargados: no añade consultas.
+function geocercaDePunto(lat, lon, geofences) {
+  let mejor = null;
+  let mejorArea = Infinity;
+  (geofences || []).forEach((g) => {
+    const geo = g.geometria;
+    if (!geo) return;
+    if (!puntoEnPoligono(lon, lat, geo)) return;
+    const area = areaPoligono(geo);
+    if (area < mejorArea) {
+      mejorArea = area;
+      mejor = g;
+    }
+  });
+  return mejor ? mejor.nombre : null;
+}
+
 // Busca por todas las palabras (en cualquier orden) y ordena: nombre exacto,
 // nombre que empieza con la consulta, nombre que la contiene, otros campos.
 function searchGeofences(list, rawQuery) {
@@ -250,13 +290,46 @@ function featureTooltip(feature, layer) {
       </p>
     </div>`;
   if (properties.nombre) {
+    // Solo tooltip sticky (hover). El clic NO abre un popup blanco:
+    // el clic abre la ficha de la geocerca (vértices/área).
     layer.bindTooltip(html, { sticky: true, direction: 'top', opacity: 1, className: 'fleet-geocerca-tooltip' });
-    layer.bindPopup(html);
   }
 }
 
 /** Encuadra el mapa sobre el recorrido cargado (FASE 2).
  *  `puntos` es una lista de pares [lat, lng]. */
+// Centra el mapa en una unidad (vehículo con coordenadas) y resalta su
+// marcador: se usa al hacer clic en el localizador o en el listado del
+// localizador. Si el marcador no está pintado (sin posición válida) simplemente
+// no mueve el mapa.
+function FocusUnidad({ unidadFocus, marcadores }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!unidadFocus) return undefined;
+    const { lat, lon, placa } = unidadFocus;
+    try {
+      map.flyTo([lat, lon], Math.max(map.getZoom(), 15), { duration: 0.7 });
+    } catch {
+      // Coordenadas inválidas no deben tumbar la consola entera.
+    }
+    const marcador = placa ? marcadores?.get(placa) : null;
+    const abrirPopup = () => {
+      try {
+        marcador?.openPopup?.();
+      } catch {
+        // El marcador puede no estar montado todavía; no rompe el flujo.
+      }
+    };
+    map.once('moveend', abrirPopup);
+    const timer = window.setTimeout(abrirPopup, 900);
+    return () => {
+      map.off('moveend', abrirPopup);
+      window.clearTimeout(timer);
+    };
+  }, [map, unidadFocus?.token, unidadFocus?.placa, marcadores]);
+  return null;
+}
+
 function FitMapToRoute({ puntos, token }) {
   const map = useMap();
   useEffect(() => {
@@ -270,6 +343,21 @@ function FitMapToRoute({ puntos, token }) {
       // Un punto malformado no debe tumbar la consola entera.
     }
   }, [map, puntos, token]);
+  return null;
+}
+
+// Informa el zoom actual del mapa para que el radio de los puntos GPS del
+// recorrido crezca al hacer zoom (el círculo se mide en píxeles).
+function ZoomRutaTracker({ onZoom }) {
+  const map = useMap();
+  useEffect(() => {
+    onZoom?.(map.getZoom());
+    const handleZoom = () => onZoom?.(map.getZoom());
+    map.on('zoomend', handleZoom);
+    return () => {
+      map.off('zoomend', handleZoom);
+    };
+  }, [map, onZoom]);
   return null;
 }
 
@@ -300,6 +388,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const [resultsOpen, setResultsOpen] = useState(false);
   const [selectedGeofenceId, setSelectedGeofenceId] = useState('');
   const [focusRequest, setFocusRequest] = useState(null);
+  const [focusUnidadRequest, setFocusUnidadRequest] = useState(null);
   const [listening, setListening] = useState(false);
   const [voiceMessage, setVoiceMessage] = useState('');
   // FASE 3.8: mapa llamativo — filtro por grupo (leyenda / JARVIS) y vista satélite.
@@ -310,11 +399,16 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // en hora de Perú). La RPC no tiene offset, así que cada página es una
   // ventana contigua del rango (ver src/lib/agrotrackMapaHistorico.js).
   const [rutaDesde, setRutaDesde] = useState('');
+  const [busquedaRuta, setBusquedaRuta] = useState('');
   const [rutaHasta, setRutaHasta] = useState('');
   const [rutaPlan, setRutaPlan] = useState(null);        // { totalPaginas, paginas, ... }
   const [rutaRangoTexto, setRutaRangoTexto] = useState('');
   const [rutaPagina, setRutaPagina] = useState(1);
   const [rutaPuntos, setRutaPuntos] = useState(null);    // null = sin cargar
+  const [zoomRuta, setZoomRuta] = useState(12);
+  // Radio de los puntos GPS del recorrido: crece con el zoom (a zoom 12 son
+  // ~4.5 px, a zoom 16 ya son picos visibles sobre el satélite).
+  const radioPuntoRuta = Math.min(10, Math.max(3, (zoomRuta - 9) * 1.5));
   const [rutaCargando, setRutaCargando] = useState(false);
   const [rutaError, setRutaError] = useState('');
   const [rutaMuestreada, setRutaMuestreada] = useState(false);
@@ -344,6 +438,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   activePlacaRef.current = selectedId;
   // Nombre que tenía el borrador antes de entrar en modo "dibujar nueva".
   const nombreAntesDeDibujar = useRef('');
+  // Referencias a los marcadores de vehículo en Leaflet, para abrir su
+  // popup de estado al enfocar la unidad (localizador o tabla de coordenadas).
+  const markerRefs = useRef(new Map());
 
   const geofences = useMemo(() => rawGeofences.map(normalizeGeofence), [rawGeofences]);
   const withoutGeometry = useMemo(
@@ -451,11 +548,14 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       const velocidad = velocidadCruda == null || velocidadCruda === '' || !Number.isFinite(Number(velocidadCruda))
         ? null
         : Number(velocidadCruda);
+      const lat = Number(vehicle.lat);
+      const lon = Number(vehicle.lng);
       return {
         clave: vehicle.placa,
         placa: vehicle.placa,
         descripcion: vehicle.descripcion || '',
         evento: fila?.ultimo_evento || vehicle.ultimo_evento || '',
+        geocerca: geocercaDePunto(lat, lon, geofences),
         fecha: fechaIso,
         fechaTexto: fechaIso
           ? formatearFechaHora(fechaIso)
@@ -472,7 +572,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         lngTexto: Number(vehicle.lng).toFixed(5),
       };
     }),
-    [vehiclesConPosicion, estadoPorPlaca, fuentePosiciones],
+    [vehiclesConPosicion, estadoPorPlaca, fuentePosiciones, geofences],
   );
 
   const ventanaRutaTexto = useMemo(() => {
@@ -646,6 +746,18 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       setFocusRequest({ geometry: geofence.geometria, token: Date.now() });
     }
   }, []);
+
+  // Enfoca una unidad en el mapa (marcador seleccionado + flyTo). Se usa al
+  // hacer clic en el localizador y al elegirla en Coordenadas de unidades.
+  const enfocarUnidad = useCallback((placa) => {
+    const objetivo = vehiclesConPosicion.find((v) => v.placa === placa)
+      || vehicles.find((v) => v.placa === placa);
+    if (!objetivo) return;
+    const lat = Number(objetivo.lat);
+    const lon = Number(objetivo.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat === 0 || lon === 0) return;
+    setFocusUnidadRequest({ lat, lon, placa, token: Date.now() });
+  }, [vehiclesConPosicion, vehicles]);
 
   /* ----- VI: última posición con dirección y geocerca actual ----- */
 
@@ -837,6 +949,24 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     }
   };
 
+  // Buscador de unidad para el recorrido histórico: escribe y aparecen las
+  // coincidencias; al pulsar una unidad la selecciona y la centra en el mapa.
+  const resultadosRuta = useMemo(() => {
+    const term = busquedaRuta.trim().toLowerCase();
+    if (!term) return [];
+    return vehiclesConPosicion
+      .filter((v) => [v.placa, v.descripcion, v.modelo, v.conductor_nombre, v.ultimo_evento]
+        .filter(Boolean)
+        .some((campo) => String(campo).toLowerCase().includes(term)))
+      .slice(0, 8);
+  }, [busquedaRuta, vehiclesConPosicion]);
+
+  const selectUnidadRuta = (placa) => {
+    if (onSelect) onSelect(placa);
+    enfocarUnidad(placa);
+    setBusquedaRuta('');
+  };
+
   const exportarRecorridoPagina = async () => {
     setExportandoRecorrido(true);
     setErrorExportarRecorrido('');
@@ -858,12 +988,19 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   };
 
   // Puntos con coordenadas numéricas: un NaN o undefined rompe Leaflet.
+  // Se enriquece cada punto con `geocerca` (polígono de menor área que lo
+  // contiene); se calcula una sola vez por carga de la página.
   const rutaValidos = useMemo(
     () =>
-      (rutaPuntos || []).filter(
-        (punto) => Number.isFinite(Number(punto.latitud)) && Number.isFinite(Number(punto.longitud)),
-      ),
-    [rutaPuntos],
+      (rutaPuntos || [])
+        .filter(
+          (punto) => Number.isFinite(Number(punto.latitud)) && Number.isFinite(Number(punto.longitud)),
+        )
+        .map((punto) => ({
+          ...punto,
+          geocerca: geocercaDePunto(Number(punto.latitud), Number(punto.longitud), geofences),
+        })),
+    [rutaPuntos, geofences],
   );
 
   const handleSelectGeofence = (geofence) => {
@@ -1496,6 +1633,51 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                 {' '}· rango con fecha y hora, paginado por ventanas.
               </p>
             </div>
+            <label className="relative flex flex-col gap-1 text-[11px] font-semibold text-slate-600 sm:w-64">
+              Unidad (placa o descripción)
+              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5">
+                <Search size={13} className="shrink-0 text-slate-400" aria-hidden="true" />
+                <input
+                  type="search"
+                  value={busquedaRuta}
+                  onChange={(event) => setBusquedaRuta(event.target.value)}
+                  placeholder="1639-1K, SEGURIDAD…"
+                  autoComplete="off"
+                  aria-label="Buscar unidad para el recorrido"
+                  className="w-full bg-transparent text-xs font-normal text-slate-700 outline-none placeholder:text-slate-400"
+                />
+                {busquedaRuta ? (
+                  <button type="button" onClick={() => setBusquedaRuta('')} aria-label="Limpiar búsqueda" className="shrink-0 text-slate-400 hover:text-slate-600">
+                    <X size={13} />
+                  </button>
+                ) : null}
+              </div>
+              {resultadosRuta.length ? (
+                <ul className="absolute left-0 top-full z-30 mt-1 w-72 max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                  {resultadosRuta.map((v) => (
+                    <li key={v.placa}>
+                      <button
+                        type="button"
+                        onClick={() => selectUnidadRuta(v.placa)}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-slate-50"
+                      >
+                        <MapPin size={13} className="shrink-0 text-forest" />
+                        <span className="min-w-0">
+                          <span className="block font-semibold text-slate-800">{v.placa}{v.descripcion ? ` · ${v.descripcion}` : ''}</span>
+                          <span className="block truncate text-[10px] text-slate-400">
+                            {(Number(v.velocidad_kmh) || 0) > 0 ? `${Number(v.velocidad_kmh)} km/h` : 'Detenida / sin dato'}{v.ultimo_evento ? ` · ${v.ultimo_evento}` : ''}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : busquedaRuta.trim() ? (
+                <p className="absolute left-0 top-full z-30 mt-1 w-72 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-400 shadow-lg">
+                  Ninguna unidad coincide con «{busquedaRuta.trim()}».
+                </p>
+              ) : null}
+            </label>
             <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
               Desde · hora de Perú
               <input
@@ -1571,12 +1753,12 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </div>
       ) : null}
 
-      <div className="relative px-3 sm:px-5 pb-2">
+      <div className="relative z-0 isolate px-3 sm:px-5 pb-2">
         <MapContainer
           center={[-6.78, -79.83]}
           zoom={12}
           scrollWheelZoom
-          style={{ width: '100%', height: 440, borderRadius: 14, background: '#E7EDE1' }}
+          style={{ width: '100%', height: 540, borderRadius: 14, background: '#E7EDE1' }}
         >
           <TileLayer
             key={vistaSatelite ? 'satelite' : 'calle'}
@@ -1591,6 +1773,11 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                 : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
             }
           />
+
+          <ZoomRutaTracker onZoom={setZoomRuta} />
+
+          <FocusUnidad unidadFocus={focusUnidadRequest} marcadores={markerRefs.current} />
+
           <GeoJSON
             key={`${empresaId || 'none'}-${mapRevision}-${editRevision}-${filtroGrupo || 'todos'}`}
             data={geoJsonVisible}
@@ -1617,6 +1804,13 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                 // se ajusta a ella, igual que desde el buscador.
                 focusGeofence(feature.properties || {});
               });
+              layer.on('dblclick', (event) => {
+                if (editModo === 'insertar' || editModo === 'dibujo') return;
+                // Evita que el doble-clic haga zoom: debe abrir la ficha.
+                L.DomEvent.stopPropagation(event);
+                L.DomEvent.preventDefault(event);
+                focusGeofence(feature.properties || {});
+              });
             }}
           />
           {editando ? (
@@ -1637,8 +1831,29 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             <>
               <Polyline
                 positions={rutaValidos.map((punto) => [Number(punto.latitud), Number(punto.longitud)])}
-                pathOptions={{ color: '#2563EB', weight: 3, opacity: 0.85 }}
+                 pathOptions={{ color: '#EC4899', weight: 4, opacity: 1 }}
               />
+              {/* Puntos GPS del recorrido: se pintan antes que inicio/fin/alertas
+                  para que queden debajo (el fin rojo y las alertas conservan
+                  prioridad visual). */}
+              {rutaValidos.map((punto) => (
+                <CircleMarker
+                  key={`ruta-punto-${punto.id ?? `${punto.fecha}-${punto.latitud}-${punto.longitud}`}`}
+                  center={[Number(punto.latitud), Number(punto.longitud)]}
+                   radius={radioPuntoRuta}
+                   pathOptions={{ color: '#FFFFFF', weight: Math.max(1.1, radioPuntoRuta / 4), fillColor: '#EC4899', fillOpacity: 1 }}
+                >
+                  <Tooltip direction="top" offset={[0, -4]} opacity={1} className="fleet-unit-tooltip">
+                    <div className="text-[11px] leading-snug">
+                      <p className="font-bold text-slate-800">{formatearFechaHora(punto.fecha)}</p>
+                      <p className="text-slate-600">
+                        {punto.evento || '—'}
+                        {punto.geocerca ? ` · ${punto.geocerca}` : ''}
+                      </p>
+                    </div>
+                  </Tooltip>
+                </CircleMarker>
+              ))}
               <CircleMarker
                 center={[
                   Number(rutaValidos[0].latitud),
@@ -1724,6 +1939,10 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             return (
               <CircleMarker
                 key={vehicle.id}
+                ref={(ref) => {
+                  if (ref) markerRefs.current.set(vehicle.placa, ref);
+                  else markerRefs.current.delete(vehicle.placa);
+                }}
                 center={[latitud, longitud]}
                 radius={selectedId === vehicle.id ? 7 : 5}
                 pathOptions={{ color: '#FFFFFF', weight: 2, fillColor: meta.dot, fillOpacity: 1 }}
@@ -1849,6 +2068,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               modoDescripcion={!gruposEditables && !gruposCargando}
               onSeleccionar={(placa) => {
                 if (onSelect) onSelect(placa);
+                enfocarUnidad(placa);
               }}
               onGuardar={guardarGrupoDeUnidad}
             />
@@ -1858,6 +2078,10 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               exportando={exportandoCoordenadas}
               errorExportar={errorExportarCoordenadas}
               onExportar={exportarCoordenadas}
+              onEnfocar={(placa) => {
+                if (onSelect) onSelect(placa);
+                enfocarUnidad(placa);
+              }}
             />
           </div>
         </>
