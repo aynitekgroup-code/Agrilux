@@ -1,23 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext';
+import { supabase } from '../../lib/supabase';
 import {
   Building,
   Check,
-  ClipboardList,
-  Droplets,
-  Factory,
   Leaf,
   Radio,
   Shield,
   Truck,
-  Wrench,
   X,
   Zap,
 } from 'lucide-react';
 
 const FOREST = 'bg-forest hover:bg-forest-dark text-white';
-const FOREST_DARK = 'bg-forest-dark text-white';
 
 const infraestructuras = [
   {
@@ -66,56 +62,50 @@ const infraestructuras = [
 
 export default function Gestion() {
   const navigate = useNavigate();
-  const { user, checkConnection } = useAuth();
+  const { user, empresa_activa_id, empresas_disponibles } = useAuth();
   const [conectando, setConectando] = useState('');
   const [mensaje, setMensaje] = useState('');
   const [proximamente, setProximamente] = useState(false);
-
-  // ── Estados de conexión independientes ──────────────────────────────
-  const [supabaseStatus, setSupabaseStatus] = useState('sin_verificar');
-  const [supabaseError, setSupabaseError] = useState(null);
-  const [authStatus, setAuthStatus] = useState('sin_sesion');
-  const [gpsStatus, setGpsStatus] = useState('sin_dispositivos');
-  const [probandoConexion, setProbandoConexion] = useState(false);
+  const [dispositivos, setDispositivos] = useState({ flota: false, campo: false, verificando: true });
 
   const nombreUsuario = (user?.nombre || '').trim();
   const nombreVisible = nombreUsuario || (user?.email ? user.email.split('@')[0] : 'Usuario Agrilux');
   const primerNombre = nombreVisible.split(' ')[0];
   const emailUsuario = user?.email || 'Sin correo configurado';
 
-  // ── Estado de autenticación ─────────────────────────────────────────
+  const empresaActiva = (empresas_disponibles || []).find((empresa) => empresa.id === empresa_activa_id);
+  const ROL_EMPRESA = { administrador: 'Administrador', ingeniero: 'Ingeniero', supervisor: 'Supervisor', operario: 'Operario' };
+  const rolEmpresaLabel = ROL_EMPRESA[empresaActiva?.rol] || user?.rol || 'Usuario';
+
   useEffect(() => {
-    setAuthStatus(user ? 'autenticado' : 'sin_sesion');
-  }, [user]);
+    if (!empresa_activa_id) {
+      setDispositivos({ flota: false, campo: false, verificando: false });
+      return undefined;
+    }
+    let cancelado = false;
+    (async () => {
+      const consulta = (tabla) =>
+        supabase.from(tabla).select('id', { count: 'exact', head: true }).eq('empresa_id', empresa_activa_id);
+      const [flotaRes, campoRes] = await Promise.all([consulta('agrotrack_posiciones'), consulta('agrotrack_telemetria')]);
+      if (cancelado) return;
+      setDispositivos({
+        flota: !flotaRes.error && (flotaRes.count || 0) > 0,
+        campo: !campoRes.error && (campoRes.count || 0) > 0,
+        verificando: false,
+      });
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [empresa_activa_id]);
+
+  const dominiosConectados = [dispositivos.flota ? 'Flota' : null, dispositivos.campo ? 'Campo' : null].filter(Boolean);
+  const hayDispositivos = dominiosConectados.length > 0;
+  const resumenDispositivos = dominiosConectados.join(' y ');
 
   const mostrarMensaje = (texto) => {
     setMensaje(texto);
     window.setTimeout(() => setMensaje(''), 3500);
-  };
-
-  // ── Prueba de conexión a Supabase ───────────────────────────────────
-  const handleTestConnection = async () => {
-    setProbandoConexion(true);
-    setSupabaseStatus('sin_verificar');
-    setSupabaseError(null);
-    try {
-      const resultado = await checkConnection();
-      if (resultado.connected) {
-        setSupabaseStatus('conectado');
-        setSupabaseError(null);
-        mostrarMensaje('Conexión a Supabase establecida correctamente.');
-      } else {
-        setSupabaseStatus('error');
-        setSupabaseError(resultado.error || 'Error desconocido.');
-        mostrarMensaje(`Error de conexión: ${resultado.error}`);
-      }
-    } catch (e) {
-      setSupabaseStatus('error');
-      setSupabaseError(String(e.message || 'Error inesperado.'));
-      mostrarMensaje(`Error de conexión: ${e.message || 'Error inesperado.'}`);
-    } finally {
-      setProbandoConexion(false);
-    }
   };
 
   const conectar = (id) => {
@@ -153,54 +143,6 @@ export default function Gestion() {
                 </div>
               </div>
             </div>
-            <div className="bg-amber-50/60 border border-amber-200/70 rounded-xl p-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
-                <span className="text-xs font-semibold text-amber-900">Supabase Cloud Sync</span>
-              </div>
-              <span className="px-2 py-0.5 bg-amber-100 text-amber-800 font-bold text-[10px] rounded tracking-wide border border-amber-300/70">
-                POR CONFIGURAR
-              </span>
-            </div>
-          </div>
-
-          {/* Card 2: Environment Selector */}
-          <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-subtle space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Entorno de Operación</h3>
-              <span className="px-2 py-0.5 text-[10px] font-bold text-emerald-800 bg-emerald-100/80 rounded-full border border-emerald-200">
-                FASE 3
-              </span>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Empresa Activa</label>
-              <div className="relative">
-                <button className="w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-semibold text-slate-800 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl transition-colors" type="button">
-                  <span className="flex items-center gap-2">
-                    <Building size={14} className="text-emerald-600" />
-                    <span>Espacio Personal (Autónomo)</span>
-                  </span>
-                  <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 9l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <div className="bg-slate-50/80 border border-slate-100 rounded-xl p-3.5 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-700">Espacio Autónomo</span>
-                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full">Empieza aquí</span>
-              </div>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                Configuración lista para uso personal sin necesidad de registrar empresa ni facturación.
-              </p>
-            </div>
-            <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all shadow-sm" type="button">
-              <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M12 4v16m8-8H4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-              </svg>
-              <span>Vincular / Crear Empresa</span>
-            </button>
           </div>
 
           {/* Card 3: Security & RLS Isolation */}
@@ -244,30 +186,6 @@ export default function Gestion() {
             </div>
           </div>
 
-          {/* Card 4: Edge Agent */}
-          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 text-white rounded-2xl p-5 shadow-card border border-slate-700/50 relative overflow-hidden">
-            <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-emerald-400 border border-white/10">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                </svg>
-              </div>
-              <div>
-                <h4 className="font-bold text-sm text-white">Agente Agrilux Edge</h4>
-                <p className="text-[11px] text-emerald-400 font-medium">ESP32 & LoRaWAN Gateway</p>
-              </div>
-            </div>
-            <p className="text-xs text-slate-300 leading-relaxed mb-4">
-              Instálalo cuando vayas a conectar tu primera estación o microcontrolador ESP32/LoRaWAN. Listo para vincularse sin IP pública.
-            </p>
-            <button className="w-full inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-950/20 transition-all" type="button">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-              </svg>
-              <span>Descargar CLI v2.4</span>
-            </button>
-          </div>
         </aside>
 
         {/* ── Main Workspace ──────────────────────────────────────── */}
@@ -296,151 +214,21 @@ export default function Gestion() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 self-start md:self-center px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200/80 text-xs font-semibold text-slate-700">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>Estado: Cuenta recién creada</span>
-                <button className="text-slate-400 hover:text-slate-600 ml-1" title="Información" type="button">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 text-slate-600">
-                <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M13 10V3L4 14h7v7l9-11h-7z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                  </svg>
-                </div>
-                <span className="font-semibold text-slate-800">Configuración Inicial Guiada (0 de 3 completados)</span>
-                <span className="text-slate-400 hidden sm:inline">•</span>
-                <span className="text-slate-500 hidden sm:inline">Selecciona el tipo de telemetría que deseas integrar para activar tu primera transmisión o prueba con datos simulados.</span>
-              </div>
-              <span className="self-start sm:self-auto px-2.5 py-1 rounded-md text-[11px] font-bold text-slate-500 bg-slate-100 tracking-wide border border-slate-200">
-                SIN DISPOSITIVOS AÚN
-              </span>
-            </div>
-          </div>
-
-          {/* ── Estado de Conexión: Supabase, Autenticación y GPS ───────── */}
-          <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-subtle space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
-                <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-900">
-                  Configuración de Infraestructura
-                </h2>
-              </div>
-              <span className="px-2.5 py-1 text-[11px] font-bold text-emerald-800 bg-emerald-100/80 rounded-full border border-emerald-200 tracking-wide">
-                TELEMETRÍA
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Tarjeta: Supabase Cloud */}
-              <div className="rounded-xl border p-4 flex flex-col gap-3 min-h-[120px]">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-100 text-slate-600">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Supabase Cloud</p>
-                      <p className="text-sm font-semibold text-slate-900">Base de datos y Auth</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleTestConnection}
-                    disabled={probandoConexion}
-                    className="px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors disabled:opacity-60 border"
-                    style={{
-                      borderColor: supabaseStatus === 'conectado' ? '#10b981' : supabaseStatus === 'error' ? '#ef4444' : '#cbd5e1',
-                      color: supabaseStatus === 'conectado' ? '#10b981' : supabaseStatus === 'error' ? '#ef4444' : '#64748b',
-                    }}
-                  >
-                    {probandoConexion ? 'Probando...' : supabaseStatus === 'conectado' ? 'Conectado' : supabaseStatus === 'error' ? 'Error' : 'Probar'}
-                  </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${supabaseStatus === 'conectado' ? 'bg-emerald-500' : supabaseStatus === 'error' ? 'bg-rose-500' : 'bg-amber-500'}`}></span>
-                  <span className={`text-[11px] font-semibold ${supabaseStatus === 'conectado' ? 'text-emerald-800' : supabaseStatus === 'error' ? 'text-rose-800' : 'text-amber-800'}`}>
-                    {supabaseStatus === 'conectado' ? 'Conectado' : supabaseStatus === 'error' ? 'Desconectado' : 'Sin verificar'}
+              <div className="flex flex-wrap items-center gap-2 self-start md:self-center text-xs">
+                <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200/80 font-semibold text-slate-700">
+                  <span className={`w-2 h-2 rounded-full ${dispositivos.verificando ? 'bg-amber-500 animate-pulse' : hayDispositivos ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
+                  <span>
+                    {dispositivos.verificando
+                      ? 'Estado: Verificando…'
+                      : hayDispositivos
+                        ? `Estado: ${resumenDispositivos} en funcionamiento`
+                        : 'Estado: Sin dispositivos aún'}
                   </span>
-                </div>
-                {supabaseError && (
-                  <p className="text-[10px] text-rose-600 bg-rose-50 border border-rose-100 rounded px-2.5 py-1.5 leading-relaxed">
-                    {supabaseError}
-                  </p>
-                )}
+                </span>
+                <span className="px-2.5 py-1.5 rounded-full bg-slate-100 border border-slate-200 font-bold text-slate-600 tracking-wide">
+                  Rol: {rolEmpresaLabel}
+                </span>
               </div>
-
-              {/* Tarjeta: Autenticación */}
-              <div className="rounded-xl border p-4 flex flex-col gap-3 min-h-[120px]">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-100 text-slate-600">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 4.266a8 8 0 110 16 8 8 0 010-16zm-3.707 7.293a1 1 0 10-1.414 1.414L9 11.586l1.293 1.293a1 1 0 001.414-1.414L10.414 11zm5 1.414L15 10.414l-1.293-1.293a1 1 0 00-1.414 1.414L11 12.586l-1.293 1.293a1 1 0 101.414 1.414L12.293 12zm-3.586 3a1 1 0 101.414-1.414L14 9.586l1.293 1.293a1 1 0 001.414-1.414L13 9.586l-1.293-1.293a1 1 0 00-1.414 1.414L11.586 9zm7 0a1 1 0 101.414-1.414L17 9.586l1.293 1.293a1 1 0 001.414-1.414L18.586 9z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Autenticación</p>
-                      <p className="text-sm font-semibold text-slate-900">Usuario y sesión</p>
-                    </div>
-                  </div>
-                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
-                    authStatus === 'autenticado' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-rose-100 text-rose-800 border border-rose-200'
-                  }`}>
-                    {authStatus === 'autenticado' ? 'Autenticado' : 'Sin sesión'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${authStatus === 'autenticado' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
-                  <span className={`text-[11px] font-semibold ${authStatus === 'autenticado' ? 'text-emerald-800' : 'text-rose-800'}`}>
-                    {authStatus === 'autenticado' ? `Usuario: ${emailUsuario}` : 'No hay sesión activa'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Tarjeta: Dispositivos GPS */}
-              <div className="rounded-xl border p-4 flex flex-col gap-3 min-h-[120px]">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-100 text-slate-600">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                        <path d="M12 6v6m0 0v6m0-6h6m-6 0H6" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Dispositivos GPS</p>
-                      <p className="text-sm font-semibold text-slate-900">Telemetría de campo</p>
-                    </div>
-                  </div>
-                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
-                    gpsStatus === 'conectados' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'
-                  }`}>
-                    {gpsStatus === 'conectados' ? 'Conectados' : 'Sin dispositivos'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${gpsStatus === 'conectados' ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
-                  <span className={`text-[11px] font-semibold ${gpsStatus === 'conectados' ? 'text-emerald-800' : 'text-slate-600'}`}>
-                    {gpsStatus === 'conectados' ? 'Datos en tiempo real' : 'Sin integración GPS activa'}
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-500 mt-1">
-                  La conexión exitosa con Supabase no implica que los dispositivos GPS estén conectados.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-3 text-xs text-slate-500 text-center">
-              Los tres indicadores son independientes: Supabase (base de datos y autenticación), Autenticación (sesión de usuario) y GPS (hardware de campo).
             </div>
           </div>
 
@@ -532,162 +320,6 @@ export default function Gestion() {
                   </article>
                 );
               })}
-            </div>
-          </div>
-
-          {/* Sección: Asistente Guiado de Configuración */}
-          <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-subtle space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-800">
-                  Asistente Guiado de Configuración & Integración
-                </h3>
-                <p className="text-xs text-slate-500">Sincronización con backend Postgres Supabase & Gateway LoRa</p>
-              </div>
-              <span className="self-start sm:self-center px-2.5 py-1 text-[11px] font-bold text-slate-700 bg-slate-100 rounded-md border border-slate-200">
-                Ruta de 3 pasos
-              </span>
-            </div>
-            <div className="space-y-3">
-              {[
-                ['1', 'Elige tu tipo de telemetría', 'Campo o Flota', 'PASO ACTUAL', 'Comenzar ahora'],
-                ['2', 'Registra tu primera parcela o estación de prueba', 'Configura el nombre del sector, cultivo y las variables que deseas medir.', 'Paso siguiente'],
-                ['3', 'Prueba la sincronización de datos en vivo', 'Valida la recepción de telemetría en tiempo real respaldada por Supabase.', 'Pendiente'],
-              ].map(([number, title, detail, action, actionBtn], index) => (
-                <button type="button" key={number} onClick={() => mostrarMensaje(`${title}: paso ${number} listo.`)} className={`flex w-full items-start gap-4 border-b border-slate-100 pb-4 text-left last:border-0 last:pb-0 ${index === 0 ? 'bg-emerald-50/40 border-2 border-emerald-500/60' : ''}`}>
-                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold shadow-sm ${index === 0 ? 'bg-forest text-white' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
-                    {index === 0 ? <Check size={14} /> : number}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center justify-between gap-2 text-xs font-semibold text-slate-800">
-                      <span>{title}</span>
-                      <span className={`shrink-0 text-[10px] font-bold ${index === 0 ? 'text-forest' : 'text-slate-400'}`}>{action}</span>
-                    </span>
-                    <span className="mt-0.5 block text-[10px] leading-snug text-slate-500">{detail}</span>
-                  </span>
-                  {index === 0 && (
-                    <button type="button" onClick={() => mostrarMensaje('Iniciando configuración de telemetría...')} className="flex items-center gap-1.5 px-4 py-2 bg-forest text-white text-xs font-bold rounded-lg hover:bg-forest-dark transition-all shadow-sm shadow-forest-dark/20">
-                      {actionBtn} <span className="text-[9px]">→</span>
-                    </button>
-                  )}
-                  {index === 1 && (
-                    <button type="button" onClick={() => mostrarMensaje('Pasando al siguiente paso...')} className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 bg-white text-xs font-bold text-slate-700 rounded-lg hover:bg-slate-50 transition-all shadow-sm">
-                      {actionBtn} <span className="text-[9px]">→</span>
-                    </button>
-                  )}
-                </button>
-              ))}
-            </div>
-            <div className="mt-4 rounded-xl border border-slate-200 bg-[#F8F9FA] p-4">
-              <p className="mb-2 text-[10px] font-semibold text-slate-700">Opciones alternativas y trabajo en campo</p>
-              <div className="space-y-1.5">
-                <button type="button" onClick={() => mostrarMensaje('Modo sin conexión seleccionado.')} className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left text-[10px] text-slate-700 hover:bg-forest/5 transition-all">
-                  <span className="flex items-center gap-2"><Wrench size={14} className="text-forest" />Registrar datos manualmente sin conexión</span><span className="text-[9px] text-slate-400">Zonas sin señal</span>
-                </button>
-                <button type="button" onClick={() => mostrarMensaje('Puedes explorar el modo demo desde aquí.')} className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left text-[10px] text-slate-700 hover:bg-forest/5 transition-all">
-                  <span className="flex items-center gap-2"><Factory size={14} className="text-slate-500" />Configurar más adelante (Modo demo)</span><span className="text-[9px] font-semibold text-forest">Omitir por ahora</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Sección: Live Previews ("¿QUÉ PODRÁS VER UNA VEZ CONECTADO?") */}
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
-                <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-900">
-                  ¿Qué podrás ver una vez conectado?
-                </h2>
-              </div>
-              <button className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100/80 text-emerald-800 text-xs font-bold border border-emerald-200/80 transition-all self-start sm:self-auto" type="button">
-                <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                  <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                </svg>
-                <span>Cargar datos de demostración (Modo Demo)</span>
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Preview 1: Microclimático */}
-              <div className="bg-white rounded-2xl overflow-hidden border border-slate-200/80 shadow-subtle hover:shadow-card transition-all group">
-                <div className="relative h-48 bg-slate-900 overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/60 to-transparent z-10"></div>
-                  <div className="absolute inset-0 bg-[radial-gradient(#22c55e_1px,transparent_1px)] [background-size:16px_16px] opacity-25"></div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="relative">
-                      <div className="w-16 h-16 rounded-2xl bg-emerald-950/80 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-[0_0_25px_rgba(34,197,94,0.3)]">
-                        <svg className="w-8 h-8 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                        </svg>
-                      </div>
-                      <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-                      </span>
-                    </div>
-                  </div>
-                  <div className="absolute bottom-3 left-3 right-3 z-20 flex items-center justify-between text-[11px] text-emerald-300 font-mono bg-slate-900/80 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-emerald-500/20">
-                    <span>Humedad: 34.2%</span>
-                    <span>Temp: 21.4°C</span>
-                    <span>EC: 1.8 dS/m</span>
-                  </div>
-                  <div className="absolute top-3 left-3 z-20">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-900/80 text-white backdrop-blur-md border border-white/20">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                      VISTA PREVIA / DEMO
-                    </span>
-                  </div>
-                </div>
-                <div className="p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-sm text-slate-900">Ejemplo: Monitoreo Microclimático</h4>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">Suelo & CE</span>
-                  </div>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Lectura de conductividad eléctrica (EC), temperatura radical y tensión volumétrica hídrica en parcelas vivas una vez sincronizado tu gateway.
-                  </p>
-                </div>
-              </div>
-              {/* Preview 2: Cadena de Frío & Despacho */}
-              <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-subtle hover:shadow-card transition-all group">
-                <div className="relative h-48 bg-slate-950 overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/60 to-transparent z-10"></div>
-                  <div className="absolute inset-0 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:16px_16px] opacity-20"></div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="relative">
-                      <div className="w-16 h-16 rounded-2xl bg-blue-950/80 border border-blue-500/40 flex items-center justify-center text-blue-400 shadow-[0_0_25px_rgba(56,189,248,0.3)]">
-                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path d="M8 17a2 2 0 100 4 2 2 0 000-4zm10 0a2 2 0 100 4 2 2 0 000-4zM4 9h11v6H4V9zm11 2h3.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V15H15v-4z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                        </svg>
-                      </div>
-                      <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
-                      </span>
-                    </div>
-                  </div>
-                  <div className="absolute bottom-3 left-3 right-3 z-20 flex items-center justify-between text-[11px] text-blue-300 font-mono bg-slate-900/80 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-blue-500/20">
-                    <span>Camión #04 • Ruta N-5</span>
-                    <span>Temp Contenedor: 3.8°C</span>
-                  </div>
-                  <div className="absolute top-3 left-3 z-20">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-900/80 text-white backdrop-blur-md border border-white/20">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
-                      VISTA PREVIA / DEMO
-                    </span>
-                  </div>
-                </div>
-                <div className="p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-sm text-slate-900">Ejemplo: Cadena de Frío & Despacho</h4>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">GPS & Temp</span>
-                  </div>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Rastreo satelital continuo de camiones con sensor de temperatura de contenedor en tiempo real y geocercas activadas.
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
 

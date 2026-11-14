@@ -72,6 +72,26 @@ function sumarDias(n) {
 const esTablaFaltante = (e) =>
   e && (e.code === '42P01' || /relation .* does not exist|Could not find the table|schema cache/i.test(e.message || ''));
 
+// ── Verificar datos personales ya registrados (anti-duplicados) ──
+// Vía RPC de Supabase (verificar_datos_registro). Requiere ejecutar
+// scripts/onboarding-2.7-verificar-datos-registro.sql en el SQL Editor.
+// Devuelve { email_registrado, whatsapp_registrado } o null si la RPC no
+// existe o falla.
+export async function verificarDatosRegistro({ email, whatsapp } = {}) {
+  const emailN = (email || '').trim().toLowerCase() || null;
+  const waN = normalizarWhatsapp(whatsapp) || null;
+  try {
+    const { data, error } = await supabase.rpc('verificar_datos_registro', {
+      p_email: emailN,
+      p_whatsapp: waN,
+    });
+    if (error) return null;
+    return data || null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Empresas ─────────────────────────────────────────────
 export async function listarEmpresas(userId) {
   try {
@@ -121,6 +141,37 @@ export const crearCosecha = (f) => insertar('cosechas', f);
 export const crearGasto = (f) => insertar('gastos', f);
 export const crearHallazgo = (f) => insertar('hallazgos', f);
 export const invitarMiembro = (f) => insertar('empresa_miembros', f);
+
+// ── Trabajadores de la empresa ────────────────────────────
+// Agrega un trabajador a empresa_miembros vía RPC segura.
+// RPC aplica las reglas: admin activo requerido, sin duplicar,
+// correo ya registrado se vincula (user_id), no permite pertenecer a otra empresa.
+export async function agregarTrabajador({ empresaId, nombre, email, rol = 'operario' }) {
+  const nombreLimpio = nombre.trim();
+  const emailLimpio = (email || '').trim().toLowerCase() || null;
+  const { data, error } = await supabase.rpc('invitar_trabajador_empresa', {
+    p_empresa_id: empresaId,
+    p_nombre: nombreLimpio,
+    p_email: emailLimpio,
+    p_rol: rol,
+  });
+  if (error) throw new Error(error.message || 'No se pudo agregar el trabajador');
+  return data;
+}
+
+export async function cambiarRolTrabajador(miembroId, nuevoRol) {
+  const { error } = await supabase.rpc('modificar_miembro_empresa', {
+    p_miembro_id: miembroId, p_nuevo_rol: nuevoRol, p_nuevo_activo: null,
+  });
+  if (error) throw error;
+}
+
+export async function cambiarActivoTrabajador(miembroId, activo) {
+  const { error } = await supabase.rpc('modificar_miembro_empresa', {
+    p_miembro_id: miembroId, p_nuevo_rol: null, p_nuevo_activo: activo,
+  });
+  if (error) throw error;
+}
 
 export async function actualizarTarea(id, cambios) {
   const { error } = await supabase.from('tareas').update({ ...cambios, updated_at: new Date().toISOString() }).eq('id', id);
@@ -320,6 +371,11 @@ export async function solicitarUnirseEmpresa({ empresa_id, cargo_id, area_trabaj
 
 // ── Listar empresas donde el usuario es miembro activo ────────────────────────
 export async function listarEmpresasDelUsuario(userId) {
+  try {
+    await supabase.rpc('vincular_trabajador_por_email');
+  } catch {
+    // RPC no desplegado: se ignora y se filtra por user_id como siempre
+  }
   const { data, error } = await supabase
     .from('empresa_miembros')
     .select(`
@@ -356,6 +412,58 @@ export async function registrarConEmpresa({ nombre, email, password, ubicacion, 
     options: { data: { nombre: nombre.trim() } }
   });
   if (authError) throw authError;
+  if (Array.isArray(authData.user?.identities) && authData.user.identities.length === 0) {
+    // Correo huérfano en Auth (no tiene fila en usuarios): si la contraseña
+    // coincide, el usuario es dueño; se repara el perfil y se vincula la empresa.
+    const emailNorm = email.trim().toLowerCase();
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email: emailNorm,
+      password,
+    });
+    if (signInError) {
+      if (signInError.code === 'email_not_confirmed' || /confirm/i.test(signInError.message || '')) {
+        const e = new Error('Este correo ya está registrado y la cuenta aún no confirmó su correo. Revisa tu bandeja de entrada o usa otro correo.');
+        e.code = 'email_not_confirmed';
+        throw e;
+      }
+      const e = new Error('Este correo ya está registrado y la contraseña no coincide. Inicia sesión o usa otro correo.');
+      e.code = 'email_already_registered';
+      throw e;
+    }
+    const uidHuerfano = signInData?.user?.id;
+    const { data: perfilExistente } = await supabase
+      .from('usuarios')
+      .select('id')
+      .eq('id', uidHuerfano)
+      .maybeSingle();
+    if (!perfilExistente) {
+      const { error: perfilError } = await supabase.from('usuarios').insert({
+        id: uidHuerfano,
+        nombre: nombre.trim(),
+        email: emailNorm,
+        ubicacion: ubicacion || '',
+        whatsapp: normalizarWhatsapp(whatsapp) || null,
+        coords: coords || null,
+        rol: 'agricultor',
+        status: 'aprobado',
+        creado_por: 'self',
+      });
+      if (perfilError) {
+        console.warn('No se pudo reparar el perfil en usuarios:', perfilError.message);
+      }
+    }
+    const { data: empresaData, error: empresaError } = await supabase.rpc('crear_empresa_con_miembro_existente', {
+      p_nombre_empresa: nombreEmpresa.trim(),
+      p_ruc: ruc || null,
+      p_telefono: telefonoEmpresa || null,
+      p_ubicacion_empresa: ubicacionEmpresa || '',
+      p_usuario_id: uidHuerfano,
+      p_usuario_nombre: nombre.trim(),
+      p_usuario_email: emailNorm,
+    });
+    if (empresaError) throw empresaError;
+    return { user: signInData.user, empresa: Array.isArray(empresaData) ? empresaData[0] : empresaData };
+  }
   const uid = authData.user?.id;
   if (!uid) throw new Error('Supabase no devolvió el usuario creado');
   const authUser = authData.user;

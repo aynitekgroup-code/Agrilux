@@ -22,11 +22,11 @@ $$;
 
 ALTER TABLE public.usuarios ENABLE ROW LEVEL SECURITY;
 CREATE POLICY usuarios_select_own ON public.usuarios
-  FOR SELECT USING (id = auth.uid());
+  FOR SELECT USING (id = auth.uid()::text);
 CREATE POLICY usuarios_insert_own ON public.usuarios
-  FOR INSERT WITH CHECK (id = auth.uid());
+  FOR INSERT WITH CHECK (id = auth.uid()::text);
 CREATE POLICY usuarios_update_own ON public.usuarios
-  FOR UPDATE USING (id = auth.uid()) WITH CHECK (id = auth.uid());
+  FOR UPDATE USING (id = auth.uid()::text) WITH CHECK (id = auth.uid()::text);
 
 ALTER TABLE public.empresas ENABLE ROW LEVEL SECURITY;
 CREATE POLICY empresas_select_member ON public.empresas
@@ -70,7 +70,7 @@ CREATE POLICY codigos_invitacion_select_admin ON public.codigos_invitacion
   FOR SELECT USING (public.onboarding_es_admin(empresa_id));
 CREATE POLICY codigos_invitacion_insert_admin ON public.codigos_invitacion
   FOR INSERT WITH CHECK (
-    public.onboarding_es_admin(empresa_id) AND creado_por = auth.uid()
+    public.onboarding_es_admin(empresa_id) AND creado_por = auth.uid()::text
   );
 -- La reserva, revocación y consumo ocurren únicamente por RPC.
 CREATE POLICY codigos_invitacion_update_none ON public.codigos_invitacion
@@ -90,10 +90,10 @@ CREATE POLICY invitacion_canjes_select_admin ON public.invitacion_canjes
   );
 -- El historial lo crea/actualiza el flujo SECURITY DEFINER.
 CREATE POLICY invitacion_canjes_insert_own ON public.invitacion_canjes
-  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL AND usuario_id = auth.uid());
+  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL AND usuario_id = auth.uid()::text);
 CREATE POLICY invitacion_canjes_update_own ON public.invitacion_canjes
-  FOR UPDATE USING (usuario_id = auth.uid() OR usuario_id IS NULL)
-  WITH CHECK (usuario_id = auth.uid());
+  FOR UPDATE USING (usuario_id = auth.uid()::text OR usuario_id IS NULL)
+  WITH CHECK (usuario_id = auth.uid()::text);
 
 ALTER TABLE public.cargos_laborales ENABLE ROW LEVEL SECURITY;
 CREATE POLICY cargos_laborales_select_catalog ON public.cargos_laborales

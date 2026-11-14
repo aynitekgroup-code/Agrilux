@@ -143,6 +143,11 @@ export const AuthProvider = ({ children }) => {
       },
     });
     if (error) throw error;
+    if (Array.isArray(data.user?.identities) && data.user.identities.length === 0) {
+      const e = new Error('Este correo ya está registrado.');
+      e.code = 'email_already_registered';
+      throw e;
+    }
     const uid = data.user?.id;
     if (!uid) throw new Error('No se pudo crear el usuario');
 
