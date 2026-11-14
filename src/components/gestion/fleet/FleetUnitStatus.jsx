@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Database, FileSpreadsheet, MapPinned, Gauge, RotateCw } from 'lucide-react';
 import { obtenerEstadoUnidadesFlota, LIMITE_ESTADO_UNIDADES } from '../../../lib/agrotrackReportesGeocerca';
 import { formatearFechaHora, clasificarEstado } from '../../../lib/agrotrackFlota';
-import { useRango, ControlesRango, CuerpoEstado, numero } from './reportesComunes';
+import { useRango, ControlesRango, CuerpoEstado, numero, useLimiteFilas, BotonVerMas } from './reportesComunes';
 import { StatusPill } from './VehicleList';
 
 /**
@@ -143,6 +143,9 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
     }
     return true;
   }), [filas, filtroPlaca, filtroGeocerca]);
+
+  // Tabla limitada a 15 filas; Excel y contadores usan la lista completa.
+  const { filasVistas: filasTabla, expandido, alternar, total } = useLimiteFilas(filasVistas);
 
   const filtroTexto = [
     filtroPlaca ? `máquina ${filtroPlaca}` : '',
@@ -306,7 +309,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
                       </td>
                     </tr>
                   ) : null}
-                  {filasVistas.map((fila) => (
+                  {filasTabla.map((fila) => (
                     <tr key={fila.placa} className="border-b border-slate-50 hover:bg-slate-50/60">
                       <td className="px-3 py-2">
                         <span className="font-bold text-slate-800">{fila.placa}</span>
@@ -382,6 +385,8 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
                 </tfoot>
               </table>
             </div>
+
+            <BotonVerMas expandido={expandido} onAlternar={alternar} total={total} />
 
             {filas.length >= LIMITE_ESTADO_UNIDADES ? (
               <p className="px-4 py-2 text-[10px] text-amber-600 border-t border-slate-50">

@@ -4,7 +4,7 @@ import { obtenerEstadoUnidadesFlota, LIMITE_ESTADO_UNIDADES } from '../../../lib
 import { formatearFechaHora } from '../../../lib/agrotrackFlota';
 import { armarContextoReporte } from '../../../lib/reportesIa';
 import { llamarIaGestion } from '../../../lib/agrotrackIa';
-import { CuerpoEstado, haceCuanto } from './reportesComunes';
+import { CuerpoEstado, haceCuanto, useLimiteFilas, BotonVerMas } from './reportesComunes';
 
 /**
  * Reporte "Unidades sin reportar" (réplica de la captura de Zonar:
@@ -34,8 +34,18 @@ const COLUMNAS = [
   { label: 'Últ. dirección', clase: 'text-left' },
   { label: 'Últ. evento', clase: 'text-left' },
   { label: 'Últ. fecha GPRS', clase: 'text-left' },
+  { label: 'Geocerca asignada', clase: 'text-left' },
   { label: 'Tiempo transcurrido', clase: 'text-right' },
 ];
+
+/** Geocerca actual (la RPC la calcula con PostGIS) o, si la unidad está
+ *  fuera de todas, la última conocida como respaldo. */
+function geocercaAsignada(f) {
+  if (!f) return '—';
+  if (f.geocerca) return f.geocerca;
+  if (f.geocerca_ultima) return `${f.geocerca_ultima} (última conocida)`;
+  return '—';
+}
 
 export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
   const [ventana, setVentana] = useState(24);
@@ -103,6 +113,9 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
       .sort((a, b) => (a.antiguedadMs === b.antiguedadMs ? 0 : b.antiguedadMs - a.antiguedadMs));
   }, [filas, ahora, ventana]);
 
+  // Tabla limitada a 15 filas; Excel e IA usan la lista completa.
+  const { filasVistas: filasTabla, expandido, alternar, total } = useLimiteFilas(filasVistas);
+
   const conteos = useMemo(() => ({
     sinReportar: filasVistas.filter((f) => f.sinReportar).length,
     reportando: filasVistas.filter((f) => !f.sinReportar).length,
@@ -136,13 +149,14 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
         rango: `última posición conocida de cada unidad · generado ${generadoEn
           ? generadoEn.toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })
           : '—'} · hora de Perú`,
-        columnas: ['Unidad', 'Placa', 'Últ. dirección', 'Últ. evento', 'Últ. fecha GPRS', 'Tiempo transcurrido', 'Sin reportar (ventana)'],
+        columnas: ['Unidad', 'Placa', 'Últ. dirección', 'Últ. evento', 'Últ. fecha GPRS', 'Geocerca asignada', 'Tiempo transcurrido', 'Sin reportar (ventana)'],
         filas: filasVistas.map((f) => ({
           Unidad: f.unidad || f.placa,
           Placa: f.placa,
           'Últ. dirección': f.direccion,
           'Últ. evento': f.ultimo_evento,
           'Últ. fecha GPRS': f.ultima_fecha ? formatearFechaHora(f.ultima_fecha) : 'sin reporte',
+          'Geocerca asignada': geocercaAsignada(f),
           'Tiempo transcurrido': f.transcurrido,
           'Sin reportar (ventana)': f.sinReportar ? `SÍ (>${ventana} h)` : 'no',
         })),
@@ -268,7 +282,7 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filasVistas.map((fila, i) => (
+                  {filasTabla.map((fila, i) => (
                     <tr
                       key={fila.placa || `sin-placa-${i}`}
                       className={`border-b border-slate-50 hover:bg-slate-50/60 ${fila.sinReportar ? 'bg-red-50/40' : ''}`}
@@ -288,6 +302,11 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
                       <td className="px-3 py-2 text-slate-600">{fila.ultimo_evento || '—'}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-slate-600">
                         {fila.ultima_fecha ? formatearFechaHora(fila.ultima_fecha) : 'sin reporte'}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600 max-w-[180px]">
+                        <span className="block truncate" title={geocercaAsignada(fila)}>
+                          {geocercaAsignada(fila)}
+                        </span>
                       </td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">
                         <span
@@ -310,7 +329,7 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-50 text-slate-700 font-bold">
-                    <td className="px-3 py-2.5" colSpan={4}>
+                    <td className="px-3 py-2.5" colSpan={5}>
                       {filasVistas.length} unidad{filasVistas.length === 1 ? '' : 'es'} · ventana de {ventana} h
                     </td>
                     <td className="px-3 py-2.5" colSpan={2}>
@@ -327,6 +346,8 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
                 </tfoot>
               </table>
             </div>
+
+            <BotonVerMas expandido={expandido} onAlternar={alternar} total={total} />
 
             {filas.length >= LIMITE_ESTADO_UNIDADES ? (
               <p className="px-4 py-2 text-[10px] text-amber-600 border-t border-slate-50">

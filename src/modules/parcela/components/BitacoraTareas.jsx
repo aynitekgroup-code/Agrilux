@@ -3,7 +3,7 @@
  * (pantallas 3, 4 y calendario de Parcela empresas)
  */
 import React, { useState, useMemo } from 'react';
-import { TIPOS_LABOR, iniciales, exportarCSV } from '../../../lib/empresaApi';
+import { TIPOS_LABOR, iniciales, exportarExcel } from '../../../lib/empresaApi';
 import { isOnline } from '../../../lib/offlineStorage';
 
 const fmtFecha = (f) => { try { return new Date(f + 'T12:00:00').toLocaleDateString('es-PE', { day: 'numeric', month: 'short' }); } catch { return f; } };
@@ -72,8 +72,8 @@ export function Bitacora({ lotes, labores, demo, onGuardar }) {
         <button onClick={guardar} disabled={guardando || demo} className="w-full bg-primary text-white font-bold py-2.5 rounded-xl text-sm disabled:opacity-50">
           {guardando ? 'Guardando...' : demo ? 'Activa tu empresa para registrar' : 'Guardar labor'}
         </button>
-        <button onClick={() => exportarCSV('bitacora.csv', labores)} className="w-full bg-white text-primary border-2 border-primary font-bold py-2.5 rounded-xl text-sm">
-          Exportar bitácora (CSV)
+        <button onClick={() => exportarExcel('bitacora.xlsx', labores)} className="w-full bg-white text-primary border-2 border-primary font-bold py-2.5 rounded-xl text-sm">
+          Descargar bitácora (Excel)
         </button>
       </div>
     </div>

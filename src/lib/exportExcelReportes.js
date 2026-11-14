@@ -15,6 +15,14 @@
 import * as XLSX from 'xlsx';
 import { formatearFechaLarga } from './agrotrackFlota';
 
+/** Geocerca asignada de la unidad: la actual (RPC, PostGIS) o la última
+ *  conocida si está fuera de todas. */
+function geocercaAsignada(f) {
+  if (f.geocerca) return f.geocerca;
+  if (f.geocerca_ultima) return `${f.geocerca_ultima} (última conocida)`;
+  return '—';
+}
+
 /** Segundos -> horas con dos decimales (celdas numéricas del Excel). */
 function horas(segundos) {
   if (segundos == null) return '';
@@ -190,6 +198,34 @@ export function exportarTablaDiaExcel(filas, { dia = '', rangoTexto = '', geocer
 }
 
 /**
+ * Exporta una tabla genérica (filas planas ya mapeadas por quien llama) a un
+ * libro Excel con hoja "Criterio". Un punto de entrada único para que toda
+ * tabla muestre "Descargar Excel" y descargue un .xlsx de verdad.
+ * @param {string} nombreBase  nombre del archivo (sin extensión)
+ * @param {Array<Object>} filas  filas planas con las columnas visibles de la tabla
+ * @param {{columnas: Array<[string, string]>, modelo?: string, criterio?: Array<object>}} opciones
+ *        columnas: [[clave, etiqueta], ...] alineadas a las de la tabla.
+ */
+export function exportarTablaExcel(nombreBase, filas, { columnas, modelo = '', criterio = [] } = {}) {
+  if (!filas?.length) throw new Error('No hay filas para exportar.');
+  const wb = XLSX.utils.book_new();
+  const datos = columnas.map(([, etiqueta]) => etiqueta);
+  const ws = XLSX.utils.json_to_sheet(
+    filas.map((row) => Object.fromEntries(columnas.map(([key, etiqueta]) => [etiqueta, row[key] ?? ''])))
+  );
+  ws['!cols'] = datos.map((etiqueta) => ({ wch: Math.max(16, String(etiqueta).length + 4) }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
+  agregarCriterio(wb, [
+    { Concepto: 'Reporte', Detalle: modelo || nombreBase },
+    { Concepto: 'Fuente', Detalle: 'Agrilux · datos agregados en SQL (RPC) o filas visibles de la tabla' },
+    { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
+    { Concepto: 'Generado', Detalle: new Date().toLocaleString('es-PE') },
+    ...criterio,
+  ]);
+  XLSX.writeFile(wb, `${etiquetaArchivo(nombreBase)}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/**
  * Reporte "Unidades sin reportar" (Zonar: Unidades - Sin Reportar) a Excel.
  * @param {Array} filas  filas enriquecidas del componente (con `transcurrido`
  *                       y `sinReportar` ya calculados, para que el texto del
@@ -205,6 +241,7 @@ export function exportarSinReportarExcel(filas, { ventanaHoras = 24, generado = 
     'Últ. dirección': f.direccion || '—',
     'Últ. evento': f.ultimo_evento || '—',
     'Últ. fecha GPRS': f.ultima_fecha ? formatearFechaLarga(f.ultima_fecha) : 'sin reporte',
+    'Geocerca asignada': geocercaAsignada(f),
     'Tiempo transcurrido': f.transcurrido || '—',
     'Estado': f.sinReportar ? 'Sin reportar' : 'Reportando',
   }));
@@ -212,7 +249,7 @@ export function exportarSinReportarExcel(filas, { ventanaHoras = 24, generado = 
   const ws = XLSX.utils.json_to_sheet(datos);
   ws['!cols'] = [
     { wch: 30 }, { wch: 12 }, { wch: 45 }, { wch: 24 },
-    { wch: 22 }, { wch: 20 }, { wch: 14 },
+    { wch: 22 }, { wch: 26 }, { wch: 20 }, { wch: 14 },
   ];
   XLSX.utils.book_append_sheet(wb, ws, 'Sin reportar');
 
@@ -223,7 +260,8 @@ export function exportarSinReportarExcel(filas, { ventanaHoras = 24, generado = 
     { Concepto: 'Criterio', Detalle: `Sin reportar = última fecha GPRS anterior a (ahora − ${ventanaHoras} h); dentro de la ventana = reportando` },
     { Concepto: 'Orden', Detalle: 'Mayor antigüedad primero (las que llevan más tiempo sin reportar arriba)' },
     { Concepto: 'Total', Detalle: `${(filas || []).length} unidad(es); ${sinReportar} sin reportar` },
-    { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones (agrotrack_estado_unidades_flota con p_desde = null y p_hasta = null: última posición conocida de cada placa)' },
+    { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones + public.agrotrack_geocercas (agrotrack_estado_unidades_flota con p_desde = null y p_hasta = null: última posición conocida de cada placa)' },
+    { Concepto: 'Geocerca asignada', Detalle: 'Geocerca que contiene la última posición conocida (PostGIS); si está fuera de todas, se muestra la última geocerca de campo con el sufijo "(última conocida)"' },
     { Concepto: 'Tiempo transcurrido', Detalle: 'Diferencia entre la última fecha GPRS y el momento en que se cargó el reporte' },
     { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
     { Concepto: 'Generado', Detalle: (generado ? new Date(generado) : new Date()).toLocaleString('es-PE') },

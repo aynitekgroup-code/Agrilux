@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Search, Filter, Power, Truck } from 'lucide-react';
 import { STATUS_META } from './fleetTokens';
+import { useLimiteFilas, BotonVerMas } from './reportesComunes';
 
 export function StatusPill({ estado }) {
   const meta = STATUS_META[estado] || STATUS_META.offline;
@@ -25,6 +26,9 @@ export default function VehicleList({ vehicles = [], selectedId, onSelect, onCut
       String(v.conductor_nombre || '').toLowerCase().includes(term);
     return matchesEstado && matchesQuery;
   });
+
+  // Tabla limitada a 15 filas; el contador superior usa la lista completa.
+  const { filasVistas, expandido, alternar, total } = useLimiteFilas(filtered);
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden min-w-0">
@@ -73,7 +77,7 @@ export default function VehicleList({ vehicles = [], selectedId, onSelect, onCut
             </tr>
           </thead>
           <tbody>
-            {filtered.map((v) => {
+            {filasVistas.map((v) => {
               const isSelected = v.id === selectedId;
               return (
                 <tr
@@ -112,6 +116,7 @@ export default function VehicleList({ vehicles = [], selectedId, onSelect, onCut
             })}
           </tbody>
         </table>
+        <BotonVerMas expandido={expandido} onAlternar={alternar} total={total} />
         {filtered.length === 0 ? (
           <div className="py-10 text-center">
             <p className="text-sm font-semibold text-slate-600">Sin resultados</p>

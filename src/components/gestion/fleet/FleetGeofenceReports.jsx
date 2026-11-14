@@ -25,7 +25,7 @@ import {
   etiquetaPeriodoReporte,
   ultimoDiaLima,
 } from '../../../lib/agrotrackFlota';
-import { useRango, ControlesRango, CuerpoEstado, numero } from './reportesComunes';
+import { useRango, ControlesRango, CuerpoEstado, numero, useLimiteFilas, BotonVerMas } from './reportesComunes';
 import { armarContextoReporte } from '../../../lib/reportesIa';
 import { llamarIaGestion } from '../../../lib/agrotrackIa';
 
@@ -92,6 +92,9 @@ function CardEventos({ empresaId, periodo, fuente }) {
     const sum = (campo) => filas.reduce((s, f) => s + Number(f[campo] || 0), 0);
     return { entradas: sum('entradas'), salidas: sum('salidas') };
   }, [filas]);
+
+  // Tabla limitada a 15 filas; el pie y el Excel usan el total completo.
+  const { filasVistas, expandido, alternar, total } = useLimiteFilas(filas);
 
   const puedeExportar = estado === 'ok' && filas.length > 0;
   const mensajePendiente =
@@ -188,7 +191,7 @@ function CardEventos({ empresaId, periodo, fuente }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filas.map((fila, i) => (
+                  {filasVistas.map((fila, i) => (
                     <tr key={`${fila.grupo}-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
                       <td className="px-3 py-2 font-semibold text-slate-800">
                         {etiquetaPeriodoReporte({ periodo: fila.grupo }, agrupar)}
@@ -224,6 +227,8 @@ function CardEventos({ empresaId, periodo, fuente }) {
                 </tfoot>
               </table>
             </div>
+
+            <BotonVerMas expandido={expandido} onAlternar={alternar} total={total} />
 
             {filas.length >= LIMITE_EVENTOS_GEOCERCA ? (
               <p className="px-4 py-2 text-[10px] text-amber-600 border-t border-slate-50">
@@ -314,6 +319,9 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
       puntos: sum('puntos'),
     };
   }, [filas]);
+
+  // Tabla limitada a 15 filas; totales y el Excel usan la lista completa.
+  const { filasVistas, expandido, alternar, total } = useLimiteFilas(filas);
 
   const puedeExportar = estado === 'ok' && filas.length > 0;
   // Si la RPC en Supabase todavía no tiene las columnas del desglose (script
@@ -443,7 +451,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filas.map((fila) => (
+                  {filasVistas.map((fila) => (
                     <tr key={fila.geocerca_id} className="border-b border-slate-50 hover:bg-slate-50/60">
                       <td className="px-3 py-2">
                         <span className="font-bold text-slate-800">{fila.lote}</span>
@@ -497,6 +505,8 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
                 </tfoot>
               </table>
             </div>
+
+            <BotonVerMas expandido={expandido} onAlternar={alternar} total={total} />
 
             {filas.length >= LIMITE_LOTES ? (
               <p className="px-4 py-2 text-[10px] text-amber-600 border-t border-slate-50">
@@ -623,6 +633,9 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
   }, [filas]);
 
   const abiertas = useMemo(() => filas.filter(visitaAbierta).length, [filas]);
+
+  // Tabla limitada a 15 filas; Excel, IA y respaldo usan la lista completa.
+  const { filasVistas, expandido, alternar, total } = useLimiteFilas(filas);
 
   // Si la RPC todavía no trae el desglose, se muestran «—» con un aviso en
   // vez de un 0 engañoso (mismo criterio que la tarjeta de lotes).
@@ -901,7 +914,7 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filas.map((f, i) => (
+                  {filasVistas.map((f, i) => (
                     <tr key={`${f.placa}-${f.geocerca}-${f.entrada}-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
                       <td className="px-3 py-2 whitespace-nowrap font-bold text-slate-800">{f.placa || '—'}</td>
                       <td className="px-3 py-2 text-slate-600">{f.geocerca || '—'}</td>
@@ -956,6 +969,8 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
                 </tfoot>
               </table>
             </div>
+
+            <BotonVerMas expandido={expandido} onAlternar={alternar} total={total} />
 
             {filas.length >= LIMITE_VISITAS_GEOCERCA ? (
               <p className="px-4 py-2 text-[10px] text-amber-600 border-t border-slate-50">

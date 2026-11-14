@@ -7,7 +7,7 @@ import {
   totalesEventosResumidos,
   formatearHMS,
 } from '../../../lib/agrotrackEventosResumidos';
-import { useRango, ControlesRango, CuerpoEstado } from './reportesComunes';
+import { useRango, ControlesRango, CuerpoEstado, useLimiteFilas, BotonVerMas } from './reportesComunes';
 
 /**
  * Reporte 15 de Zonar "Eventos resumidos" (FASE 3.6, pedido por el Ing.
@@ -94,6 +94,9 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
     () => calcularEventosResumidos(filas, totalSegundos),
     [filas, totalSegundos]
   );
+
+  // Tabla limitada a 15 filas; totales, filtros y Excel usan todo.
+  const { filasVistas, expandido, alternar, total } = useLimiteFilas(filasCalculadas);
 
   const totales = useMemo(() => totalesEventosResumidos(filasCalculadas), [filasCalculadas]);
 
@@ -195,7 +198,7 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
                   </tr>
                 </thead>
                 <tbody>
-                  {filasCalculadas.map((fila) => (
+                  {filasVistas.map((fila) => (
                     <tr key={fila.placa} className="border-b border-slate-50 hover:bg-slate-50/60">
                       <td className="px-3 py-2">
                         <span className="font-bold text-slate-800">{fila.placa}</span>
@@ -238,6 +241,8 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
                 </tfoot>
               </table>
             </div>
+
+            <BotonVerMas expandido={expandido} onAlternar={alternar} total={total} />
 
             <p className="px-4 py-2 text-[10px] text-slate-400 border-t border-slate-50">
               Total del rango: {formatearHMS(totalSegundos)} · Stop + Idle + Drive = 100% en cada fila.

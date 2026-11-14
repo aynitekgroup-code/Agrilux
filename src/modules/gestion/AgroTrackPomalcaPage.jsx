@@ -374,10 +374,9 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             periodo={conDatosReales ? panel.periodo : null}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
-          {/* Esquema de módulos fusionado dentro de Reportes (pedido por el
-              Ing. Carlos Perez: la pestaña "Esquema de modulos" desaparece y
-              su contenido vive aquí). ModulesOverview filtra el catálogo. */}
-          <ModulesOverview selectedId={selectedFleetModule} onSelect={setSelectedFleetModule} />
+          {/* Esquema de módulos arriba del catálogo: en Reportes viven
+              Flota y Alertas y eventos. ModulesOverview filtra el catálogo. */}
+          <ModulesOverview modulos={['flota', 'alertas']} selectedId={selectedFleetModule} onSelect={setSelectedFleetModule} />
           <ReportesPage
             empresaId={empresa_activa_id}
             periodo={conDatosReales ? panel.periodo : null}
@@ -399,6 +398,15 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             periodo={conDatosReales ? panel.periodo : null}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
             vehicles={vehiclesFuente}
+          />
+          {/* El módulo "Geocercas y rutas" vive aquí, arriba del catálogo. */}
+          <ModulesOverview modulos={['geocercas']} selectedId="geocercas" onSelect={() => {}} />
+          <ReportesPage
+            empresaId={empresa_activa_id}
+            periodo={conDatosReales ? panel.periodo : null}
+            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+            vehicles={vehiclesFuente}
+            selectedModuleId="geocercas"
           />
         </div>
       ) : null}
@@ -423,6 +431,8 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             ]}
             nota="La Consola principal conserva su indicador demostrativo de combustible mientras no haya fuente real (así se pidió)."
           />
+          {/* El módulo "Combustible" vive al final (aún sin fuente real). */}
+          <ModulesOverview modulos={['combustible']} selectedId="combustible" onSelect={() => {}} />
         </div>
       ) : null}
 

@@ -80,16 +80,22 @@ async function llamarRpc(nombre, params, contexto) {
 /**
  * Entradas y salidas de geocerca (eventos de Zonar).
  * @param {'geocerca'|'dia'|'mes'} agrupar
+ * @param {Array<string>} [placas] filtro opcional por conjunto de placas
+ *        (selector "Mostrar: Unidades / Grupos"). Solo se envía cuando trae
+ *        placas: si la base no tiene la firma con p_placas, la llamada sin
+ *        filtro sigue resolviendo y al filtrar se pide la firma nueva.
  * @returns filas { grupo_tipo, grupo, entradas, salidas, unidades, ultima_entrada }
  */
 export async function obtenerEventosGeocerca(
   empresaId,
-  { desde = null, hasta = null, agrupar = 'geocerca', limite = LIMITE_EVENTOS_GEOCERCA } = {}
+  { desde = null, hasta = null, agrupar = 'geocerca', limite = LIMITE_EVENTOS_GEOCERCA, placas = null } = {}
 ) {
   if (!empresaId) return [];
+  const params = { p_empresa_id: empresaId, p_desde: desde, p_hasta: hasta, p_agrupar: agrupar, p_limite: limite };
+  if (Array.isArray(placas) && placas.length) params.p_placas = placas;
   return llamarRpc(
     'agrotrack_eventos_geocerca_flota',
-    { p_empresa_id: empresaId, p_desde: desde, p_hasta: hasta, p_agrupar: agrupar, p_limite: limite },
+    params,
     'No se pudo cargar el reporte de entradas y salidas'
   );
 }
@@ -167,6 +173,31 @@ async function llamarRpcEmpresa(nombre, params, contexto) {
     const { p_empresa_id, ...resto } = params;
     return llamarRpc(nombre, { ...resto, p_empresa: p_empresa_id }, contexto);
   }
+}
+
+/**
+ * Límite de velocidad por geocerca (FASE 4): episodios de exceso del
+ * velocidad_max_kmh configurado en cada geocerca, calculados con PostGIS
+ * sobre las posiciones y solo en geocercas con ese límite configurado.
+ * @param {Array<string>} [placas] filtro opcional por conjunto de placas
+ *        (selector "Mostrar: Unidades / Grupos").
+ * @returns filas { geocerca_id, geocerca, division, placa, unidad, inicio,
+ *                  fin, duracion_segundos, vel_max_kmh, velocidad_max_kmh,
+ *                  exceso_kmh, puntos, direccion, evento }
+ */
+export async function obtenerLimiteVelocidadFlota(
+  empresaId,
+  { desde = null, hasta = null, placas = null, geocerca = '', limite = LIMITE_ESTADO_UNIDADES } = {}
+) {
+  if (!empresaId) return [];
+  const params = { p_empresa_id: empresaId, p_desde: desde, p_hasta: hasta, p_limite: limite };
+  if (Array.isArray(placas) && placas.length) params.p_placas = placas;
+  if (geocerca) params.p_geocerca = geocerca;
+  return llamarRpcEmpresa(
+    'agrotrack_limite_velocidad_flota',
+    params,
+    'No se pudo cargar el reporte de límite de velocidad'
+  );
 }
 
 /**

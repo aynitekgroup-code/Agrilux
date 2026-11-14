@@ -17,6 +17,7 @@ import { COLORES_GRUPO, ETIQUETAS_GRUPO } from '../../../lib/asistenteMapa';
 import { areaHectareas, contarVertices } from '../../../lib/geocercasGeometria';
 import { agruparUnidades, grupoSugerido } from '../../../lib/agrotrackGrupos';
 import { formatearFechaLarga } from '../../../lib/agrotrackFlota';
+import { useLimiteFilas, BotonVerMas } from './reportesComunes';
 
 /**
  * Controles flotantes del mapa de flota (FASE 3.8):
@@ -440,6 +441,8 @@ export function TablaCoordenadas({
   onExportar = () => {},
 }) {
   const muchas = filas.length > 100;
+  // Tabla limitada a 15 filas; el pie y el Excel usan el total completo.
+  const { filasVistas, expandido, alternar, total } = useLimiteFilas(filas);
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
       <div className="p-4 sm:p-5 border-b border-slate-50 flex flex-wrap items-center gap-2">
@@ -480,7 +483,7 @@ export function TablaCoordenadas({
                 </tr>
               </thead>
               <tbody>
-                {filas.map((fila) => (
+                {filasVistas.map((fila) => (
                   <tr key={fila.clave || fila.placa} className="border-b border-slate-50 hover:bg-slate-50/60">
                     <td className="px-3 py-2">
                       <span className="block font-semibold text-slate-800">{fila.placa}</span>
@@ -502,6 +505,7 @@ export function TablaCoordenadas({
               </tbody>
             </table>
           </div>
+          <BotonVerMas expandido={expandido} onAlternar={alternar} total={total} />
           <p className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-[10px] text-slate-500">
             {filas.length} fila(s) · una por marcador visible
             {muchas ? ' · la tabla tiene scroll, desplázate para verlas todas' : ''}
@@ -653,6 +657,8 @@ export function PanelUnidadesGeocerca({
   error = '',
   aviso = '',
 }) {
+  // Tabla limitada a 15 filas (ganchos antes del return anticipado).
+  const { filasVistas, expandido, alternar, total } = useLimiteFilas(unidades);
   if (!geocerca) return null;
 
   const cabecera = (
@@ -688,6 +694,7 @@ export function PanelUnidadesGeocerca({
       ) : !unidades.length ? (
         <p className="p-6 text-center text-xs font-semibold text-slate-500">Ninguna unidad dentro</p>
       ) : (
+        <>
         <div className="max-h-72 overflow-auto">
           <table className="w-full text-xs text-slate-700">
             <thead className="sticky top-0 z-10 bg-white">
@@ -699,7 +706,7 @@ export function PanelUnidadesGeocerca({
               </tr>
             </thead>
             <tbody>
-              {unidades.map((unidad) => (
+              {filasVistas.map((unidad) => (
                 <tr key={unidad.placa} className="border-b border-slate-50 hover:bg-slate-50/60">
                   <td className="px-3 py-2">
                     <span className="block font-semibold text-slate-800">{unidad.placa}</span>
@@ -717,6 +724,8 @@ export function PanelUnidadesGeocerca({
             </tbody>
           </table>
         </div>
+        <BotonVerMas expandido={expandido} onAlternar={alternar} total={total} />
+        </>
       )}
     </div>
   );

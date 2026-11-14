@@ -1,4 +1,4 @@
--- Reportes de geocercas + estado de unidades (FASE 3.5 / 3.6): los tres
+-- Reportes de geocercas + estado de unidades (FASE 3.5 / 3.6): los cuatro
 -- reportes pedidos por Ing. Carlos Perez que necesitan PostGIS.
 -- Ejecutar completo en el SQL Editor de Supabase. Es repetible e idempotente:
 -- no borra ni modifica datos, ni toca RLS, ni a agrotrack_posiciones,
@@ -8,7 +8,7 @@
 -- to create extension", ejecutar primero y sola la línea:
 --   create extension if not exists postgis with schema public;
 --
--- Los tres reportes:
+-- Los cuatro reportes:
 --   1) agrotrack_eventos_geocerca_flota : entradas / salidas por geocerca de los
 --      eventos de Zonar ("Entrada a Geocerca" / "Salida de Geocerca", con
 --      pt_referencia = nombre del dispositivo). Agrupable por geocerca, por día
@@ -25,6 +25,9 @@
 --      dirección, velocidad, coordenadas) MÁS la geocerca actual: el polígono
 --      PostGIS que contiene esa posición (la columna extra que pidió el
 --      Ing. Carlos Perez). Igual que en (2), todas las geocercas activas.
+--   4) agrotrack_limite_velocidad_flota : "Geocercas: límite de velocidad":
+--      episodios de exceso del velocidad_max_kmh de la geocerca (PostGIS),
+--      con velocidad del carro, límite, exceso y duración.
 --
 -- Mismo criterio que los reportes de actividad (FASE 3), para que las cifras
 -- sean comparables:
@@ -173,6 +176,8 @@ alter table if exists public.agrotrack_geocercas
 --      'geocerca' -> una fila por geocerca (por defecto)
 --      'dia'      -> una fila por día de Perú
 --      'mes'      -> una fila por mes de Perú
+--    p_placas (opcional): conjunto de placas para el selector "Mostrar:
+--      Unidades / Grupos" del reporte; null = todas las unidades.
 --
 --    Las salidas pueden no cuadrar con las entradas: el dispositivo registra
 --    el estado en cada reporte y un periodo abierto (unidad aún dentro) deja
@@ -185,13 +190,17 @@ alter table if exists public.agrotrack_geocercas
 --    (p_desde), de modo que entradas y salidas cuadren al cortar por días.
 -- ---------------------------------------------------------------------------
 drop function if exists public.agrotrack_eventos_geocerca_flota(uuid, timestamptz, timestamptz, text, integer);
+drop function if exists public.agrotrack_eventos_geocerca_flota(uuid, timestamptz, timestamptz, text, integer, text[]);
 
 create function public.agrotrack_eventos_geocerca_flota(
   p_empresa_id uuid,
   p_desde      timestamptz default null,
   p_hasta      timestamptz default null,
   p_agrupar    text        default 'geocerca',
-  p_limite     integer     default 500
+  p_limite     integer     default 500,
+  -- Filtro opcional por conjunto de placas (la UI del reporte "Geocercas:
+  -- entradas y salidas" lo usa para "Mostrar: Unidades / Grupos"). null = todas.
+  p_placas     text[]      default null
 )
 returns table (
   grupo_tipo     text,            -- 'geocerca' | 'dia' | 'mes'
@@ -217,6 +226,8 @@ as $$
     -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
     where (select public.onboarding_es_miembro(p_empresa_id))
       and p.empresa_id = p_empresa_id
+      -- Filtro opcional por placas (pantalla "Mostrar: Unidades / Grupos").
+      and (p_placas is null or p.placa = any(p_placas))
       and (p_desde is null or p.fecha >= p_desde)
       and (p_hasta is null or p.fecha <= p_hasta)
       -- Tolera mayúsculas/minúsculas y tildes distintas (mismo criterio que
@@ -243,6 +254,7 @@ as $$
     where (select public.onboarding_es_miembro(p_empresa_id))
       and p.empresa_id = p_empresa_id
       and p_desde is not null
+      and (p_placas is null or p.placa = any(p_placas))
       and p.fecha < p_desde
       and (lower(p.evento) like '%entrada%geocerca%'
         or lower(p.evento) like '%salida%geocerca%')
@@ -288,7 +300,7 @@ as $$
   limit greatest(coalesce(p_limite, 500), 1);
 $$;
 
-grant execute on function public.agrotrack_eventos_geocerca_flota(uuid, timestamptz, timestamptz, text, integer)
+grant execute on function public.agrotrack_eventos_geocerca_flota(uuid, timestamptz, timestamptz, text, integer, text[])
   to anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
@@ -520,6 +532,185 @@ as $$
 $$;
 
 grant execute on function public.agrotrack_lotes_flota(uuid, timestamptz, timestamptz, text, time, time, integer)
+  to anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
+-- 2.5) Límite de velocidad por geocerca (reporte "Geocercas: límite de
+--      velocidad").
+--
+--      Una fila por EPISODIO de exceso: racha de posiciones por encima del
+--      velocidad_max_kmh de la geocerca, dentro de esa misma geocerca, sin
+--      huecos de más de 10 minutos (mismo criterio de continuidad del resto
+--      del archivo).
+--
+--      Entran TODAS las geocercas activas con polígono. Con límite
+--      configurado cuenta lo que excede; sin límite configurado cuenta los
+--      eventos "Alta velocidad" de Zonar dentro del polígono (límite y exceso
+--      quedan en «—» en la UI). Las geocercas con velocidad_max_kmh NULL y
+--      sin eventos alta velocidad no aportan filas.
+--
+--      Devuelve: unidad, inicio y fin del episodio, duración, velocidad
+--      máxima del carro, el límite de la geocerca, el exceso máximo, el
+--      evento y la dirección del punto con el exceso más alto, y los puntos
+--      por encima del límite.
+--
+--      p_placas (opcional): conjunto de placas para el selector "Mostrar:
+--      Unidades / Grupos" del reporte. null = todas las unidades.
+--      p_geocerca (opcional): nombre de UNA geocerca para el desplegable
+--      "Geocercas" del reporte. null = todas las geocercas.
+-- ---------------------------------------------------------------------------
+drop function if exists public.agrotrack_limite_velocidad_flota(uuid, timestamptz, timestamptz, text[], integer);
+drop function if exists public.agrotrack_limite_velocidad_flota(uuid, timestamptz, timestamptz, text[], integer, text);
+
+create function public.agrotrack_limite_velocidad_flota(
+  p_empresa_id uuid,
+  p_desde      timestamptz default null,
+  p_hasta      timestamptz default null,
+  p_placas     text[]      default null,
+  p_limite     integer     default 500,
+  p_geocerca   text        default null
+)
+returns table (
+  geocerca_id       uuid,
+  geocerca          text,
+  division          text,
+  placa             text,
+  unidad            text,
+  inicio            timestamptz,
+  fin               timestamptz,
+  duracion_segundos bigint,
+  vel_max_kmh       numeric,
+  velocidad_max_kmh numeric,
+  exceso_kmh        numeric,
+  puntos            bigint,
+  direccion         text,
+  evento            text
+)
+language sql
+stable
+security definer
+set search_path = public, extensions, pg_catalog, pg_temp
+as $$
+  with geocercas as materialized (
+    select
+      g.id, g.nombre, g.division, g.velocidad_max_kmh,
+      ((g.geometria->'bbox')->>0)::double precision as lon_min,
+      ((g.geometria->'bbox')->>1)::double precision as lat_min,
+      ((g.geometria->'bbox')->>2)::double precision as lon_max,
+      ((g.geometria->'bbox')->>3)::double precision as lat_max,
+      ST_SetSRID(ST_GeomFromGeoJSON(g.geometria::text), 4326) as poligono
+    from public.agrotrack_geocercas g
+    where g.empresa_id = p_empresa_id
+      and g.activa is true
+      -- Desplegable "Geocercas": filtrar a UNA geocerca (nombre tolerante a caso).
+      and (p_geocerca is null or lower(btrim(g.nombre)) = lower(btrim(p_geocerca)))
+      and g.geometria is not null
+      and jsonb_typeof(g.geometria) = 'object'
+      and (g.geometria->>'type') in ('Polygon', 'MultiPolygon')
+      and jsonb_typeof(g.geometria->'bbox') = 'array'
+  ),
+  -- Límite mínimo configurado entre las geocercas con límite: cualquier
+  -- violación (propia-geocerca > su límite) también supera este mínimo, así
+  -- que un row que falle este predicado no puede ser infractor. SIN ningún
+  -- límite configurado (todas NULL), el predicado es NULL y solo entran los
+  -- eventos "Alta velocidad" de Zonar: de ~100 mil filas a unas pocas.
+  limite_min as (
+    select min(g.velocidad_max_kmh) as minimo
+    from public.agrotrack_geocercas g
+    where g.empresa_id = p_empresa_id
+      and g.velocidad_max_kmh is not null
+  ),
+  puntos as (
+    select p.id, p.placa, p.unidad, p.fecha, p.secuencia, p.latitud, p.longitud, p.velocidad, p.evento, p.direccion
+    from public.agrotrack_posiciones p
+    -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
+    where (select public.onboarding_es_miembro(p_empresa_id))
+      and p.empresa_id = p_empresa_id
+      and (p_placas is null or p.placa = any(p_placas))
+      and (p_desde is null or p.fecha >= p_desde)
+      and (p_hasta is null or p.fecha <= p_hasta)
+      and p.latitud is not null
+      and p.longitud is not null
+      and p.velocidad is not null
+      and (
+        lower(coalesce(p.evento, '')) like '%alta velocidad%'
+        or p.velocidad > (select minimo from limite_min)
+      )
+  ),
+  candidatos as (
+    select g.id as geocerca_id, g.nombre, g.division, g.velocidad_max_kmh, g.poligono,
+           p.id as punto_id, p.placa, p.unidad, p.fecha, p.secuencia, p.latitud, p.longitud, p.velocidad, p.evento, p.direccion
+    from geocercas g
+    join puntos p
+      on p.latitud  between g.lat_min and g.lat_max
+     and p.longitud between g.lon_min and g.lon_max
+  ),
+  dentro as (
+    select c.geocerca_id, c.nombre, c.division, c.velocidad_max_kmh,
+           c.punto_id, c.placa, c.unidad, c.fecha, c.secuencia, c.velocidad, c.evento, c.direccion
+    from candidatos c
+    where ST_Contains(c.poligono, ST_SetSRID(ST_MakePoint(c.longitud, c.latitud), 4326))
+      and (
+        -- Con límite configurado: exceso del límite
+        (c.velocidad_max_kmh is not null and c.velocidad > c.velocidad_max_kmh)
+        -- Sin límite configurado (o además): eventos "Alta velocidad" de Zonar
+        or (lower(coalesce(c.evento, '')) like '%alta velocidad%'
+            and lower(c.evento) not like 'fin%')
+      )
+  ),
+  con_prev as (
+    select
+      d.*,
+      lag(d.fecha) over ventana as prev_fecha
+    from dentro d
+    window ventana as (
+      partition by d.geocerca_id, d.placa
+      order by d.fecha, coalesce(d.secuencia, 0), d.punto_id
+    )
+  ),
+  marcados as (
+    select
+      c.*,
+      case
+        when c.prev_fecha is null then 1
+        when extract(epoch from (c.fecha - c.prev_fecha)) > 600 then 1
+        else 0
+      end as nuevo_episodio
+    from con_prev c
+  ),
+  episodios as (
+    select
+      m.*,
+      sum(m.nuevo_episodio) over (
+        partition by m.geocerca_id, m.placa
+        order by m.fecha, coalesce(m.secuencia, 0), m.punto_id
+        rows unbounded preceding
+      ) as ep_n
+    from marcados m
+  )
+  select
+    e.geocerca_id,
+    e.nombre as geocerca,
+    e.division,
+    e.placa,
+    max(e.unidad) as unidad,
+    min(e.fecha) as inicio,
+    max(e.fecha) as fin,
+    extract(epoch from (max(e.fecha) - min(e.fecha)))::bigint as duracion_segundos,
+    max(e.velocidad) as vel_max_kmh,
+    max(e.velocidad_max_kmh) as velocidad_max_kmh,
+    max(e.velocidad) - max(e.velocidad_max_kmh) as exceso_kmh,
+    count(*) as puntos,
+    (array_agg(e.direccion order by e.velocidad desc nulls last))[1] as direccion,
+    (array_agg(e.evento order by e.velocidad desc nulls last))[1] as evento
+  from episodios e
+  group by e.geocerca_id, e.nombre, e.division, e.placa, e.ep_n
+  -- Lo más reciente primero.
+  order by min(e.fecha) desc, max(e.velocidad) desc
+  limit greatest(coalesce(p_limite, 500), 1);
+$$;
+
+grant execute on function public.agrotrack_limite_velocidad_flota(uuid, timestamptz, timestamptz, text[], integer, text)
   to anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------

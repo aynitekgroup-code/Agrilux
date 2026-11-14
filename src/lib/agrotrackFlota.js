@@ -185,11 +185,16 @@ export async function obtenerResumenFlota(empresaId, { desde = null, hasta = nul
   );
 }
 
-/** Eventos de "Alta velocidad" y "Botón de pánico" más recientes. */
-export async function obtenerAlertasFlota(empresaId, { desde = null, hasta = null, limite = LIMITE_ALERTAS_PANEL } = {}) {
+/** Eventos de "Alta velocidad" y "Botón de pánico" más recientes.
+ *  `placas` filtra por conjunto de placas (solo se envía al filtrar; sin él la
+ *  llamada sigue resolviendo contra la firma de 4 argumentos de una base que
+ *  todavía no tiene el script actualizado). */
+export async function obtenerAlertasFlota(empresaId, { desde = null, hasta = null, limite = LIMITE_ALERTAS_PANEL, placas = null } = {}) {
+  const params = { p_empresa_id: empresaId, p_desde: desde, p_hasta: hasta, p_limite: limite };
+  if (Array.isArray(placas) && placas.length) params.p_placas = placas;
   return llamarRpc(
     'agrotrack_alertas_flota',
-    { p_empresa_id: empresaId, p_desde: desde, p_hasta: hasta, p_limite: limite },
+    params,
     'No se pudieron cargar las alertas'
   );
 }

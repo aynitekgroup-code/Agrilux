@@ -12,6 +12,7 @@ import {
   LIMITE_FILAS_ACTIVIDAD,
 } from '../../../lib/agrotrackFlota';
 import { generarResumenFlota } from '../../../lib/agrotrackInsights';
+import { useLimiteFilas, BotonVerMas } from './reportesComunes';
 
 /**
  * Reporte de actividad de flota (FASE 3).
@@ -159,6 +160,9 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
       return 0;
     });
   }, [filas, orden]);
+
+  // Tabla limitada a 15 filas; el pie y el Excel usan el total completo.
+  const { filasVistas: filasTabla, expandido, alternar, total } = useLimiteFilas(filasOrdenadas);
 
   const totales = useMemo(() => {
     const sum = (campo) => filas.reduce((s, f) => s + Number(f[campo] || 0), 0);
@@ -407,7 +411,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
                 </tr>
               </thead>
               <tbody>
-                {filasOrdenadas.map((fila, i) => (
+                {filasTabla.map((fila, i) => (
                   <tr key={`${fila.placa}-${fila.periodo || 'total'}-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
                     <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-600">{etiquetaPeriodoReporte(fila, modo)}</td>
                     <td className="px-3 py-2">
@@ -446,6 +450,8 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
               </tfoot>
             </table>
           </div>
+
+          <BotonVerMas expandido={expandido} onAlternar={alternar} total={total} />
 
           {filas.length >= LIMITE_FILAS_ACTIVIDAD ? (
             <p className="px-4 py-2 text-[10px] text-amber-600 border-t border-slate-50">
