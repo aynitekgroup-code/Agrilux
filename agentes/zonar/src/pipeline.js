@@ -13,7 +13,7 @@ import path from 'node:path';
 
 import { RUTAS, asegurarCarpetas } from './config.js';
 import { loginZonar, listarUnidades, historialUnidad, hoyPeru, restarDias, dormir } from './zonar.js';
-import { conectarAgrilux, subirPosiciones } from './agrilux.js';
+import { conectarAgrilux, subirPosiciones, registrarLatido, calcularVisitasPendientes } from './agrilux.js';
 import { armarFilaZonar } from '../lib/parse.js';
 
 const TOPE_AVISO_HISTORIAL = 50000; // el máximo que avisa la UI de Zonar
@@ -198,6 +198,27 @@ export async function ejecutarCorrida(cfg, opts, log) {
     }
   } else {
     log.aviso('No se obtuvieron filas en este rango.');
+  }
+
+  // 14/11/2026: deja listas las visitas a geocercas del rango (la tabla
+  // dinámica de las 6:30 a. m. ya no espera a nadie) y avisa a la web.
+  if (!sinIngerir && agrilux) {
+    try {
+      const n = await calcularVisitasPendientes(agrilux, desde, hasta, log);
+      if (n) log.info(`Visitas a geocercas calculadas y guardadas: ${n} (día, placa).`);
+    } catch (e) {
+      log.aviso(`No se pudieron calcular las visitas a geocercas: ${e.message}`);
+    }
+    try {
+      await registrarLatido(agrilux, 'diario', {
+        ok: resumen.unidades_con_error === 0,
+        unidades: resumen.unidades_ok,
+        nuevas: resumen.nuevas,
+        mensaje: resumen.errores.slice(0, 3).join(' · ') || null,
+      });
+    } catch {
+      /* el latido es informativo */
+    }
   }
 
   limpiarDescargas(cfg.corrida.reten_dias);

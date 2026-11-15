@@ -12,6 +12,7 @@ import {
   LIMITE_FILAS_ACTIVIDAD,
 } from '../../../lib/agrotrackFlota';
 import { generarResumenFlota } from '../../../lib/agrotrackInsights';
+import { rangoRapido } from './reportesComunes';
 
 /**
  * Reporte de actividad de flota (FASE 3).
@@ -256,6 +257,37 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
         {descargaError ? <p className="text-[10px] text-red-600">{descargaError}</p> : null}
 
         <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Atajos (como Zonar)</p>
+            <div className="flex gap-1.5">
+              {[
+                { id: 'hoy', label: 'Hoy' },
+                { id: 'ayer', label: 'Ayer' },
+                { id: 'semana', label: 'Esta semana' },
+                { id: 'semana-anterior', label: 'Semana anterior' },
+              ].map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => {
+                    const r = rangoRapido(a.id);
+                    if (!r) return;
+                    if (a.id === 'hoy' || a.id === 'ayer') {
+                      setDia(r.desde.slice(0, 10));
+                      setModo('dia');
+                    } else {
+                      setDesdeHora(r.desde);
+                      setHastaHora(r.hasta);
+                      setModo('libre');
+                    }
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 bg-white text-slate-600 hover:border-forest hover:text-forest transition-colors"
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Agrupación</p>
             <div className="flex gap-1.5">

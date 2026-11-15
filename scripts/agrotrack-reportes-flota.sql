@@ -39,8 +39,12 @@
 --                  descartando duplicados, saltos > 600 s y >= 5 km.
 --   Duplicados   : mismo (fecha, secuencia) repetidos al recargar el reporte.
 --   Día/Mes      : fecha at time zone 'America/Lima' (UTC-5, sin DST).
---   Primer tramo : el primer punto del rango no tiene anterior, así que no
---                  aporta tiempo (como máximo 10 min por unidad y rango).
+--   Estado tramo : (14/11/2026) cada tramo toma el estado del punto donde
+--                  EMPIEZA (un estado dura hasta el siguiente evento, como
+--                  en Zonar).
+--   Bordes       : (14/11/2026) se leen 10 min antes y después del rango y
+--                  cada tramo se recorta a [p_desde, p_hasta]: el tramo que
+--                  cruza la medianoche se reparte entre los dos días.
 --
 -- El umbral de 5 km/h es una decisión de negocio: cambiar UMBRAL_VIAJE_KMH /
 -- UMBRAL_RALENTI_KMH más abajo cambia el reporte completo, nunca se duplica
@@ -178,33 +182,43 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
+  -- ---------------------------------------------------------------------------
+  -- CRITERIO 14/11/2026 (diferencia de ~10 % contra Zonar, observaciones I y II):
+  --   1) Cada tramo entre dos reportes toma el estado del punto donde EMPIEZA
+  --      (como Zonar: un estado dura hasta el siguiente evento). Antes tomaba
+  --      el del punto final, y el tiempo estacionado previo a una
+  --      "Ignición Encendida" se contaba como motor prendido.
+  --   2) Corte de días y horas exacto: se leen también los 10 minutos antes de
+  --      p_desde y después de p_hasta, y cada tramo se RECORTA al rango. Así el
+  --      tramo que cruza la medianoche se reparte entre los dos días en vez de
+  --      perderse, y un rango 08:00–12:00 suma exactamente esas horas.
+  -- ---------------------------------------------------------------------------
   with base as (
     select
       p.id, p.placa, p.unidad, p.fecha, p.secuencia, p.evento,
-      p.velocidad, p.latitud, p.longitud
+      p.velocidad, p.latitud, p.longitud,
+      ((p_desde is null or p.fecha >= p_desde)
+        and (p_hasta is null or p.fecha <= p_hasta))              as en_rango
     from public.agrotrack_posiciones p
     -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
     where (select public.onboarding_es_miembro(p_empresa_id))
       and p.empresa_id = p_empresa_id
       and (p_placa is null or p.placa = p_placa)
-      and (p_desde is null or p.fecha >= p_desde)
-      and (p_hasta is null or p.fecha <= p_hasta)
+      -- 10 minutos de margen a cada lado: el tramo que cruza el borde existe.
+      and (p_desde is null or p.fecha >= p_desde - interval '10 minutes')
+      and (p_hasta is null or p.fecha <= p_hasta + interval '10 minutes')
   ),
   -- Estado de cada punto según el criterio único de la cabecera.
   puntos as (
     select
       b.*,
-      -- motor encendido: el evento no dice estacionado ni apagado
       (not (lower(b.evento) like '%estacionad%'
          or lower(b.evento) like '%apagad%'))                    as encendido,
-      -- en viaje: encendido y por encima del umbral
       (not (lower(b.evento) like '%estacionad%'
          or lower(b.evento) like '%apagad%'))
         and coalesce(b.velocidad, 0) > 5                         as es_viaje
     from base b
   ),
-  -- UNA sola ventana: con ella salen el tramo anterior (lag), el detector de
-  -- duplicados y la distancia, igual que agrotrack_resumen_flota.
   tramos as (
     select
       q.*,
@@ -212,6 +226,7 @@ as $$
       lag(q.longitud)               over ventana as prev_lon,
       lag(q.fecha)                  over ventana as prev_fecha,
       lag(coalesce(q.secuencia, 0)) over ventana as prev_sec,
+      lag(q.encendido)              over ventana as prev_encendido,
       lag(q.es_viaje)               over ventana as prev_viaje
     from puntos q
     window ventana as (
@@ -222,63 +237,79 @@ as $$
   calculado as (
     select
       t.*,
-      -- Es la segunda (o tercera…) vez que vemos ese punto: reporte repetido.
       (t.prev_fecha is not null
         and t.prev_fecha = t.fecha
         and coalesce(t.secuencia, 0) = coalesce(t.prev_sec, 0))  as es_duplicado,
+      -- Duración bruta del tramo (null = sin continuidad: hueco > 10 min).
       case
         when t.prev_fecha is null then null
         when t.prev_fecha = t.fecha
           and coalesce(t.secuencia, 0) = coalesce(t.prev_sec, 0) then 0
         when extract(epoch from (t.fecha - t.prev_fecha)) > 600 then null
         else extract(epoch from (t.fecha - t.prev_fecha))
+      end                                                        as dt_bruto,
+      -- Parte del tramo que cae DENTRO del rango pedido.
+      case
+        when t.prev_fecha is null then null
+        when extract(epoch from (t.fecha - t.prev_fecha)) > 600 then null
+        else greatest(0, extract(epoch from (
+               least(t.fecha, coalesce(p_hasta, t.fecha))
+               - greatest(t.prev_fecha, coalesce(p_desde, t.prev_fecha)))))
       end                                                        as dt_segundos,
+      -- Inicio del tramo (recortado): decide en qué día/mes cae.
+      case
+        when t.prev_fecha is null then t.fecha
+        else greatest(t.prev_fecha, coalesce(p_desde, t.prev_fecha))
+      end                                                        as fecha_ref,
       case
         when t.prev_lat is null or t.prev_fecha is null then null
         when t.prev_fecha = t.fecha
           and coalesce(t.secuencia, 0) = coalesce(t.prev_sec, 0) then null
         when extract(epoch from (t.fecha - t.prev_fecha)) > 600 then null
-        -- Haversine inlineado (mismo motivo que en agrotrack_resumen_flota)
         else 2.0 * 6371.0 * asin(least(1.0, sqrt(
           power(sin(radians(t.latitud - t.prev_lat) / 2.0), 2) +
           cos(radians(t.prev_lat)) * cos(radians(t.latitud)) *
           power(sin(radians(t.longitud - t.prev_lon) / 2.0), 2)
         )))
-      end                                                        as dist_km
+      end                                                        as dist_bruta
     from tramos t
   ),
+  -- Solo filas que aportan: un punto dentro del rango o un tramo que entra en él.
+  utiles as (
+    select
+      c.*,
+      -- km del tramo proporcional a la parte que cae dentro del rango
+      case
+        when c.dist_bruta is null or c.dist_bruta >= 5 then 0::double precision
+        when coalesce(c.dt_bruto, 0) <= 0 then case when c.en_rango then c.dist_bruta else 0 end
+        else c.dist_bruta * least(1.0, coalesce(c.dt_segundos, 0) / c.dt_bruto)
+      end                                                        as dist_km
+    from calculado c
+    where c.en_rango or coalesce(c.dt_segundos, 0) > 0
+  ),
   -- ---------------------------------------------------------------------------
-  -- AGREGADO: lo que antes era directamente el SELECT final. Una fila por
-  -- (periodo, placa) con datos en el rango. Ordinal 1 = periodo, igual que
-  -- antes, para no repetir la fórmula del período.
+  -- AGREGADO: una fila por (periodo, placa) con datos en el rango.
   -- ---------------------------------------------------------------------------
   agregado as (
     select
       case
         when lower(coalesce(p_agrupar, 'dia')) = 'unidad' then null
         when lower(p_agrupar) = 'mes'
-          then to_char(c.fecha at time zone 'America/Lima', 'YYYY-MM')
-        else to_char(c.fecha at time zone 'America/Lima', 'YYYY-MM-DD')
+          then to_char(c.fecha_ref at time zone 'America/Lima', 'YYYY-MM')
+        else to_char(c.fecha_ref at time zone 'America/Lima', 'YYYY-MM-DD')
       end                                                as periodo,
       c.placa                                            as placa,
       max(c.unidad)                                      as unidad,
-      -- Recorrido: mismas reglas que agrotrack_resumen_flota (<= 10 min, < 5 km).
-      coalesce(round(sum(
-        case
-          when c.dist_km is null or c.dist_km >= 5 then 0::double precision
-          else c.dist_km
-        end
-      )::numeric, 2), 0)                                 as km_recorridos,
-      -- Encendido = viaje + ralentí (los tres son coherentes por construcción).
-      coalesce((sum(c.dt_segundos) filter (where c.encendido))::bigint, 0)   as encendido_segundos,
-      coalesce((sum(c.dt_segundos) filter (where c.es_viaje))::bigint, 0)    as viaje_segundos,
-      coalesce((sum(c.dt_segundos) filter (where c.encendido and not c.es_viaje))::bigint, 0)
-                                                                           as ralenti_segundos,
-      max(c.velocidad)                                   as vel_max_kmh,
-      -- Mismo filtro de alertas que agrotrack_alertas_flota: "Alta velocidad"
-      -- cuenta, "Fin de alta velocidad" es el cierre y no.
+      coalesce(round(sum(c.dist_km)::numeric, 2), 0)     as km_recorridos,
+      -- El tramo toma el estado del punto donde empieza (prev_*).
+      coalesce((sum(c.dt_segundos) filter (where c.prev_encendido))::bigint, 0) as encendido_segundos,
+      coalesce((sum(c.dt_segundos) filter (where c.prev_viaje))::bigint, 0)     as viaje_segundos,
+      coalesce((sum(c.dt_segundos) filter (where c.prev_encendido and not c.prev_viaje))::bigint, 0)
+                                                                              as ralenti_segundos,
+      max(c.velocidad) filter (where c.en_rango)         as vel_max_kmh,
       count(*) filter (
-        where not c.es_duplicado
+        where c.en_rango
+          and not c.es_duplicado
           and (
             (lower(c.evento) like '%alta velocidad%'
               and lower(c.evento) not like 'fin%')
@@ -286,8 +317,8 @@ as $$
             or lower(c.evento) like '%panico%'
           )
       )                                                  as alertas,
-      count(*)                                           as posiciones
-    from calculado c
+      count(*) filter (where c.en_rango)                 as posiciones
+    from utiles c
     group by 1, c.placa
   ),
   -- ---------------------------------------------------------------------------

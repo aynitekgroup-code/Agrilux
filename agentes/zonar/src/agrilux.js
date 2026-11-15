@@ -80,3 +80,49 @@ export async function subirPosiciones(supabase, filas, onLote) {
   }
   return nuevas;
 }
+
+/**
+ * Latido del agente (scripts/agrotrack-tiempo-real.sql): la web muestra
+ * "Zonar leído hace N min". Si el SQL aún no se ejecutó, no hace nada.
+ */
+export async function registrarLatido(agrilux, modo, { ok = true, unidades = null, nuevas = null, mensaje = null } = {}) {
+  const { error } = await agrilux.supabase.rpc('agrotrack_registrar_latido', {
+    p_empresa_id: agrilux.empresaId,
+    p_modo: modo,
+    p_ok: ok,
+    p_unidades: unidades,
+    p_nuevas: nuevas,
+    p_mensaje: mensaje ? String(mensaje).slice(0, 500) : null,
+  });
+  if (error && !/could not find|schema cache/i.test(error.message || '')) {
+    throw traducirError(error);
+  }
+}
+
+/**
+ * Calcula y GUARDA las visitas a geocercas pendientes del rango
+ * (scripts/agrotrack-visitas-diarias.sql), de a una placa por llamada para
+ * no chocar con el límite de 8 s. Devuelve cuántos (día, placa) calculó.
+ */
+export async function calcularVisitasPendientes(agrilux, desdeDia, hastaDia, log = null) {
+  const { data: pendientes, error } = await agrilux.supabase.rpc('agrotrack_visitas_dia_pendientes', {
+    p_empresa_id: agrilux.empresaId,
+    p_desde_dia: desdeDia,
+    p_hasta_dia: hastaDia,
+  });
+  if (error) {
+    if (/could not find|schema cache/i.test(error.message || '')) return 0;
+    throw traducirError(error);
+  }
+  let hechas = 0;
+  for (const p of pendientes || []) {
+    const { error: e2 } = await agrilux.supabase.rpc('agrotrack_calcular_visitas_dia', {
+      p_empresa_id: agrilux.empresaId,
+      p_dia: p.dia,
+      p_placa: p.placa,
+    });
+    if (e2) log?.aviso?.(`  visitas ${p.placa} ${p.dia}: ${e2.message}`);
+    else hechas += 1;
+  }
+  return hechas;
+}

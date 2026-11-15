@@ -12,7 +12,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist "%~dp0config.json" (
+if not exist "%APPDATA%\agrilux-zonar\config.json" (
   echo [ERROR] Falta la configuracion. Ejecuta primero:  node configurar.mjs
   pause
   exit /b 1

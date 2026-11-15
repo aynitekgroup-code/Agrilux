@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Clock, Database, FileSpreadsheet, Loader2, RotateCw, Sparkles } from 'lucide-react';
 import { obtenerEstadoUnidadesFlota, LIMITE_ESTADO_UNIDADES } from '../../../lib/agrotrackReportesGeocerca';
+import { obtenerEstadoVivo } from '../../../lib/agrotrackTiempoReal';
 import { formatearFechaHora } from '../../../lib/agrotrackFlota';
 import { armarContextoReporte } from '../../../lib/reportesIa';
 import { llamarIaGestion } from '../../../lib/agrotrackIa';
@@ -63,7 +64,11 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
     setEstado('cargando');
     setError(null);
     const instante = new Date();
-    obtenerEstadoUnidadesFlota(empresaId, { desde: null, hasta: null })
+    // 14/11/2026: primero la tabla en vivo (una fila por placa, instantánea);
+    // solo si su SQL aún no está instalado se recorre todo el histórico.
+    obtenerEstadoVivo(empresaId)
+      .then((vivo) => (vivo.length ? vivo : obtenerEstadoUnidadesFlota(empresaId, { desde: null, hasta: null })))
+      .catch(() => obtenerEstadoUnidadesFlota(empresaId, { desde: null, hasta: null }))
       .then((resultado) => {
         if (cancelado) return;
         // El "ahora" de los cálculos es el de la carga: así el tiempo

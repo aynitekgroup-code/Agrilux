@@ -51,8 +51,10 @@ export function haceCuanto(iso, ahora = new Date()) {
  * mes con el último dato real y expone `consulta` ({ desde, hasta, texto })
  * listo para la RPC.
  */
-export function useRango(periodo) {
-  const [rango, setRango] = useState('todo');
+export function useRango(periodo, rangoInicial = 'dia') {
+  // 14/11/2026: por defecto "Por día". "Todo el periodo" recorre todo el
+  // histórico y con varios meses cargados supera los 8 s de Supabase.
+  const [rango, setRango] = useState(rangoInicial);
   const [dia, setDia] = useState('');
   const [mes, setMes] = useState('');
   // Rango libre con hora (pedido por el Ing. Carlos Perez): dos buscadores de
@@ -95,13 +97,81 @@ export function useRango(periodo) {
   };
 }
 
+/** Hoy en hora de Perú (YYYY-MM-DD). */
+export function hoyLima(ahora = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(ahora);
+}
+
+function sumarDias(iso, n) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + n));
+  return t.toISOString().slice(0, 10);
+}
+
+/**
+ * Atajos de Zonar (Hoy · Ayer · Esta semana · Semana anterior) como rangos
+ * "Desde / hasta" con hora: { desde: 'YYYY-MM-DDT00:00', hasta: '...T23:59' }.
+ * La semana va de lunes a domingo, como en Zonar.
+ */
+export function rangoRapido(id, ahora = new Date()) {
+  const hoy = hoyLima(ahora);
+  const [y, m, d] = hoy.split('-').map(Number);
+  const dow = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7; // 0 = lunes
+  const lunes = sumarDias(hoy, -dow);
+  const rangos = {
+    hoy: [hoy, hoy],
+    ayer: [sumarDias(hoy, -1), sumarDias(hoy, -1)],
+    semana: [lunes, hoy],
+    'semana-anterior': [sumarDias(lunes, -7), sumarDias(lunes, -1)],
+  };
+  const r = rangos[id];
+  if (!r) return null;
+  return { desde: `${r[0]}T00:00`, hasta: `${r[1]}T23:59` };
+}
+
+const ATAJOS = [
+  { id: 'hoy', label: 'Hoy' },
+  { id: 'ayer', label: 'Ayer' },
+  { id: 'semana', label: 'Esta semana' },
+  { id: 'semana-anterior', label: 'Semana anterior' },
+];
+
 /** Botones del rango + date/month/libre, compartidos por las tarjetas. */
 export function ControlesRango({
   rango, setRango, dia, setDia, mes, setMes,
   desdeHora = '', setDesdeHora = () => {}, hastaHora = '', setHastaHora = () => {},
 }) {
+  const aplicarAtajo = (id) => {
+    const r = rangoRapido(id);
+    if (!r) return;
+    if (id === 'hoy' || id === 'ayer') {
+      setDia(r.desde.slice(0, 10));
+      setRango('dia');
+      return;
+    }
+    setDesdeHora(r.desde);
+    setHastaHora(r.hasta);
+    setRango('libre');
+  };
   return (
     <div className="flex flex-wrap items-end gap-3">
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Atajos (como Zonar)</p>
+        <div className="flex gap-1.5">
+          {ATAJOS.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => aplicarAtajo(a.id)}
+              className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 bg-white text-slate-600 hover:border-forest hover:text-forest transition-colors"
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div>
         <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Rango</p>
         <div className="flex gap-1.5">

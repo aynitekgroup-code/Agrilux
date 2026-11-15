@@ -36,6 +36,46 @@ Si todo sale bien, el paso 5 imprime algo como:
 Listo en 142s · unidades 44/44 · marcas 36180 · filas 36180 · nuevas 8124
 ```
 
+## Tiempo real (Agrilux conectado a Zonar)
+
+Además de la descarga diaria, el agente puede quedarse **conectado**:
+
+| Cada | Qué hace |
+| --- | --- |
+| 2 min | Lee la posición actual de **todas** las unidades (una sola llamada a `GetUnitsLocator`) y la sube a Agrilux. La web (Status de maquinaria, mapa, localizador) se actualiza sola por Supabase Realtime. |
+| 15 min | Baja el historial de **hoy** de cada unidad (los puntos cada 2 min) y recalcula las visitas a geocercas pendientes de hoy y ayer. |
+
+Instalación (una vez, después de los pasos de arriba):
+
+```bat
+REM 1) En Supabase (SQL Editor), en este orden:
+REM    scripts/agrotrack-reportes-flota.sql
+REM    scripts/agrotrack-geocercas-reportes.sql
+REM    scripts/agrotrack-visitas-diarias.sql
+REM    scripts/agrotrack-tiempo-real.sql
+REM 2) Prueba una sola vuelta:
+node agente.mjs envivo --una-vez
+REM 3) Déjalo corriendo siempre (arranca solo al iniciar sesión en Windows):
+instalar-envivo.bat
+```
+
+| Comando | Qué hace |
+| --- | --- |
+| `node agente.mjs envivo` | Conectado: lee Zonar cada 2 min (Ctrl+C para salir) |
+| `node agente.mjs envivo --una-vez` | Una sola vuelta (prueba) |
+| `node agente.mjs envivo --intervalo=60 --historial=10` | Cambia los tiempos (segundos / minutos) |
+| `instalar-envivo.bat` / `quitar-envivo.bat` | Activa / quita el arranque automático |
+
+La web muestra “Zonar leído hace N min” (el **latido** del agente). Si pasa de
+10 minutos, se pone en ámbar: revisa que la PC esté encendida y mira
+`logs\envivo.log`.
+
+> Conviene confirmar con Zonar/TSO Mobile que una lectura cada 2 minutos con
+> el usuario de la empresa está dentro de su política de uso. Si Zonar ofrece
+> su API oficial o un envío por *webhook*, el agente se reemplaza por esa
+> integración sin cambiar nada en Supabase: basta con escribir en
+> `agrotrack_posiciones` (el trigger y la web funcionan igual).
+
 ## Uso diario
 
 No hay que hacer nada: la tarea **“AgroTrack Zonar diario”** corre sola a las
@@ -52,6 +92,7 @@ abre una terminal y escribe `node agente.mjs correr`.
 | `node agente.mjs correr --fecha-modo=utc` | Cambia cómo interpreta las fechas sin zona de Zonar |
 | `node agente.mjs descubrir` | Diagnóstico de conexión y formatos |
 | `node agente.mjs estado` | Último resumen de corrida |
+| `node agente.mjs envivo` | Tiempo real (ver arriba) |
 
 ## Qué guarda dónde
 

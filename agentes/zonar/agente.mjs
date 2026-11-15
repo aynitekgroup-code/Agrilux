@@ -9,6 +9,8 @@
  *   node agente.mjs correr --desde=2026-11-10 --hasta=2026-11-12
  *   node agente.mjs correr --sin-ingerir   solo descarga los JSON (nada a Agrilux)
  *   node agente.mjs correr --unidades=1414-1K,T-01
+ *   node agente.mjs envivo                 tiempo real: lee Zonar cada 2 min (Ctrl+C para salir)
+ *   node agente.mjs envivo --una-vez       una sola vuelta (para probar)
  *   node agente.mjs descubrir              primera corrida de diagnóstico
  *   node agente.mjs estado                 último resumen guardado
  *
@@ -20,6 +22,7 @@ import { parseArgs } from 'node:util';
 
 import { RUTAS, cargarConfig, asegurarCarpetas } from './src/config.js';
 import { crearLog, ejecutarCorrida } from './src/pipeline.js';
+import { ejecutarEnVivo } from './src/envivo.js';
 import {
   loginZonar, crudoUnidades, crudoArbolUnidades, crudoHistorial, hoyPeru, restarDias,
 } from './src/zonar.js';
@@ -37,6 +40,9 @@ function parsear(argv) {
       'sin-ingerir': { type: 'boolean' },
       'sin-guardar': { type: 'boolean' },
       'fecha-modo': { type: 'string' },
+      'una-vez': { type: 'boolean' },
+      intervalo: { type: 'string' },
+      historial: { type: 'string' },
     },
   });
 }
@@ -155,8 +161,16 @@ async function main() {
     await modoDescubrir(cfg, log);
     return;
   }
+  if (comando === 'envivo') {
+    await ejecutarEnVivo(cfg, {
+      unaVez: Boolean(values['una-vez']),
+      intervaloSeg: values.intervalo ? Number(values.intervalo) : null,
+      historialMin: values.historial ? Number(values.historial) : null,
+    }, log);
+    return;
+  }
   if (comando !== 'correr') {
-    throw new Error(`Comando desconocido: "${comando}". Usa: correr | descubrir | estado.`);
+    throw new Error(`Comando desconocido: "${comando}". Usa: correr | envivo | descubrir | estado.`);
   }
 
   const opts = {

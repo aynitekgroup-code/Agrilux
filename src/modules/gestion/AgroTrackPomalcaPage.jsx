@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCheck, X, Bell, RefreshCw, Database, Loader2, AlertTriangle } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext';
@@ -8,7 +8,8 @@ import {
   fuelReadings as mockFuelReadings,
   cutRequests,
 } from '../../mocks/agrotrackData';
-import { cargarPanelFlota, textoPeriodoCargado, formatearRango, LIMITE_ALERTAS_PANEL } from '../../lib/agrotrackFlota';
+import { cargarPanelFlota, textoPeriodoCargado, formatearRango, LIMITE_ALERTAS_PANEL, clasificarEstado } from '../../lib/agrotrackFlota';
+import { obtenerEstadoVivo, suscribirEstadoVivo } from '../../lib/agrotrackTiempoReal';
 import FleetHeader from '../../components/gestion/fleet/FleetHeader';
 import FleetKpis from '../../components/gestion/fleet/FleetKpis';
 import FleetMap from '../../components/gestion/fleet/FleetMap';
@@ -19,6 +20,7 @@ import FleetUnitStatus from '../../components/gestion/fleet/FleetUnitStatus';
 import FleetSinReportar from '../../components/gestion/fleet/FleetSinReportar';
 import FleetGeofenceReports from '../../components/gestion/fleet/FleetGeofenceReports';
 import FleetGeofenceSummary from '../../components/gestion/fleet/FleetGeofenceSummary';
+import FleetTablaDiariaGeocercas from '../../components/gestion/fleet/FleetTablaDiariaGeocercas';
 import VigiaFlota from '../../components/gestion/fleet/VigiaFlota';
 import BriefingFlota from '../../components/gestion/fleet/BriefingFlota';
 import RemoteCutModal from '../../components/gestion/fleet/RemoteCutModal';
@@ -88,8 +90,61 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
   const conDatosReales = panel.estado === 'real';
   const sinDatosReales = panel.estado === 'vacio';
 
+  // 14/11/2026: posiciones EN VIVO (agente de Zonar cada 2 min). Si existen,
+  // se sobreponen a la última posición del periodo cargado: el mapa y el
+  // localizador se mueven solos sin recargar la página.
+  const [vivo, setVivo] = useState([]);
+  useEffect(() => {
+    if (!empresa_activa_id) return undefined;
+    let cancelado = false;
+    const leer = () => obtenerEstadoVivo(empresa_activa_id)
+      .then((filas) => { if (!cancelado) setVivo(filas); })
+      .catch(() => { if (!cancelado) setVivo([]); }); // sin SQL de tiempo real: sigue como antes
+    leer();
+    let pendiente = null;
+    const cancelar = suscribirEstadoVivo(empresa_activa_id, () => {
+      clearTimeout(pendiente);
+      pendiente = setTimeout(leer, 1500);
+    });
+    const reloj = setInterval(leer, 60 * 1000);
+    return () => { cancelado = true; clearTimeout(pendiente); clearInterval(reloj); cancelar(); };
+  }, [empresa_activa_id]);
+
+  const unidadesConVivo = useMemo(() => {
+    if (!conDatosReales || !vivo.length) return panel.unidades;
+    const ahora = new Date().toISOString();
+    const porPlaca = new Map(vivo.map((v) => [v.placa, v]));
+    const vistas = new Set();
+    const mezcladas = panel.unidades.map((u) => {
+      const v = porPlaca.get(u.placa);
+      vistas.add(u.placa);
+      if (!v || (u.ultima_fecha && Date.parse(v.ultima_fecha) < Date.parse(u.ultima_fecha))) return u;
+      return {
+        ...u,
+        lat: Number(v.latitud),
+        lng: Number(v.longitud),
+        velocidad_kmh: Number(v.ultima_velocidad || 0),
+        ultima_fecha: v.ultima_fecha,
+        ultimo_evento: v.ultimo_evento || u.ultimo_evento,
+        estado: clasificarEstado(v, ahora),
+        geocerca_actual: v.geocerca || null,
+        en_vivo: true,
+      };
+    });
+    vivo.forEach((v) => {
+      if (vistas.has(v.placa)) return;
+      mezcladas.push({
+        id: v.placa, placa: v.placa, descripcion: v.descripcion || v.unidad || '', modelo: v.descripcion || v.unidad || '',
+        estado: clasificarEstado(v, ahora), lat: Number(v.latitud), lng: Number(v.longitud),
+        velocidad_kmh: Number(v.ultima_velocidad || 0), ultima_fecha: v.ultima_fecha, ultimo_evento: v.ultimo_evento || '',
+        km_recorridos: 0, eventos_alta_velocidad: 0, fuente: 'real', geocerca_actual: v.geocerca || null, en_vivo: true,
+      });
+    });
+    return mezcladas;
+  }, [conDatosReales, vivo, panel.unidades]);
+
   // Fuente compartida por tarjetas, alertas y marcadores del mapa.
-  const vehiclesFuente = conDatosReales ? panel.unidades : sinDatosReales ? vehicles : [];
+  const vehiclesFuente = conDatosReales ? unidadesConVivo : sinDatosReales ? vehicles : [];
   const alertasBase = conDatosReales ? panel.alertas : sinDatosReales ? mockAlerts : [];
   const alertList = alertasBase.map((alerta) => (ackIds.includes(alerta.id) ? { ...alerta, atendida: true } : alerta));
   const fuentePosiciones = conDatosReales ? 'real' : enCarga ? 'cargando' : hayErrorPanel ? 'ninguna' : 'demo';
@@ -393,6 +448,13 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
           <SectionHeading
             title="Reportes de geocercas"
             description="Entradas y salidas de los eventos de Zonar y tiempo dentro de cada lote, calculados con PostGIS sobre las posiciones GPS del periodo cargado."
+          />
+          {/* 14/11/2026: todas las unidades juntas + tabla dinámica de las 6:30. */}
+          <FleetTablaDiariaGeocercas
+            empresaId={empresa_activa_id}
+            periodo={conDatosReales ? panel.periodo : null}
+            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+            vehicles={vehiclesFuente}
           />
           <FleetGeofenceReports
             empresaId={empresa_activa_id}

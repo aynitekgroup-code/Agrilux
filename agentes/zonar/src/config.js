@@ -65,6 +65,11 @@ function validar(cfg) {
       reten_dias: Number(cfg.corrida?.reten_dias ?? 30),
       max_unidades: Number(cfg.corrida?.max_unidades ?? 0),
     },
+    // Modo en vivo (14/11/2026): cada cuánto leer Zonar.
+    envivo: {
+      intervalo_seg: Number(cfg.envivo?.intervalo_seg ?? 120),
+      historial_min: Number(cfg.envivo?.historial_min ?? 15),
+    },
   };
 }
 

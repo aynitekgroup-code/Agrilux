@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Database, FileSpreadsheet, MapPinned, Gauge, RotateCw } from 'lucide-react';
+import { Database, FileSpreadsheet, MapPinned, Gauge, RotateCw, Radio } from 'lucide-react';
+import { obtenerEstadoVivo, obtenerLatidos, suscribirEstadoVivo, describirLatido } from '../../../lib/agrotrackTiempoReal';
 import { obtenerEstadoUnidadesFlota, LIMITE_ESTADO_UNIDADES } from '../../../lib/agrotrackReportesGeocerca';
 import { formatearFechaHora, clasificarEstado } from '../../../lib/agrotrackFlota';
 import { useRango, ControlesRango, CuerpoEstado, numero } from './reportesComunes';
@@ -69,13 +70,59 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
   // por la RPC (una por placa), sin volver a llamar a la base.
   const [filtroPlaca, setFiltroPlaca] = useState('');
   const [filtroGeocerca, setFiltroGeocerca] = useState('');
+  // 14/11/2026 (observación III): modo TIEMPO REAL con los datos que el
+  // agente trae de Zonar cada 2 minutos (agrotrack_estado_vivo). Activo por
+  // defecto; "Histórico" vuelve al reporte por rango de siempre.
+  const [tiempoReal, setTiempoReal] = useState(true);
+  const [latido, setLatido] = useState(null);
+  const [ahoraRef, setAhoraRef] = useState(() => new Date().toISOString());
 
   // Geocerca "mostrada" de una fila: la actual (dentro del polígono) o, si
   // está fuera, la última en la que estuvo (fallback de la RPC).
   const geocercaMostrada = (f) => f.geocerca || f.geocerca_ultima || '';
   const FUERA = '__fuera__';
 
+  // ---- Tiempo real: lectura + Realtime + respaldo cada 60 s ----
   useEffect(() => {
+    if (!empresaId || !tiempoReal) return undefined;
+    let cancelado = false;
+    const cargarVivo = (silencioso) => {
+      if (!silencioso) setEstado('cargando');
+      Promise.all([obtenerEstadoVivo(empresaId), obtenerLatidos(empresaId)])
+        .then(([resultado, latidos]) => {
+          if (cancelado) return;
+          setFilas(resultado);
+          setLatido(latidos?.envivo || latidos?.diario || null);
+          setAhoraRef(new Date().toISOString());
+          setEstado(resultado.length ? 'ok' : 'vacio');
+          setRangoTexto('tiempo real');
+          setGeneradoEn(new Date());
+          setError(null);
+        })
+        .catch((e) => {
+          if (cancelado) return;
+          setError(e?.message || 'No se pudo leer el estado en vivo.');
+          setEstado('error');
+        });
+    };
+    cargarVivo(false);
+    let pendiente = null;
+    const cancelarSuscripcion = suscribirEstadoVivo(empresaId, () => {
+      // Varias placas cambian juntas: se agrupan en una sola lectura.
+      clearTimeout(pendiente);
+      pendiente = setTimeout(() => cargarVivo(true), 1500);
+    });
+    const reloj = setInterval(() => cargarVivo(true), 60 * 1000);
+    return () => {
+      cancelado = true;
+      clearTimeout(pendiente);
+      clearInterval(reloj);
+      cancelarSuscripcion();
+    };
+  }, [empresaId, tiempoReal, intento]);
+
+  useEffect(() => {
+    if (tiempoReal) return undefined;
     if (!empresaId || pendienteDeFecha) {
       // Nunca dejar "Calculando..." colgado (ver FleetEventsSummary).
       setEstado((prev) => (prev === 'cargando' ? 'inactivo' : prev));
@@ -102,7 +149,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
     return () => {
       cancelado = true;
     };
-  }, [empresaId, consulta, pendienteDeFecha, intento]);
+  }, [empresaId, consulta, pendienteDeFecha, intento, tiempoReal]);
 
   // Auto-refresco cada 5 minutos: reutiliza el mismo mecanismo de recarga
   // (incrementar `intento` vuelve a disparar el effect de arriba). Los refs
@@ -153,11 +200,11 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
   const conteos = useMemo(() => {
     const c = { en_ruta: 0, detenido: 0, offline: 0 };
     filasVistas.forEach((f) => {
-      const e = clasificarEstado(f, periodo?.hasta);
+      const e = clasificarEstado(f, tiempoReal ? ahoraRef : periodo?.hasta);
       c[e] = (c[e] || 0) + 1;
     });
     return c;
-  }, [filasVistas, periodo?.hasta]);
+  }, [filasVistas, periodo?.hasta, tiempoReal, ahoraRef]);
 
   const puedeExportar = estado === 'ok' && filasVistas.length > 0;
   const mensajePendiente =
@@ -233,7 +280,44 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
         </div>
         {descargaError ? <p className="text-[10px] text-red-600">{descargaError}</p> : null}
 
-        <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} desdeHora={desdeHora} setDesdeHora={setDesdeHora} hastaHora={hastaHora} setHastaHora={setHastaHora} />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-lg bg-slate-50 p-0.5">
+            <button
+              type="button"
+              onClick={() => setTiempoReal(true)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
+                tiempoReal ? 'bg-forest text-white' : 'text-slate-500 hover:text-forest'
+              }`}
+              title="Última posición de cada unidad, enviada por Zonar cada 2 minutos"
+            >
+              <Radio size={13} className={tiempoReal ? 'animate-pulse' : ''} /> Tiempo real (Zonar)
+            </button>
+            <button
+              type="button"
+              onClick={() => setTiempoReal(false)}
+              className={`px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
+                !tiempoReal ? 'bg-forest text-white' : 'text-slate-500 hover:text-forest'
+              }`}
+            >
+              Histórico por rango
+            </button>
+          </div>
+          {tiempoReal ? (() => {
+            const l = describirLatido(latido);
+            return (
+              <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
+                l.viejo ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${l.viejo ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} aria-hidden="true" />
+                {l.texto}
+              </span>
+            );
+          })() : null}
+        </div>
+
+        {!tiempoReal ? (
+          <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} desdeHora={desdeHora} setDesdeHora={setDesdeHora} hastaHora={hastaHora} setHastaHora={setHastaHora} />
+        ) : null}
 
         {estado === 'ok' && filas.length > 0 ? (
           <div className="flex flex-wrap items-end gap-3">
@@ -278,7 +362,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
       </div>
 
       <CuerpoEstado
-        pendienteDeFecha={pendienteDeFecha}
+        pendienteDeFecha={!tiempoReal && pendienteDeFecha}
         mensajePendiente={mensajePendiente}
         estado={estado}
         error={error}
@@ -318,7 +402,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
                         {formatearFechaHora(fila.ultima_fecha)}
                       </td>
                       <td className="px-3 py-2">
-                        <StatusPill estado={clasificarEstado(fila, periodo?.hasta)} />
+                        <StatusPill estado={clasificarEstado(fila, tiempoReal ? ahoraRef : periodo?.hasta)} />
                       </td>
                       <td className="px-3 py-2 text-slate-500 max-w-[260px]">
                         <span className="block truncate" title={fila.direccion || ''}>

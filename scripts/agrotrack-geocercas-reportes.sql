@@ -724,9 +724,15 @@ grant execute on function public.agrotrack_estado_unidades_flota(uuid, timestamp
 --    largo superara ese tope, PostgREST cortaría como en cualquier otra RPC
 --    (consultar por tramos de día/mes).
 -- ---------------------------------------------------------------------------
-drop function if exists public.agrotrack_visitas_geocerca_flota(uuid, timestamptz, timestamptz, text, text);
+-- 4.a) MOTOR interno del cálculo de visitas (14/11/2026).
+--    Es el mismo cálculo de siempre, pero SIN la validación de membresía:
+--    así lo pueden usar el cálculo diario guardado (pg_cron, sin usuario) y
+--    el agente de Zonar. NO se expone a anon/authenticated: solo lo llaman
+--    las funciones security definer de este archivo y de
+--    scripts/agrotrack-visitas-diarias.sql, que sí validan la membresía.
+drop function if exists public.agrotrack_visitas_geocerca_calc(uuid, timestamptz, timestamptz, text, text);
 
-create function public.agrotrack_visitas_geocerca_flota(
+create function public.agrotrack_visitas_geocerca_calc(
   p_empresa_id uuid,
   p_desde      timestamptz default null,
   p_hasta      timestamptz default null,
@@ -776,9 +782,7 @@ as $$
     select p.id, p.placa, p.fecha, p.secuencia, p.latitud, p.longitud,
            p.velocidad, p.evento
     from public.agrotrack_posiciones p
-    -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
-    where (select public.onboarding_es_miembro(p_empresa_id))
-      and p.empresa_id = p_empresa_id
+    where p.empresa_id = p_empresa_id
       and (p_placa is null or p.placa = p_placa)
       and (p_desde is null or p.fecha >= p_desde)
       and (p_hasta is null or p.fecha <= p_hasta)
@@ -791,8 +795,7 @@ as $$
     select distinct on (p.placa)
       p.placa, p.fecha, p.latitud, p.longitud, p.velocidad, p.evento
     from public.agrotrack_posiciones p
-    where (select public.onboarding_es_miembro(p_empresa_id))
-      and p.empresa_id = p_empresa_id
+    where p.empresa_id = p_empresa_id
       and (p_placa is null or p.placa = p_placa)
       and p_desde is not null
       and p.fecha < p_desde
@@ -967,13 +970,16 @@ as $$
       -- Estado del tramo = estado del ÚLTIMO punto dentro conocido (si el
       -- tramo cierra en un punto fuera, manda el anterior, que estaba dentro;
       -- si no hay puntos dentro en el rango, el estado con el que abría).
+      -- 14/11/2026: el tramo toma el estado del punto donde EMPIEZA (como
+      -- Zonar y como agrotrack_actividad_flota); la cola "en curso" hasta
+      -- p_hasta usa el estado del último punto (ver seg_abierto abajo).
       case
-        when m.dentro then m.encendido
+        when m.prev_fecha is null then coalesce(m.encendido_base, m.encendido)
         when m.prev_dentro then coalesce(m.prev_encendido, m.encendido)
         else coalesce(m.encendido_base, m.encendido)
       end as tramo_encendido,
       case
-        when m.dentro then m.es_viaje
+        when m.prev_fecha is null then coalesce(m.viaje_base, m.es_viaje)
         when m.prev_dentro then coalesce(m.prev_es_viaje, m.es_viaje)
         else coalesce(m.viaje_base, m.es_viaje)
       end as tramo_viaje
@@ -1008,17 +1014,17 @@ as $$
             ) is null
         and max(f.fecha) filter (where f.cierra_hueco) is null) as abierta,
       coalesce(sum(case
-        when not f.tramo_encendido
-        then (case when f.pertenece then f.seg else 0 end) + f.seg_abierto
-        else 0 end), 0)                                     as apagado_segundos,
+        when not f.tramo_encendido and f.pertenece then f.seg else 0 end), 0)
+      + coalesce(sum(case when not f.encendido then f.seg_abierto else 0 end), 0)
+                                                            as apagado_segundos,
       coalesce(sum(case
-        when f.tramo_encendido and not f.tramo_viaje
-        then (case when f.pertenece then f.seg else 0 end) + f.seg_abierto
-        else 0 end), 0)                                     as ralenti_segundos,
+        when f.tramo_encendido and not f.tramo_viaje and f.pertenece then f.seg else 0 end), 0)
+      + coalesce(sum(case when f.encendido and not f.es_viaje then f.seg_abierto else 0 end), 0)
+                                                            as ralenti_segundos,
       coalesce(sum(case
-        when f.tramo_viaje
-        then (case when f.pertenece then f.seg else 0 end) + f.seg_abierto
-        else 0 end), 0)                                     as viaje_segundos
+        when f.tramo_viaje and f.pertenece then f.seg else 0 end), 0)
+      + coalesce(sum(case when f.es_viaje then f.seg_abierto else 0 end), 0)
+                                                            as viaje_segundos
     from filas f
     where f.visita_n > 0
       and (f.dentro or f.prev_dentro = true)   -- cierra la visita recién abierta
@@ -1057,6 +1063,42 @@ as $$
   from emitidas e
   -- Pedido: orden de salida por la fecha/hora de entrada.
   order by e.entrada asc nulls last, e.geocerca, e.placa;
+$$;
+
+
+revoke all on function public.agrotrack_visitas_geocerca_calc(uuid, timestamptz, timestamptz, text, text) from public, anon, authenticated;
+grant execute on function public.agrotrack_visitas_geocerca_calc(uuid, timestamptz, timestamptz, text, text) to service_role;
+
+-- 4.b) La RPC pública de siempre (misma firma y columnas): valida la
+--      membresía UNA vez y delega en el motor.
+drop function if exists public.agrotrack_visitas_geocerca_flota(uuid, timestamptz, timestamptz, text, text);
+
+create function public.agrotrack_visitas_geocerca_flota(
+  p_empresa_id uuid,
+  p_desde      timestamptz default null,
+  p_hasta      timestamptz default null,
+  p_placa      text        default null,
+  p_geocerca   text        default null
+)
+returns table (
+  placa             text,
+  geocerca          text,
+  entrada           timestamptz,
+  salida            timestamptz,
+  duracion_segundos integer,
+  apagado_segundos  integer,
+  ralenti_segundos  integer,
+  viaje_segundos    integer,
+  abierta           boolean
+)
+language sql
+stable
+security definer
+set search_path = public, extensions, pg_catalog, pg_temp
+as $$
+  select c.*
+  from public.agrotrack_visitas_geocerca_calc(p_empresa_id, p_desde, p_hasta, p_placa, p_geocerca) c
+  where (select public.onboarding_es_miembro(p_empresa_id));
 $$;
 
 grant execute on function public.agrotrack_visitas_geocerca_flota(uuid, timestamptz, timestamptz, text, text)

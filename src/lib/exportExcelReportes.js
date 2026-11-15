@@ -232,3 +232,143 @@ export function exportarSinReportarExcel(filas, { ventanaHoras = 24, generado = 
   const fecha = new Date().toISOString().slice(0, 10);
   XLSX.writeFile(wb, `Agrilux_Unidades_Sin_Reportar_${ventanaHoras}h_${fecha}.xlsx`);
 }
+
+/* -------------------------------------------------------------------------
+ * 14/11/2026 · Tabla dinámica diaria de geocercas (TODAS las unidades)
+ * Mismo formato que el Excel de las 6:30 a. m.: hoja "Data" con las columnas
+ * Placa · Area · Area Cod · Grupo · Geocerca · Hora de entrada · Hora de
+ * salida · Fecha de entrada · Fecha de salida · Duración · Duración2 ·
+ * Duración3, con FECHAS y HORAS reales de Excel (la tabla dinámica y las
+ * segmentaciones por mes/día funcionan igual que hoy), y la hoja
+ * "Resumen Geocer" (placa x geocerca, horas con 2 decimales y totales).
+ * ---------------------------------------------------------------------- */
+
+/** Fecha 'YYYY-MM-DD' -> número de serie de Excel (fecha sin hora). */
+function serialFecha(fecha) {
+  if (!fecha) return null;
+  const [y, m, d] = fecha.split('-').map(Number);
+  return Date.UTC(y, m - 1, d) / 86400000 + 25569;
+}
+
+/** 'HH:mm:ss' -> fracción del día. */
+function serialHora(hora) {
+  if (!hora) return null;
+  const [h, m, s] = hora.split(':').map(Number);
+  return (h * 3600 + m * 60 + (s || 0)) / 86400;
+}
+
+function partesPeru(iso) {
+  const t = Date.parse(iso || '');
+  if (!Number.isFinite(t)) return { fecha: '', hora: '' };
+  const d = new Date(t - 5 * 3600 * 1000);
+  const dd = (n) => String(n).padStart(2, '0');
+  return {
+    fecha: `${d.getUTCFullYear()}-${dd(d.getUTCMonth() + 1)}-${dd(d.getUTCDate())}`,
+    hora: `${dd(d.getUTCHours())}:${dd(d.getUTCMinutes())}:${dd(d.getUTCSeconds())}`,
+  };
+}
+
+function textoDuracion(seg) {
+  const s = Math.max(0, Math.round(Number(seg || 0)));
+  const dd = (n) => String(n).padStart(2, '0');
+  return `${dd(Math.floor(s / 3600))}h:${dd(Math.floor((s % 3600) / 60))}m:${dd(s % 60)}s`;
+}
+
+/**
+ * @param {Array} visitas  filas de agrotrack_visitas_dia_flota
+ * @param {{ matriz: object, infoPlaca: object, desdeDia: string, hastaDia: string,
+ *           metricaLabel?: string }} opciones
+ */
+export function exportarTablaDinamicaGeocercasExcel(visitas, {
+  matriz, infoPlaca = {}, desdeDia = '', hastaDia = '', metricaLabel = 'Total en geocerca',
+} = {}) {
+  const wb = XLSX.utils.book_new();
+
+  // ---- Hoja Data (una fila por visita) ----
+  const encabezado = [
+    'Placa', 'Area', 'Area Cod', 'Grupo', 'Geocerca',
+    'Hora de entrada', 'Hora de salida', 'Fecha de entrada', 'Fecha de salida',
+    'Duración', 'Duración2', 'Duración3',
+    'Apagado (h)', 'Ralentí (h)', 'Viajando (h)', 'Estado',
+  ];
+  const aoa = [encabezado];
+  (visitas || []).forEach((v) => {
+    const e = partesPeru(v.entrada);
+    const s = partesPeru(v.salida);
+    const info = infoPlaca[v.placa] || {};
+    const seg = Number(v.duracion_segundos || 0);
+    aoa.push([
+      v.placa,
+      info.areaNombre || '',
+      info.area || '',
+      info.grupo || '',
+      v.geocerca,
+      serialHora(e.hora),
+      serialHora(s.hora),
+      serialFecha(e.fecha),
+      serialFecha(s.fecha),
+      textoDuracion(seg),
+      seg / 86400,
+      Math.round((seg / 3600) * 100) / 100,
+      Math.round((Number(v.apagado_segundos || 0) / 3600) * 100) / 100,
+      Math.round((Number(v.ralenti_segundos || 0) / 3600) * 100) / 100,
+      Math.round((Number(v.viaje_segundos || 0) / 3600) * 100) / 100,
+      v.abierta ? 'Sigue dentro al cierre del día'
+        : v.continua_dia_anterior ? 'Venía del día anterior' : 'Cerrada',
+    ]);
+  });
+  const wsData = XLSX.utils.aoa_to_sheet(aoa);
+  const formatos = { 5: 'hh:mm:ss', 6: 'hh:mm:ss', 7: 'dd/mm/yyyy', 8: 'dd/mm/yyyy', 10: '[h]:mm:ss', 11: '0.00' };
+  for (let r = 1; r < aoa.length; r += 1) {
+    Object.entries(formatos).forEach(([c, z]) => {
+      const ref = XLSX.utils.encode_cell({ r, c: Number(c) });
+      if (wsData[ref] && wsData[ref].t === 'n') wsData[ref].z = z;
+    });
+  }
+  wsData['!cols'] = [
+    { wch: 11 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 24 },
+    { wch: 11 }, { wch: 11 }, { wch: 12 }, { wch: 12 }, { wch: 13 },
+    { wch: 11 }, { wch: 10 }, { wch: 11 }, { wch: 10 }, { wch: 11 }, { wch: 26 },
+  ];
+  wsData['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(aoa.length - 1, 1), c: encabezado.length - 1 } }) };
+  XLSX.utils.book_append_sheet(wb, wsData, 'Data');
+
+  // ---- Hoja Resumen Geocer (matriz placa x geocerca) ----
+  if (matriz) {
+    const filasM = [['Area Cod', 'Grupo', 'Placa', ...matriz.geocercas, 'Total general']];
+    matriz.filas.forEach((f) => {
+      filasM.push([
+        f.area, f.grupo, f.placa,
+        ...matriz.geocercas.map((g) => Math.round(((f.valores[g] || 0) / 3600) * 100) / 100),
+        Math.round((f.total / 3600) * 100) / 100,
+      ]);
+    });
+    filasM.push([
+      'Total general', '', '',
+      ...matriz.geocercas.map((g) => Math.round(((matriz.totales[g] || 0) / 3600) * 100) / 100),
+      Math.round((matriz.totalGeneral / 3600) * 100) / 100,
+    ]);
+    const wsM = XLSX.utils.aoa_to_sheet(filasM);
+    for (let r = 1; r < filasM.length; r += 1) {
+      for (let c = 3; c < filasM[0].length; c += 1) {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        if (wsM[ref]) wsM[ref].z = '0.00';
+      }
+    }
+    wsM['!cols'] = [{ wch: 14 }, { wch: 16 }, { wch: 11 }, ...matriz.geocercas.map(() => ({ wch: 12 })), { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, wsM, 'Resumen Geocer');
+  }
+
+  agregarCriterio(wb, [
+    { Concepto: 'Reporte', Detalle: 'Tabla dinámica de geocercas · todas las unidades (Agrilux)' },
+    { Concepto: 'Días', Detalle: desdeDia === hastaDia ? desdeDia : `${desdeDia} a ${hastaDia}` },
+    { Concepto: 'Valores', Detalle: `${metricaLabel} en horas (Duración3 / Resumen Geocer)` },
+    { Concepto: 'Corte', Detalle: 'Cada día de 00:00:00 a 23:59:59 hora de Perú. Una visita que cruza la medianoche se parte en dos (sale a las 23:59:59 y vuelve a entrar a las 00:00:00).' },
+    { Concepto: 'Area / Area Cod', Detalle: 'Area Cod = texto después de la "/" de la unidad en Zonar; Grupo = grupo asignado en Agrilux (Mapa > Grupos).' },
+    { Concepto: 'Fuente', Detalle: 'public.agrotrack_visitas_dia (respaldo diario de horas por máquina y geocerca)' },
+    { Concepto: 'Generado', Detalle: new Date().toLocaleString('es-PE') },
+  ]);
+
+  const nombre = desdeDia === hastaDia ? desdeDia : `${desdeDia}_a_${hastaDia}`;
+  XLSX.writeFile(wb, `Agrilux_Geocercas_Todas_Unidades_${nombre}.xlsx`);
+}

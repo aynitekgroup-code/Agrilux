@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, AlertTriangle, RotateCw, Database, MapPinned, ArrowRight } from 'lucide-react';
 import { obtenerEventosGeocerca, obtenerLotesFlota, LIMITE_LOTES } from '../../../lib/agrotrackReportesGeocerca';
-import { formatearDuracion } from '../../../lib/agrotrackFlota';
+import { formatearDuracion, rangoDiaLima, ultimoDiaLima } from '../../../lib/agrotrackFlota';
 
 /**
  * Bloque compacto de geocercas para la Consola principal (FASE 3.5): los KPIs
@@ -9,6 +9,11 @@ import { formatearDuracion } from '../../../lib/agrotrackFlota';
  * en lotes) + los 3 lotes que más tiempo pasaron, con enlace al reporte
  * completo. Mismo cálculo en SQL que la pestaña «Geocercas»; aquí solo se
  * muestran las cifras ya agregadas por la RPC (nunca se bajan posiciones).
+ *
+ * 14/11/2026: se calcula sobre UN DÍA (por defecto el último día con datos),
+ * no sobre todo el periodo cargado. Con todo el histórico el cruce
+ * posiciones x polígonos superaba los 8 s de Supabase ("No se pudo cargar
+ * el resumen de geocercas").
  */
 const TOP = 3;
 
@@ -34,19 +39,29 @@ export default function FleetGeofenceSummary({ empresaId, periodo = null, fuente
   const [lotes, setLotes] = useState([]);
   const [error, setError] = useState(null);
   const [intento, setIntento] = useState(0);
+  const [dia, setDia] = useState('');
+
+  // Por defecto, el último día con datos (hora de Perú).
+  useEffect(() => {
+    if (!periodo?.hasta) return;
+    const ultimo = ultimoDiaLima(periodo.hasta);
+    if (ultimo) setDia((prev) => prev || ultimo);
+  }, [periodo?.hasta]);
+
+  const rango = useMemo(() => (dia ? rangoDiaLima(dia) : null), [dia]);
 
   useEffect(() => {
-    if (!empresaId || !periodo?.desde) return undefined;
+    if (!empresaId || !periodo?.desde || !rango?.desde) return undefined;
     let cancelado = false;
     setEstado('cargando');
     setError(null);
     Promise.all([
       obtenerEventosGeocerca(empresaId, {
-        desde: periodo.desde,
-        hasta: periodo.hasta,
+        desde: rango.desde,
+        hasta: rango.hasta,
         agrupar: 'geocerca',
       }),
-      obtenerLotesFlota(empresaId, { desde: periodo.desde, hasta: periodo.hasta, limite: LIMITE_LOTES }),
+      obtenerLotesFlota(empresaId, { desde: rango.desde, hasta: rango.hasta, limite: LIMITE_LOTES }),
     ])
       .then(([ev, lo]) => {
         if (cancelado) return;
@@ -64,7 +79,7 @@ export default function FleetGeofenceSummary({ empresaId, periodo = null, fuente
     return () => {
       cancelado = true;
     };
-  }, [empresaId, periodo?.desde, periodo?.hasta, intento]);
+  }, [empresaId, periodo?.desde, rango, intento]);
 
   const resumen = useMemo(() => {
     const entradas = eventos.reduce((s, f) => s + Number(f.entradas || 0), 0);
@@ -85,13 +100,22 @@ export default function FleetGeofenceSummary({ empresaId, periodo = null, fuente
         <div className="min-w-0">
           <h2 className="text-base font-bold text-slate-900">Geocercas (resumen)</h2>
           <p className="text-xs text-slate-500">
-            Entradas y salidas de los eventos de Zonar + tiempo dentro de cada lote, del periodo cargado.
+            Entradas y salidas de los eventos de Zonar + tiempo dentro de cada lote, del día elegido.
           </p>
         </div>
+        <label className="ml-auto min-w-0">
+          <span className="sr-only">Día del resumen</span>
+          <input
+            type="date"
+            value={dia}
+            onChange={(e) => setDia(e.target.value)}
+            className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+          />
+        </label>
         <button
           type="button"
           onClick={onVerReporte}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
         >
           Ver reporte completo <ArrowRight size={13} />
         </button>
@@ -133,10 +157,10 @@ export default function FleetGeofenceSummary({ empresaId, periodo = null, fuente
 
       {!sinPeriodo && estado === 'vacio' ? (
         <div className="p-8 text-center">
-          <p className="text-sm font-semibold text-slate-600">Sin actividad de geocercas en el periodo</p>
+          <p className="text-sm font-semibold text-slate-600">Sin actividad de geocercas ese día</p>
           <p className="text-xs text-slate-400 mt-1 leading-relaxed">
             No hay eventos de geocerca ni posiciones dentro de los polígonos de agrotrack_geocercas en{' '}
-            {periodo?.desde ? 'el periodo cargado' : 'ese rango'}.
+            {dia || 'ese día'}. Prueba con otro día.
           </p>
         </div>
       ) : null}
@@ -200,7 +224,7 @@ export default function FleetGeofenceSummary({ empresaId, periodo = null, fuente
         {fuente === 'real' ? (
           <span className="inline-flex items-center gap-1">
             <Database size={10} /> Cálculo en SQL con PostGIS (agrotrack_eventos_geocerca_flota + agrotrack_lotes_flota)
-            sobre el periodo cargado.
+            sobre el día {dia || '—'} (hora de Perú).
           </span>
         ) : (
           'Aún no hay datos reales para esta empresa.'

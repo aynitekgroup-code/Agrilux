@@ -1,4 +1,5 @@
 import shp from 'shpjs';
+import { leerCapasZip } from './leerZipGeocercas';
 import { supabase } from './supabase';
 import { splitForExport } from './geofenceCleaner';
 import { clasificarCapas, collectionEntries, filasDeCapa } from './geocercasImportacion';
@@ -58,7 +59,20 @@ export async function importarGeocercasZip(file, empresaId, userId) {
     throw new Error('Se requiere el archivo ZIP, una empresa activa y una sesión iniciada.');
   }
 
-  const parsed = await shp(await file.arrayBuffer());
+  // 14/11/2026: lector propio (ZIP dentro de ZIP, extensiones en
+  // mayúscula, subcarpetas). Si por algo falla, se intenta con shp() como
+  // antes y, si ambos fallan, se muestra el mensaje claro del lector propio.
+  const buffer = await file.arrayBuffer();
+  let parsed;
+  try {
+    parsed = await leerCapasZip(buffer);
+  } catch (errorLector) {
+    try {
+      parsed = await shp(buffer);
+    } catch {
+      throw errorLector;
+    }
+  }
   const capas = collectionEntries(parsed).filter(({ collection }) => collection?.type === 'FeatureCollection');
   if (!capas.length) {
     throw new Error('El ZIP no contiene shapefiles legibles (.shp + .dbf).');
