@@ -281,12 +281,16 @@ grant execute on function public.agrotrack_resumen_flota(uuid, timestamptz, time
 --    %panico%) para no depender de la mayúscula ni de la tilde exacta.
 -- ---------------------------------------------------------------------------
 drop function if exists public.agrotrack_alertas_flota(uuid, timestamptz, timestamptz, integer);
+drop function if exists public.agrotrack_alertas_flota(uuid, timestamptz, timestamptz, integer, text[]);
 
 create function public.agrotrack_alertas_flota(
   p_empresa_id uuid,
   p_desde      timestamptz default null,
   p_hasta      timestamptz default null,
-  p_limite     integer    default 50
+  p_limite     integer    default 50,
+  -- Filtro opcional por conjunto de placas (pantalla "Mostrar: Unidades /
+  -- Grupos" de los reportes de alertas). null = todas las unidades.
+  p_placas     text[]     default null
 )
 returns table (
   id         bigint,
@@ -314,6 +318,7 @@ as $$
   -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
   where (select public.onboarding_es_miembro(p_empresa_id))
     and p.empresa_id = p_empresa_id
+    and (p_placas is null or p.placa = any(p_placas))
     and (p_desde is null or p.fecha >= p_desde)
     and (p_hasta is null or p.fecha <= p_hasta)
     and (
@@ -327,7 +332,7 @@ as $$
   limit greatest(coalesce(p_limite, 50), 1);
 $$;
 
-grant execute on function public.agrotrack_alertas_flota(uuid, timestamptz, timestamptz, integer)
+grant execute on function public.agrotrack_alertas_flota(uuid, timestamptz, timestamptz, integer, text[])
   to anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------

@@ -220,18 +220,17 @@ export function calcularKPIs({ lotes, labores, tareas, cosechas, gastos, campana
   return { hectareas, costoTotal, costoPorHa, alertas, mejora, rendActual: actual, rendAnterior: anterior };
 }
 
-// ── Exportar CSV (bitácora, tareas, costos) ──────────────
-export function exportarCSV(nombre, filas) {
+// ── Exportar Excel (bitácora, tareas, costos) ─────────────
+// Genera un .xlsx real en el navegador (xlsx se importa bajo demanda).
+export async function exportarExcel(nombre, filas) {
   if (!filas?.length) return;
-  const cols = Object.keys(filas[0]);
-  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const csv = [cols.join(','), ...filas.map((f) => cols.map((c) => esc(f[c])).join(','))].join('\n');
-  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = nombre.endsWith('.csv') ? nombre : `${nombre}.csv`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  const XLSX = await import('xlsx');
+  const ws = XLSX.utils.json_to_sheet(filas);
+  ws['!cols'] = Object.keys(filas[0]).map(() => ({ wch: 22 }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Datos');
+  const base = String(nombre || 'agrilux_datos').replace(/\.(csv|xlsx)$/i, '') || 'agrilux_datos';
+  XLSX.writeFile(wb, `${base}.xlsx`);
 }
 
 export const etiquetaRiesgo = { bajo: 'Bajo', moderado: 'Moderado', alto: 'Alto', critico: 'Crítico' };

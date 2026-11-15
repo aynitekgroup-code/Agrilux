@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import {
-  Megaphone, Hash, MessageSquare, Users, Download, Copy, Check,
+  Megaphone, Hash, MessageSquare, Users, FileSpreadsheet, Copy, Check,
   Loader2, Plus, Trash2, ExternalLink, Search, X, FileText,
   Send, BarChart3, Target, Zap, Facebook
 } from 'lucide-react';
@@ -134,18 +134,22 @@ export default function Marketing() {
     if (!error) setContactos(prev => prev.filter(c => c.id !== id));
   };
 
-  const exportarContactos = () => {
-    const csv = [
-      'Nombre,Ubicación,Cultivo,Plataforma,Fecha',
-      ...contactos.map(c => `"${c.nombre || ''}","${c.ubicacion || ''}","${c.cultivo || ''}","${c.plataforma || ''}","${c.created_at || ''}"`)
-    ].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `agrilux_contactos_${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const exportarContactos = async () => {
+    try {
+      const { exportarTablaExcel } = await import('../lib/exportExcelReportes');
+      exportarTablaExcel('Agrilux_Contactos_Marketing', contactos, {
+        columnas: [
+          ['nombre', 'Nombre'],
+          ['ubicacion', 'Ubicación'],
+          ['cultivo', 'Cultivo'],
+          ['plataforma', 'Plataforma'],
+          ['created_at', 'Fecha'],
+        ],
+        modelo: 'Contactos de marketing',
+      });
+    } catch (e) {
+      alert(e?.message || 'No se pudo generar el archivo de Excel.');
+    }
   };
 
   return (
@@ -258,7 +262,7 @@ export default function Marketing() {
             <h3 className="text-sm font-bold text-gray-800">Agricultores Contactados</h3>
             <button onClick={exportarContactos}
               className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-3 py-1.5 rounded-lg font-semibold">
-              <Download size={12} /> Exportar CSV
+              <FileSpreadsheet size={12} /> Descargar Excel
             </button>
           </div>
 

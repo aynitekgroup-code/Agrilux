@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, AlertTriangle, RotateCw, CalendarClock, Database } from 'lucide-react';
+import { Loader2, AlertTriangle, RotateCw, CalendarClock, Database, ChevronDown, ChevronUp } from 'lucide-react';
 import { rangoDiaLima, rangoMesLima, rangoLibreLima, formatearRango, ultimoDiaLima } from '../../../lib/agrotrackFlota';
 
 /**
@@ -10,6 +10,51 @@ import { rangoDiaLima, rangoMesLima, rangoLibreLima, formatearRango, ultimoDiaLi
  * fecha, cargando, error, vacío). Un solo lugar para que todas las tarjetas
  * se comporten igual.
  */
+
+/** Filas visibles inicialmente en una tabla antes de pedir "Ver más". */
+export const FILAS_INICIALES_TABLA = 15;
+
+/**
+ * Limita a 15 filas la parte visible de una tabla: el usuario puede abrir
+ * todo con el botón "Ver más" (tipo flecha). `filasVistas` es la sección a
+ * renderizar; el resto de la pantalla y los exports deben seguir usando la
+ * lista completa. Al cambiar la lista de filas (otro rango/reporte) vuelve
+ * a contraerse.
+ */
+export function useLimiteFilas(filas = [], limite = FILAS_INICIALES_TABLA) {
+  const [expandido, setExpandido] = useState(false);
+  useEffect(() => {
+    setExpandido(false);
+  }, [filas]);
+  const filasVistas = useMemo(() => (expandido ? filas : filas.slice(0, limite)), [filas, expandido, limite]);
+  return {
+    filasVistas,
+    expandido,
+    alternar: () => setExpandido((v) => !v),
+    total: filas.length,
+  };
+}
+
+/** Botón "Ver más (N restantes) ▾ / Ver menos ▴" para las tablas largas. */
+export function BotonVerMas({ expandido, onAlternar, total, limite = FILAS_INICIALES_TABLA }) {
+  if (total <= limite) return null;
+  return (
+    <div className="flex items-center justify-center border-t border-slate-50 py-1.5">
+      <button
+        type="button"
+        onClick={onAlternar}
+        aria-expanded={expandido}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest transition-colors"
+      >
+        {expandido ? (
+          <>Ver menos <ChevronUp size={14} /></>
+        ) : (
+          <>Ver más ({total - limite} restante{total - limite === 1 ? '' : 's'}) <ChevronDown size={14} /></>
+        )}
+      </button>
+    </div>
+  );
+}
 
 export const RANGOS = [
   { id: 'todo', label: 'Todo el periodo' },

@@ -14,8 +14,15 @@ const nombreDe = (id) => {
   return found ? found.nombre : id;
 };
 
-export default function ModulesOverview({ selectedId, onSelect }) {
-  const selected = modules.find((m) => m.id === selectedId) || modules[0];
+/**
+ * Esquema funcional de AgroTrack. Por defecto muestra los cuatro módulos;
+ * `modulos` permite limitarlo a los que corresponden a la sección actual
+ * (p. ej. ['flota', 'alertas'] en Reportes, ['geocercas'] en Geocercas,
+ * ['combustible'] en Control de combustible).
+ */
+export default function ModulesOverview({ modulos = null, selectedId, onSelect }) {
+  const visibles = modulos ? modules.filter((m) => modulos.includes(m.id)) : modules;
+  const selected = visibles.find((m) => m.id === selectedId) || visibles[0] || null;
 
   return (
     <div className="space-y-4">
@@ -30,29 +37,31 @@ export default function ModulesOverview({ selectedId, onSelect }) {
           </span>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-1.5">
-          {modules.map((m) => {
-            const Icon = ICONS[m.icon] || Database;
-            const active = m.id === selectedId;
-            return (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => onSelect(m.id)}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
-                  active ? 'bg-forest text-white' : 'bg-slate-50 text-slate-600 hover:text-forest'
-                }`}
-              >
-                <Icon size={13} />
-                {m.nombre}
-              </button>
-            );
-          })}
-        </div>
+        {visibles.length > 1 ? (
+          <div className="mt-4 flex flex-wrap items-center gap-1.5">
+            {visibles.map((m) => {
+              const Icon = ICONS[m.icon] || Database;
+              const active = m.id === selectedId;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => onSelect(m.id)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+                    active ? 'bg-forest text-white' : 'bg-slate-50 text-slate-600 hover:text-forest'
+                  }`}
+                >
+                  <Icon size={13} />
+                  {m.nombre}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-        {modules.map((m) => {
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${visibles.length > 2 ? 'xl:grid-cols-4' : 'xl:grid-cols-2'}`}>
+        {visibles.map((m) => {
           const Icon = ICONS[m.icon] || Database;
           const active = m.id === selectedId;
           return (

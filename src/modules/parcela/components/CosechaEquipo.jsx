@@ -2,7 +2,7 @@
  * Cosecha y costos + Equipo y reportes (pantallas 5 y 6 de Parcela empresas)
  */
 import React, { useState } from 'react';
-import { CATEGORIAS_GASTO, iniciales, exportarCSV, ROLES } from '../../../lib/empresaApi';
+import { CATEGORIAS_GASTO, iniciales, exportarExcel, ROLES } from '../../../lib/empresaApi';
 
 const fmt = (n) => (Number(n) || 0).toLocaleString('es-PE', { maximumFractionDigits: 0 });
 const CAT_LABEL = { insumos: 'Insumos', mano_obra: 'Mano de obra', riego: 'Riego', maquinaria: 'Maquinaria', otros: 'Otros' };
@@ -89,8 +89,8 @@ export function CosechaCostos({ lotes, cosechas, gastos, campana, demo, onGuarda
         <button disabled={demo} onClick={() => fg.concepto && onGuardarGasto({ ...fg, monto: parseFloat(fg.monto) || 0, campana, empresa_id: undefined })} className="w-full bg-primary text-white font-bold py-2.5 rounded-xl text-sm disabled:opacity-50">
           Guardar gasto
         </button>
-        <button onClick={() => exportarCSV('costos.csv', gastosCamp)} className="w-full bg-white text-primary border-2 border-primary font-bold py-2.5 rounded-xl text-sm">
-          Exportar costos (CSV)
+        <button onClick={() => exportarExcel('costos.xlsx', gastosCamp)} className="w-full bg-white text-primary border-2 border-primary font-bold py-2.5 rounded-xl text-sm">
+          Descargar costos (Excel)
         </button>
       </div>
     </div>
@@ -144,8 +144,8 @@ export function EquipoReportes({ miembros, empresa, lotes, labores, cosechas, ga
       <p className="text-xs font-bold text-gray-500 uppercase">Reportes</p>
       <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50">
         <button onClick={reporteCampana} className="w-full flex justify-between p-3 text-sm"><span>Informe de campaña {empresa.campana_activa}</span><span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-1 rounded-full">TXT</span></button>
-        <button onClick={() => exportarCSV('trazabilidad.csv', labores)} className="w-full flex justify-between p-3 text-sm"><span>Trazabilidad por lote (labores)</span><span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-1 rounded-full">CSV</span></button>
-        <button onClick={() => exportarCSV('costos-cosecha.csv', [...gastos.map((g) => ({ tipo: 'gasto', ...g })), ...cosechas.map((c) => ({ tipo: 'cosecha', ...c }))])} className="w-full flex justify-between p-3 text-sm"><span>Costos y cosecha</span><span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-1 rounded-full">CSV</span></button>
+        <button onClick={() => exportarExcel('trazabilidad.xlsx', labores)} className="w-full flex justify-between p-3 text-sm"><span>Trazabilidad por lote (labores)</span><span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-1 rounded-full">Excel</span></button>
+        <button onClick={() => exportarExcel('costos-cosecha.xlsx', [...gastos.map((g) => ({ tipo: 'gasto', ...g })), ...cosechas.map((c) => ({ tipo: 'cosecha', ...c }))])} className="w-full flex justify-between p-3 text-sm"><span>Costos y cosecha</span><span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-1 rounded-full">Excel</span></button>
       </div>
     </div>
   );

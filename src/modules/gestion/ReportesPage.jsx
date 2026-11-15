@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Download, Library, Loader2, Radio, Sparkles, AlertTriangle } from 'lucide-react';
+import { FileSpreadsheet, Library, Loader2, Radio, Sparkles, AlertTriangle } from 'lucide-react';
 import {
   obtenerActividadFlota,
   obtenerAlertasFlota,
@@ -22,7 +22,10 @@ import {
   CuerpoEstado,
   PanelSinDatos,
   numero,
+  useLimiteFilas,
+  BotonVerMas,
 } from '../../components/gestion/fleet/reportesComunes';
+import { cargarGruposUnidades, GRUPO_SIN_GRUPO } from '../../lib/agrotrackGrupos';
 
 /**
  * src/modules/gestion/ReportesPage.jsx
@@ -162,6 +165,8 @@ function columnasPara(report, agruparGeocerca) {
       return [['grupo', primera], ['unidades', 'Unidades', true], ['entradas', 'Entradas', true], ['salidas', 'Salidas', true], ['ultima_entrada', 'Última entrada']];
     }
     case 'limite-velocidad':
+    case 'alertas':
+      return [['fecha', 'Fecha y hora'], ['unidad', 'Unidad'], ['evento', 'Evento'], ['velocidad', 'Velocidad (km/h)', true], ['direccion', 'Dirección']];
     case 'alertas':
       return [['fecha', 'Fecha y hora'], ['unidad', 'Unidad'], ['evento', 'Evento'], ['velocidad', 'Velocidad (km/h)', true], ['direccion', 'Dirección']];
     case 'ralenti':
@@ -307,9 +312,24 @@ function mapearFilas(report, crudas, ctx) {
   }
 }
 
-function csvEscape(value) {
-  return `"${String(value ?? '').replaceAll('"', '""')}"`;
-}
+/** Placas a incluir cuando el selector "Mostrar" filtra por unidad o por grupo.
+ *  null = sin filtro. Misma regla de agrupación que el mapa (descripción si
+ *  falta el RPC de grupos). */
+const placasDelFiltro = (vehicles, gruposInfo, mostrar, opcion) => {
+  if (!opcion) return null;
+  if (mostrar === 'unidades') return [opcion];
+  const grupos = gruposInfo?.disponible ? gruposInfo.grupos : {};
+  return (vehicles || [])
+    .filter((v) => {
+      const placa = String(v?.placa || '').trim();
+      if (!placa) return false;
+      const g = grupos[placa]
+        || (!gruposInfo?.disponible ? String(v?.descripcion || '').trim() : '')
+        || GRUPO_SIN_GRUPO;
+      return g === opcion;
+    })
+    .map((v) => String(v.placa).trim());
+};
 
 export default function ReportesPage({
   selectedModuleId,
@@ -320,7 +340,6 @@ export default function ReportesPage({
 }) {
   const [selectedReportId, setSelectedReportId] = useState('actividades-sumarizado');
   const [placa, setPlaca] = useState('');
-  const [agruparGeocerca, setAgruparGeocerca] = useState('geocerca');
   const [estado, setEstado] = useState('cargando');
   const [intento, setIntento] = useState(0);
   const [filas, setFilas] = useState([]);
@@ -330,6 +349,14 @@ export default function ReportesPage({
   const [explicacion, setExplicacion] = useState(null);
   const [explicando, setExplicando] = useState(false);
   const [errorExplicacion, setErrorExplicacion] = useState(null);
+  // "Reporte básico" permite elegir si se ve por Unidades o por Grupos: el
+  // selector se adapta a los datos (placas con descripción o grupos reales).
+  const [mostrar, setMostrar] = useState('unidades');
+  const [opcionFiltro, setOpcionFiltro] = useState('');
+  const [gruposInfo, setGruposInfo] = useState({ grupos: {}, disponible: true, aviso: null });
+  // Reporte "Geocercas: entradas y salidas": desplegable de geocercas (reemplaza
+  // al antiguo "Agrupar"; filtra la tabla a la geocerca elegida).
+  const [geocercaSel, setGeocercaSel] = useState('');
 
   const { rango, setRango, dia, setDia, mes, setMes, desdeHora, setDesdeHora, hastaHora, setHastaHora, consulta, pendienteDeFecha } = useRango(periodo);
 
@@ -340,6 +367,26 @@ export default function ReportesPage({
   );
   const report = availableReports.find((item) => item.id === selectedReportId) || availableReports[0];
   const groups = [...new Set(availableReports.map((item) => item.group))];
+  const esBasico = report?.id === 'basico';
+  const esGeocercas = report?.id === 'geocercas-entradas';
+  const esLimiteVel = report?.id === 'limite-velocidad';
+  // Cambia de valor para los reportes cuyo Mostrar filtra del lado de la base:
+  // el efecto de carga lo usa para recalcular con las placas elegidas sin
+  // recargar los demás reportes.
+  const filtroKey = esGeocercas || esLimiteVel ? `${mostrar}|${opcionFiltro}` : '';
+
+  // Grupos reales de las unidades (RPC); si no existe, se agrupa por la
+  // descripción de la unidad (mismo criterio que el mapa de flota).
+  useEffect(() => {
+    if (!(esBasico || esGeocercas || esLimiteVel) || !empresaId) return undefined;
+    let cancelado = false;
+    cargarGruposUnidades(empresaId).then((info) => {
+      if (!cancelado) setGruposInfo(info);
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [esBasico, esGeocercas, esLimiteVel, empresaId]);
 
   const requierePlaca = report?.fuente === 'recorrido';
   const sinRango = report?.fuente === 'conteo';
@@ -369,9 +416,13 @@ export default function ReportesPage({
     let cancelado = false;
     setEstado('cargando');
     setError(null);
-    // Un reporte o rango nuevo invalida la explicación anterior de IA.
+    // Un reporte o rango nuevo invalida la explicación anterior de IA. La
+    // geocerca se reinicia salvo en el reporte de límite de velocidad: ahí
+    // la geocerca es parte del filtro que se envía a la base (p_geocerca), y
+    // un reload provocado por ella no debe borrarla.
     setExplicacion(null);
     setErrorExplicacion(null);
+    setGeocercaSel('');
 
     const cargar = () => {
       const { desde, hasta } = consulta;
@@ -380,10 +431,14 @@ export default function ReportesPage({
           const agrupar = report.agrupar || (rango === 'dia' ? 'dia' : rango === 'mes' ? 'mes' : 'unidad');
           return obtenerActividadFlota(empresaId, { desde, hasta, agrupar });
         }
-        case 'alertas':
-          return obtenerAlertasFlota(empresaId, { desde, hasta, limite: 500 });
-        case 'geocerca':
-          return obtenerEventosGeocerca(empresaId, { desde, hasta, agrupar: agruparGeocerca, limite: 500 });
+        case 'alertas': {
+          const placas = esLimiteVel ? placasDelFiltro(vehicles, gruposInfo, mostrar, opcionFiltro) : null;
+          return obtenerAlertasFlota(empresaId, { desde, hasta, limite: 500, placas });
+        }
+        case 'geocerca': {
+          const placas = placasDelFiltro(vehicles, gruposInfo, mostrar, opcionFiltro);
+          return obtenerEventosGeocerca(empresaId, { desde, hasta, agrupar: 'geocerca', limite: 500, placas });
+        }
         case 'estado':
           return obtenerEstadoUnidadesFlota(empresaId, { desde, hasta });
         case 'conteo':
@@ -418,7 +473,7 @@ export default function ReportesPage({
     consulta,
     rango,
     placa,
-    agruparGeocerca,
+    filtroKey,
     pendientePlaca,
     sinRango,
     pendienteDeFecha,
@@ -429,31 +484,86 @@ export default function ReportesPage({
   // porcentajes de "Tiempo de uso del motor" y "Eventos resumidos".
   const totalSegundos = useMemo(() => segundosDelRango(consulta, periodo), [consulta, periodo]);
 
-  const columnas = report ? columnasPara(report, agruparGeocerca) : [];
+  const columnas = report ? columnasPara(report, 'geocerca') : [];
   const filasVisibles = useMemo(() => {
     if (!report || estado !== 'ok') return [];
-    const agrupar = report.agrupar || (rango === 'dia' ? 'dia' : rango === 'mes' ? 'mes' : 'unidad');
+    const agrupar = esGeocercas
+      ? 'geocerca'
+      : report.agrupar || (rango === 'dia' ? 'dia' : rango === 'mes' ? 'mes' : 'unidad');
     return mapearFilas(report, filas, { agrupar, totalSegundos, placa });
-  }, [report, estado, filas, agruparGeocerca, rango, totalSegundos, placa]);
+  }, [report, esGeocercas, esLimiteVel, estado, filas, rango, totalSegundos, placa]);
 
-  const exportCsv = () => {
-    if (!filasVisibles.length) return;
-    const content = [
-      columnas.map(([, label]) => csvEscape(label)).join(','),
-      ...filasVisibles.map((row) => columnas.map(([key]) => csvEscape(row[key])).join(',')),
-    ].join('\n');
-    const url = URL.createObjectURL(new Blob(['\uFEFF', content], { type: 'text/csv;charset=utf-8;' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `reporte-${report.id}-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const unidades = useMemo(
+    () => (vehicles || []).map((v) => ({ placa: v.placa, descripcion: v.descripcion || v.modelo || '' })),
+    [vehicles],
+  );
+
+  // Grupo de cada placa (RPC real; si falta, cae a la descripción de la unidad,
+  // igual que el mapa de flota) y filas tras el selector Mostrar del BAJO.
+  const grupoDePlaca = useMemo(() => {
+    const mapa = {};
+    const grupos = gruposInfo.disponible ? gruposInfo.grupos : {};
+    (vehicles || []).forEach((v) => {
+      const placa = String(v.placa || '').trim();
+      if (!placa) return;
+      mapa[placa] = grupos[placa]
+        || (!gruposInfo.disponible ? String(v.descripcion || '').trim() : '')
+        || GRUPO_SIN_GRUPO;
+    });
+    return mapa;
+  }, [vehicles, gruposInfo]);
+
+  const opcionesGrupos = useMemo(
+    () => [...new Set(Object.values(grupoDePlaca))].sort((a, b) => a.localeCompare(b, 'es')),
+    [grupoDePlaca],
+  );
+
+  const filasMostradas = useMemo(() => {
+    if (!esBasico || !opcionFiltro) return filasVisibles;
+    return filasVisibles.filter((row) => (mostrar === 'unidades'
+      ? row.unidad === opcionFiltro
+      : (grupoDePlaca[row.unidad] || GRUPO_SIN_GRUPO) === opcionFiltro));
+  }, [esBasico, opcionFiltro, filasVisibles, mostrar, grupoDePlaca]);
+
+  // Geocercas del desplegable: entradas/salidas lista las presentes en los
+  // datos del rango (filtro cliente). Límite de velocidad no lleva este
+  // desplegable (retirado a pedido).
+  const esFiltroGeocerca = esGeocercas;
+  const geocOptions = useMemo(
+    () => [...new Set(filasMostradas.map((row) => row.grupo).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), 'es')),
+    [filasMostradas],
+  );
+  const filasGeocercas = useMemo(() => {
+    if (!esFiltroGeocerca || !geocercaSel) return filasMostradas;
+    return filasMostradas.filter((row) => row.grupo === geocercaSel);
+  }, [esFiltroGeocerca, geocercaSel, filasMostradas]);
+
+  // Tabla limitada a 15 filas; Excel e IA usan la lista completa.
+  const { filasVistas: filasTabla, expandido, alternar, total } = useLimiteFilas(filasGeocercas);
+
+  const [descargaError, setDescargaError] = useState(null);
+  const descargarExcel = async () => {
+    if (!filasGeocercas.length) return;
+    setDescargaError(null);
+    try {
+      const { exportarTablaExcel } = await import('../../lib/exportExcelReportes');
+      exportarTablaExcel(`Agrilux_${report?.id || 'reporte'}`, filasGeocercas, {
+        columnas: columnas.map(([key, label]) => [key, label]),
+        modelo: report?.label ? `${report.label}${report?.group ? ` · ${report.group}` : ''}` : 'Reporte',
+        criterio: [
+          { Concepto: 'Rango cargado', Detalle: rangoTexto || (sinRango ? 'todo el periodo cargado' : '—') },
+          { Concepto: 'Filas', Detalle: String(filasGeocercas.length) },
+        ],
+      });
+    } catch (e) {
+      setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
+    }
   };
 
   // Explicación con IA del reporte YA calculado en SQL: se mandan solo las
   // filas visibles comprimidas; la IA interpreta, no calcula ni inventa.
   const explicarReporte = async () => {
-    if (!filasVisibles.length || explicando) return;
+    if (!filasGeocercas.length || explicando) return;
     setExplicando(true);
     setErrorExplicacion(null);
     try {
@@ -462,8 +572,8 @@ export default function ReportesPage({
         grupo: report.group,
         rango: rangoTexto || (sinRango ? 'todo el periodo cargado' : ''),
         columnas: columnas.map(([, label]) => label),
-        filas: filasVisibles,
-        totalFilas: filasVisibles.length,
+        filas: filasGeocercas,
+        totalFilas: filasGeocercas.length,
       });
       const data = await llamarIaGestion({ modo: 'reporte', contexto });
       if (!data.texto) throw new Error('La IA no devolvió texto para este reporte.');
@@ -474,11 +584,6 @@ export default function ReportesPage({
       setExplicando(false);
     }
   };
-
-  const unidades = useMemo(
-    () => (vehicles || []).map((v) => ({ placa: v.placa, descripcion: v.descripcion || v.modelo || '' })),
-    [vehicles],
-  );
 
   return (
     <section className="space-y-4" aria-labelledby="fleet-reports-heading">
@@ -554,7 +659,7 @@ export default function ReportesPage({
                     <button
                       type="button"
                       onClick={explicarReporte}
-                      disabled={estado !== 'ok' || !filasVisibles.length || explicando}
+                      disabled={estado !== 'ok' || !filasGeocercas.length || explicando}
                       className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
                       title="Interpretar este reporte con IA (solo lectura)"
                     >
@@ -563,14 +668,61 @@ export default function ReportesPage({
                     </button>
                     <button
                       type="button"
-                      onClick={exportCsv}
-                      disabled={estado !== 'ok' || !filasVisibles.length}
+                      onClick={descargarExcel}
+                      disabled={estado !== 'ok' || !filasGeocercas.length}
                       className="inline-flex items-center gap-2 rounded-lg bg-forest px-3 py-2 text-xs font-semibold text-white hover:bg-forest-dark disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <Download size={14} /> Exportar CSV
+                      <FileSpreadsheet size={14} /> Descargar Excel
                     </button>
                   </div>
+                  {descargaError ? <p className="text-[10px] text-red-600 px-1">{descargaError}</p> : null}
                 </div>
+
+                {esBasico || esGeocercas || esLimiteVel ? (
+                  <div className="flex flex-wrap items-end gap-3 mb-4">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Mostrar</p>
+                      <div className="flex gap-1.5" role="radiogroup" aria-label="Mostrar por grupos o por unidades">
+                        {[['grupos', 'Grupos'], ['unidades', 'Unidades']].map(([id, label]) => (
+                          <button
+                            key={id}
+                            type="button"
+                            role="radio"
+                            aria-checked={mostrar === id}
+                            onClick={() => { setMostrar(id); setOpcionFiltro(''); }}
+                            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
+                              mostrar === id ? 'bg-forest text-white' : 'bg-slate-50 text-slate-500 hover:text-forest'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <label className="min-w-0">
+                      <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">{mostrar === 'grupos' ? 'Grupo' : 'Unidad'}</span>
+                      <select
+                        value={opcionFiltro}
+                        onChange={(e) => setOpcionFiltro(e.target.value)}
+                        className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 bg-white min-w-[240px] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                      >
+                        <option value="">{mostrar === 'grupos' ? 'Todos los grupos' : 'Todas las unidades'}</option>
+                        {mostrar === 'grupos'
+                          ? opcionesGrupos.map((grupo) => <option key={grupo} value={grupo}>{grupo}</option>)
+                          : unidades.map((u) => (
+                              <option key={u.placa} value={u.placa}>
+                                {u.placa}{u.descripcion ? ` - ${u.descripcion}` : ''}
+                              </option>
+                            ))}
+                      </select>
+                      {mostrar === 'grupos' && !gruposInfo.disponible && gruposInfo.aviso ? (
+                        <span className="block mt-1 text-[10px] text-amber-600 max-w-[280px] leading-snug">
+                          Grupos no disponibles en la base: se agrupa por la descripción de la unidad. {gruposInfo.aviso}
+                        </span>
+                      ) : null}
+                    </label>
+                  </div>
+                ) : null}
 
                 <div className="flex flex-wrap items-end gap-3 mb-4">
                   {!sinRango ? (
@@ -597,16 +749,17 @@ export default function ReportesPage({
                     </label>
                   ) : null}
 
-                  {report.fuente === 'geocerca' ? (
+                  {esFiltroGeocerca ? (
                     <label className="min-w-0">
-                      <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Agrupar</span>
+                      <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Geocercas</span>
                       <select
-                        value={agruparGeocerca}
-                        onChange={(e) => setAgruparGeocerca(e.target.value)}
-                        className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                        value={geocercaSel}
+                        onChange={(e) => setGeocercaSel(e.target.value)}
+                        className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 bg-white min-w-[220px] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                       >
-                        {AGROUPS_GEOCERCA.map((g) => (
-                          <option key={g.id} value={g.id}>{g.label}</option>
+                        <option value="">Todas las geocercas</option>
+                        {geocOptions.map((grupo) => (
+                          <option key={grupo} value={grupo}>{grupo}</option>
                         ))}
                       </select>
                     </label>
@@ -621,7 +774,8 @@ export default function ReportesPage({
                   onReintentar={() => setIntento((n) => n + 1)}
                   mensajeVacio={`No hay datos de "${report.label}" en ${rangoTexto || 'ese rango'}. Prueba con otro día/mes o con "Todo el periodo".`}
                 >
-                  {estado === 'ok' && filasVisibles.length ? (
+                  {estado === 'ok' && filasGeocercas.length ? (
+                    <>
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs text-slate-700">
                         <thead>
@@ -634,7 +788,7 @@ export default function ReportesPage({
                           </tr>
                         </thead>
                         <tbody>
-                          {filasVisibles.map((row, index) => (
+                          {filasTabla.map((row, index) => (
                             <tr
                               key={`${row.unidad || row.grupo || row.evento || 'fila'}-${index}`}
                               className="border-b border-slate-50 hover:bg-slate-50/60"
@@ -654,6 +808,8 @@ export default function ReportesPage({
                         </tbody>
                       </table>
                     </div>
+                    <BotonVerMas expandido={expandido} onAlternar={alternar} total={total} />
+                    </>
                   ) : estado === 'inactivo' ? (
                     <p className="py-6 text-center text-xs text-slate-400">
                       Esperando parámetros para calcular el reporte…
@@ -689,7 +845,7 @@ export default function ReportesPage({
                         ))}
                     </div>
                     <p className="mt-2 text-[10px] text-slate-500">
-                      Interpretación de las {filasVisibles.length} fila(s) ya calculadas en SQL con las columnas del
+                      Interpretación de las {filasGeocercas.length} fila(s) ya calculadas en SQL con las columnas del
                       reporte; la IA no recalcula cifras ni sustituye la revisión del responsable.
                     </p>
                   </div>
