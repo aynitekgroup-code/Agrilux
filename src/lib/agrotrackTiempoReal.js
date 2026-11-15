@@ -60,24 +60,50 @@ export async function obtenerLatidos(empresaId) {
 }
 
 /**
+ * Número de canal: hace único el nombre de cada suscripción (ver abajo).
+ */
+let suscripcionSeq = 0;
+
+/**
  * Se suscribe a los cambios de agrotrack_estado_vivo de la empresa.
+ *
+ * 15/11/2026 — El nombre del canal DEBE ser único por suscriptor:
+ * `supabase.channel(topic)` devuelve el canal ya existente cuando el topic se
+ * repite (RealtimeClient.channel busca en getChannels()), y si ese canal ya
+ * está suscrito, `.on()` lanza "cannot add `postgres_changes` callbacks ...
+ * after `subscribe()`". Como la consola (AgroTrackPomalcaPage) y el reporte
+ * "Status de maquinaria" (FleetUnitStatus) usaban el mismo topic
+ * `estado-vivo-<empresa>`, abrir Reportes lanzaba la excepción dentro de un
+ * useEffect y React desmontaba la app entera: pantalla en blanco.
+ *
+ * Además, cualquier fallo al crear el canal se ignora: el reporte se refresca
+ * igual cada 60 s, así que Realtime es una mejora, nunca un requisito.
+ *
  * @returns {() => void} función para cancelar la suscripción
  */
 export function suscribirEstadoVivo(empresaId, onCambio) {
   if (!empresaId || typeof supabase?.channel !== 'function') return () => {};
-  const canal = supabase
-    .channel(`estado-vivo-${empresaId}`)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'agrotrack_estado_vivo', filter: `empresa_id=eq.${empresaId}` },
-      () => onCambio?.(),
-    )
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'agrotrack_zonar_latidos', filter: `empresa_id=eq.${empresaId}` },
-      () => onCambio?.(),
-    )
-    .subscribe();
+  suscripcionSeq += 1;
+  const topic = `estado-vivo-${empresaId}-${suscripcionSeq}-${Math.random().toString(36).slice(2, 8)}`;
+  let canal = null;
+  try {
+    canal = supabase
+      .channel(topic)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'agrotrack_estado_vivo', filter: `empresa_id=eq.${empresaId}` },
+        () => onCambio?.(),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'agrotrack_zonar_latidos', filter: `empresa_id=eq.${empresaId}` },
+        () => onCambio?.(),
+      )
+      .subscribe();
+  } catch (e) {
+    console.warn('Tiempo real no disponible (se sigue refrescando cada 60 s):', e?.message || e);
+    return () => {};
+  }
   return () => {
     try {
       supabase.removeChannel(canal);
