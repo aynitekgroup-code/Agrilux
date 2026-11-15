@@ -420,6 +420,7 @@ export function exportarCoordenadasUnidadesExcel(filas, { rangoTexto = '', fuent
     'Evento': f.evento || '—',
     'Fecha': f.fecha ? formatearFechaHora(f.fecha) : '—',
     'Dirección': f.direccion || '—',
+    'Geocerca': f.geocerca || '—',
     'Vel. (km/h)': f.velocidad == null || f.velocidad === '' ? '' : Number(f.velocidad),
     'Últ. contacto': f.fecha ? formatearFechaLarga(f.fecha) : '—',
     'Latitud': f.latitud == null ? '' : Number(Number(f.latitud).toFixed(6)),
@@ -429,7 +430,7 @@ export function exportarCoordenadasUnidadesExcel(filas, { rangoTexto = '', fuent
   const ws = XLSX.utils.json_to_sheet(datos);
   ws['!cols'] = [
     { wch: 14 }, { wch: 30 }, { wch: 26 }, { wch: 16 }, { wch: 46 },
-    { wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 12 },
+    { wch: 24 }, { wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 12 },
   ];
   XLSX.utils.book_append_sheet(wb, ws, 'Coordenadas');
 
@@ -438,7 +439,7 @@ export function exportarCoordenadasUnidadesExcel(filas, { rangoTexto = '', fuent
     { Concepto: 'Rango', Detalle: rangoTexto || 'Última posición del periodo cargado' },
     { Concepto: 'Unidades', Detalle: unidades ? `${unidades} unidad(es) con posición válida en el mapa` : 'Solo las unidades con latitud y longitud distintas de cero' },
     { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones (agrotrack_resumen_flota + agrotrack_estado_unidades_flota)' },
-    { Concepto: 'Dirección / geocerca', Detalle: 'Dirección y evento de la última posición de cada placa; si la RPC de estado no está disponible se muestra «—»' },
+    { Concepto: 'Dirección / geocerca', Detalle: 'Dirección y geocerca (polígono que contiene la última posición) de cada placa; la geocerca se calcula en el navegador con los polígonos cargados en el mapa («—» = fuera de todas)' },
     { Concepto: 'Velocidad', Detalle: 'Velocidad de la última posición (km/h)' },
     { Concepto: 'Últ. contacto', Detalle: 'Fecha y hora larga de la última posición recibida' },
     { Concepto: 'Odómetro / Hrs. motor', Detalle: 'Sin dato: el archivo "Reporte por placa" de Zonar que importamos no incluye odómetro ni horas de motor' },
@@ -472,6 +473,7 @@ export function exportarRecorridoExcel(
     'Fecha': f.fecha ? formatearFechaLarga(f.fecha) : '—',
     'Evento': f.evento || '—',
     'Dirección': f.direccion || '—',
+    'Geocerca': f.geocerca || '—',
     'Vel. (km/h)': f.velocidad == null || f.velocidad === '' ? '' : Number(f.velocidad),
     'Latitud': f.latitud == null ? '' : Number(Number(f.latitud).toFixed(6)),
     'Longitud': f.longitud == null ? '' : Number(Number(f.longitud).toFixed(6)),
@@ -480,8 +482,8 @@ export function exportarRecorridoExcel(
 
   const ws = XLSX.utils.json_to_sheet(datos);
   ws['!cols'] = [
-    { wch: 24 }, { wch: 28 }, { wch: 46 }, { wch: 12 },
-    { wch: 12 }, { wch: 12 }, { wch: 9 },
+    { wch: 24 }, { wch: 28 }, { wch: 46 }, { wch: 24 },
+    { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 9 },
   ];
   XLSX.utils.book_append_sheet(wb, ws, 'Recorrido');
 
@@ -495,6 +497,7 @@ export function exportarRecorridoExcel(
       ? 'La ventana superó el tope de 900 puntos: la RPC muestrea por paso entero (conserva inicio, fin y alertas). Reduce el rango para ver todos los puntos.'
       : 'Sin muestreo: la ventana trajo menos de 900 puntos.' },
     { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones (agrotrack_recorrido_flota)' },
+    { Concepto: 'Geocerca', Detalle: 'Geocerca (o distrito / oficina) que contiene cada punto, calculada en el navegador con los polígonos cargados en el mapa. «—» = fuera de todas.' },
     { Concepto: 'Alerta', Detalle: 'Alta velocidad (sin cierre) o botón de pánico' },
     { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
     { Concepto: 'Generado', Detalle: new Date().toLocaleString('es-PE') },
