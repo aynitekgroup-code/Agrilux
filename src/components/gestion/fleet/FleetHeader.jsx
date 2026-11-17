@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Leaf,
   Building2,
   MapPin,
   Wifi,
@@ -55,13 +54,13 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
     <section className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
       <div className="p-5 sm:p-6 flex flex-col gap-4">
         <div className="flex flex-wrap items-start gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-forest text-white flex items-center justify-center shadow-sm shrink-0">
-            <Leaf size={24} />
+          <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-sm shrink-0 overflow-hidden">
+            <img src="/icons/Agrilux.logo.web.png" alt="Agrilux" className="w-11 h-14 object-contain" />
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-                Agrilux · AgroTrack Pomalca
+                Agrilux · {empresaNombre}
               </h1>
               <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
                 Modo demo
