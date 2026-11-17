@@ -64,7 +64,8 @@ async function modoDescubrir(cfg, log) {
   log.info(`Unidades: ${unidades.length} marcadores. Guardado en ${pathJoin(carpeta, 'unidades.json')}`);
   if (unidades[0]) {
     log.info(`  ejemplo: ${JSON.stringify(unidades[0]).slice(0, 400)}`);
-    const conUnitId = unidades.filter((u) => u.UnitID !== undefined && u.UnitID !== null).length;
+    // GetUnitsLocator puede traer UnitID o solo MarkerID (el que usa la UI).
+    const conUnitId = unidades.filter((u) => u.UnitID ?? u.unitId ?? u.MarkerID).length;
     const conNombre = unidades.filter((u) => String(u.MarkerName || u.Unit || '').trim()).length;
     log.info(`  con UnitID: ${conUnitId}/${unidades.length} · con nombre: ${conNombre}/${unidades.length}`);
   }

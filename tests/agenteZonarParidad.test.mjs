@@ -135,6 +135,21 @@ test('fecha: inválida -> null', () => {
   assert.equal(fechaDesdeJsonZonar({}), null);
 });
 
+test('fecha: formato real de GetUnitsHistory "11/15/2026 11:58:27 PM"', () => {
+  // Formato observado en vivo desde la PC de Carlos (Chiclayo): mes/día/año.
+  assert.equal(fechaDesdeJsonZonar('11/15/2026 11:58:27 PM'), '2026-11-15T23:58:27-05:00');
+  assert.equal(fechaDesdeJsonZonar('11/15/2026 12:01:00 AM'), '2026-11-15T00:01:00-05:00');
+  assert.equal(fechaDesdeJsonZonar('11/16/2026 8:13:27 AM'), '2026-11-16T08:13:27-05:00');
+  assert.equal(fechaDesdeJsonZonar('11/16/2026 12:00:00 PM'), '2026-11-16T12:00:00-05:00');
+  // sin segundos
+  assert.equal(fechaDesdeJsonZonar('11/15/2026 11:58 PM'), '2026-11-15T23:58:00-05:00');
+});
+
+test('fecha: sesión en español "nov. 16 2026 8:13:27 p. m."', () => {
+  assert.equal(fechaDesdeJsonZonar('nov. 16 2026 8:13:27 p. m.'), '2026-11-16T20:13:27-05:00');
+  assert.equal(fechaDesdeJsonZonar('nov. 16 2026 8:13 a. m.'), '2026-11-16T08:13:00-05:00');
+});
+
 /* ── armarFilaZonar: fila equivalente a la del importador web ─────────────── */
 
 test('fila: mismo shape y source_key que buildRow del importador', () => {
