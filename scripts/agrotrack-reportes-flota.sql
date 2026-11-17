@@ -197,16 +197,18 @@ as $$
     select
       p.id, p.placa, p.unidad, p.fecha, p.secuencia, p.evento,
       p.velocidad, p.latitud, p.longitud,
-      ((p_desde is null or p.fecha >= p_desde)
-        and (p_hasta is null or p.fecha <= p_hasta))              as en_rango
+      (p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
+        and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz))              as en_rango
     from public.agrotrack_posiciones p
     -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
     where (select public.onboarding_es_miembro(p_empresa_id))
       and p.empresa_id = p_empresa_id
       and (p_placa is null or p.placa = p_placa)
       -- 10 minutos de margen a cada lado: el tramo que cruza el borde existe.
-      and (p_desde is null or p.fecha >= p_desde - interval '10 minutes')
-      and (p_hasta is null or p.fecha <= p_hasta + interval '10 minutes')
+      -- 16/11/2026: predicados INDEXABLES aunque el plan sea generico (con
+      -- "p_desde is null or ..." el indice de fecha queda inservible).
+      and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz) - interval '10 minutes'
+      and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz) + interval '10 minutes'
   ),
   -- Estado de cada punto según el criterio único de la cabecera.
   puntos as (
