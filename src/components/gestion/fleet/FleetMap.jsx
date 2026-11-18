@@ -13,8 +13,10 @@ import {
   RefreshCw,
   Search,
   Upload,
+  Volume2,
   X,
 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import 'leaflet/dist/leaflet.css';
 import {
   crearGeocerca,
@@ -50,6 +52,19 @@ import PosicionesImport from './PosicionesImport';
 
 const SpeechRecognitionCtor =
   typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
+
+let nativeSpeechRecognition = null;
+const loadNativeSpeechRecognition = async () => {
+  if (!Capacitor.isNativePlatform()) return null;
+  if (nativeSpeechRecognition) return nativeSpeechRecognition;
+  try {
+    const mod = await import('@capacitor-community/speech-recognition');
+    nativeSpeechRecognition = mod.SpeechRecognition;
+    return nativeSpeechRecognition;
+  } catch {
+    return null;
+  }
+};
 
 /* ---------- Utilidades ---------- */
 
@@ -193,7 +208,7 @@ function stripVoiceCommand(transcript) {
   const text = normalizeText(transcript).replace(/[.,;:!?¿¡]/g, ' ').replace(/\s+/g, ' ').trim();
   const cleaned = text
     .replace(
-      /^(?:(?:busca|buscar|buscame|llevame|muestrame|muestra|mostrar|ubica|ubicame|quiero ver|ir|ve|vamos)\s+)?(?:(?:a|al|a la|hacia|en)\s+)?(?:(?:la|el)\s+)?(?:(?:geocerca|zona|lote|division)\s+)?/,
+      /^(?:(?:busca|buscar|buscame|llevame|muestrame|muestra|mostrar|ubica|ubicame|quiero ver|ir|ve|vamos)\s+)?(?:(?:a|al|a la|hacia|en)\s+)?(?:(?:la|el)\s+)?(?:(?:geocerca|zona|lote|division|maquina|máquina|placa|unidad|vehiculo|vehículo|camion|camión|tractor)\s+)?/,
       '',
     )
     .trim();
@@ -392,6 +407,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const [focusUnidadRequest, setFocusUnidadRequest] = useState(null);
   const [listening, setListening] = useState(false);
   const [voiceMessage, setVoiceMessage] = useState('');
+  const [listeningUnit, setListeningUnit] = useState(false);
+  const [voiceUnitMessage, setVoiceUnitMessage] = useState('');
   // FASE 3.8: mapa llamativo — filtro por grupo (leyenda / JARVIS) y vista satélite.
   const [filtroGrupo, setFiltroGrupo] = useState('');
   const [vistaSatelite, setVistaSatelite] = useState(false);
@@ -432,7 +449,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const [errorExportarRecorrido, setErrorExportarRecorrido] = useState('');
   const fileInputRef = useRef(null);
   const recognitionRef = useRef(null);
+  const unitRecognitionRef = useRef(null);
   const applyVoiceRef = useRef(null);
+  const applyUnitVoiceRef = useRef(null);
   const activeCompanyRef = useRef(empresaId);
   activeCompanyRef.current = empresaId;
   const activePlacaRef = useRef(selectedId);
@@ -988,6 +1007,181 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     }
   };
 
+  /* ----- Voz · unidad/placa y lectura del popup ----- */
+
+  const normalizarVozPlaca = (value) => (
+    normalizeText(value).replace(/[^a-z0-9]/g, '')
+  );
+
+  const geocercaActualUnidad = (vehicle) => {
+    if (!vehicle) return '';
+    const fila = estadoPorPlaca.get(vehicle.placa) || null;
+    if (fila?.geocerca) return fila.geocerca;
+    if (fila?.geocerca_ultima) return `${fila.geocerca_ultima} (últ. vez)`;
+    return geocercaDePunto(Number(vehicle.lat), Number(vehicle.lng), geofences) || 'Sin geocerca';
+  };
+
+  const filaCoordenadaPorPlaca = useMemo(
+    () => new Map(filasCoordenadas.map((fila) => [fila.clave, fila])),
+    [filasCoordenadas],
+  );
+
+  const leerVentanaUnidad = (vehicle) => {
+    if (!('speechSynthesis' in window)) return;
+    const estadoPlaca = estadoPorPlaca.get(vehicle?.placa) || null;
+    const velocidad = Number(vehicle?.velocidad_kmh);
+    const geocerca = geocercaActualUnidad(vehicle);
+    const partes = [
+      `Unidad ${vehicle?.placa || ''}`.trim(),
+      vehicle?.descripcion || vehicle?.modelo || '',
+      (estadoPlaca?.ultimo_evento || vehicle?.ultimo_evento) ? `último evento ${estadoPlaca?.ultimo_evento || vehicle?.ultimo_evento}` : '',
+      Number.isFinite(velocidad) && velocidad > 0 ? `a ${velocidad} kilómetros por hora` : 'detenida o sin dato',
+      `geocerca ${geocerca}`,
+      (estadoPlaca?.direccion || (fuentePosiciones === 'real' ? vehicle?.ultima_ubicacion : '')) ? `dirección ${estadoPlaca?.direccion || vehicle?.ultima_ubicacion}` : '',
+      vehicle?.conductor_nombre ? `conductor ${vehicle.conductor_nombre}` : '',
+      Number.isFinite(Number(vehicle?.km_recorridos)) && Number(vehicle.km_recorridos) > 0 ? `${Number(vehicle.km_recorridos)} kilómetros recorridos en 24 horas` : '',
+    ].filter(Boolean);
+    const texto = partes.join(', ');
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(texto);
+    utterance.lang = 'es-PE';
+    utterance.rate = 0.9;
+    const vozEs = window.speechSynthesis.getVoices().find((voz) => (voz.lang || '').startsWith('es'));
+    if (vozEs) utterance.voice = vozEs;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const aplicarVozUnidad = (transcript) => {
+    const query = normalizarVozPlaca(stripVoiceCommand(transcript));
+    const queryTexto = normalizeText(stripVoiceCommand(transcript));
+    const candidatos = vehiclesConPosicion.filter((vehicle) => {
+      const campos = [vehicle.placa, vehicle.descripcion, vehicle.modelo, vehicle.conductor_nombre, vehicle.ultimo_evento];
+      return campos.filter(Boolean).some((campo) => (
+        normalizarVozPlaca(campo).includes(query) || normalizeText(campo).includes(queryTexto)
+      ));
+    });
+    if (!candidatos.length && query) {
+      setBusquedaRuta(stripVoiceCommand(transcript));
+      setVoiceUnitMessage(`No encontré una máquina para "${transcript}". Intenta decir solo la placa.`);
+      return;
+    }
+    const exacto = candidatos.find((vehicle) => normalizarVozPlaca(vehicle.placa) === query) || null;
+    const elegida = exacto || (candidatos.length === 1 ? candidatos[0] : null);
+    if (elegida) {
+      selectUnidadRuta(elegida.placa);
+      setVoiceUnitMessage(`Unidad ${elegida.placa} · geocerca ${geocercaActualUnidad(elegida)}.`);
+      leerVentanaUnidad(elegida);
+      return;
+    }
+    if (candidatos.length > 1) {
+      setBusquedaRuta(stripVoiceCommand(transcript));
+      setVoiceUnitMessage(`Hay ${candidatos.length} coincidencias. Elige la unidad en la lista.`);
+      return;
+    }
+    setBusquedaRuta(stripVoiceCommand(transcript));
+    setVoiceUnitMessage('');
+  };
+
+  applyUnitVoiceRef.current = aplicarVozUnidad;
+
+  const toggleVoiceUnidad = async () => {
+    if (Capacitor.isNativePlatform()) {
+      if (listeningUnit) {
+        setListeningUnit(false);
+        return;
+      }
+      const plugin = await loadNativeSpeechRecognition();
+      if (!plugin) {
+        setVoiceUnitMessage('Reconocimiento de voz no disponible en este dispositivo.');
+        return;
+      }
+      try {
+        const { available } = await plugin.available();
+        if (!available) {
+          setVoiceUnitMessage('Activa “Speech Services by Google” e intenta de nuevo.');
+          return;
+        }
+        const perm = await plugin.requestPermissions().catch(() => null);
+        if (perm?.speechRecognition === 'denied') {
+          setVoiceUnitMessage('Permiso de micrófono denegado. Actívalo en Ajustes → Agrilux → Permisos.');
+          return;
+        }
+        setListeningUnit(true);
+        setVoiceUnitMessage('Escuchando… di la placa de la máquina.');
+        const result = await plugin.start({
+          language: 'es-PE',
+          maxResults: 5,
+          prompt: 'Di la placa de la máquina',
+          popup: true,
+          partialResults: false,
+        });
+        setListeningUnit(false);
+        const match = (result?.matches || []).find((m) => m && m.trim())?.trim() || '';
+        if (match) applyUnitVoiceRef.current?.(match);
+        else setVoiceUnitMessage('No te escuché. Intenta de nuevo cerca del micrófono.');
+      } catch (error) {
+        setListeningUnit(false);
+        setVoiceUnitMessage('No te escuché bien. Revisa internet y los permisos de micrófono.');
+        console.warn('[Unidad] dictado falló:', error);
+      }
+      return;
+    }
+    if (!SpeechRecognitionCtor) {
+      setVoiceUnitMessage('Tu navegador no soporta búsqueda por voz. Usa Chrome o Edge.');
+      return;
+    }
+    if (listeningUnit) {
+      unitRecognitionRef.current?.stop();
+      return;
+    }
+
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = 'es-PE';
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setListeningUnit(true);
+      setVoiceUnitMessage('Escuchando… di la placa de la máquina.');
+    };
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0]?.transcript || '')
+        .join(' ')
+        .trim();
+      if (!transcript) return;
+      const isFinal = event.results[event.results.length - 1]?.isFinal;
+      if (isFinal) {
+        applyUnitVoiceRef.current?.(transcript);
+      } else {
+        setBusquedaRuta(transcript);
+      }
+    };
+    recognition.onerror = (event) => {
+      const messages = {
+        'not-allowed': 'Permite el acceso al micrófono en el navegador para usar la voz.',
+        'service-not-allowed': 'Permite el acceso al micrófono en el navegador para usar la voz.',
+        'no-speech': 'No te escuché. Toca el micrófono e inténtalo de nuevo.',
+        'audio-capture': 'No se detectó ningún micrófono.',
+        network: 'La búsqueda por voz necesita conexión a internet.',
+      };
+      setVoiceUnitMessage(messages[event.error] || 'No se pudo reconocer la voz. Inténtalo de nuevo.');
+    };
+    recognition.onend = () => {
+      setListeningUnit(false);
+      unitRecognitionRef.current = null;
+    };
+
+    unitRecognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch {
+      setListeningUnit(false);
+      unitRecognitionRef.current = null;
+    }
+  };
+
   // Puntos con coordenadas numéricas: un NaN o undefined rompe Leaflet.
   // Se enriquece cada punto con `geocerca` (polígono de menor área que lo
   // contiene); se calcula una sola vez por carga de la página.
@@ -1378,6 +1572,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     }
   };
 
+  useEffect(() => () => unitRecognitionRef.current?.abort?.(), []);
   useEffect(() => () => recognitionRef.current?.abort?.(), []);
 
   /* ----- Importación ----- */
@@ -1641,18 +1836,40 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                 <input
                   type="search"
                   value={busquedaRuta}
-                  onChange={(event) => setBusquedaRuta(event.target.value)}
+                  onChange={(event) => {
+                    setBusquedaRuta(event.target.value);
+                    setVoiceUnitMessage('');
+                  }}
                   placeholder="1639-1K, SEGURIDAD…"
                   autoComplete="off"
                   aria-label="Buscar unidad para el recorrido"
                   className="w-full bg-transparent text-xs font-normal text-slate-700 outline-none placeholder:text-slate-400"
                 />
                 {busquedaRuta ? (
-                  <button type="button" onClick={() => setBusquedaRuta('')} aria-label="Limpiar búsqueda" className="shrink-0 text-slate-400 hover:text-slate-600">
+                  <button type="button" onClick={() => { setBusquedaRuta(''); setVoiceUnitMessage(''); }} aria-label="Limpiar búsqueda" className="shrink-0 text-slate-400 hover:text-slate-600">
                     <X size={13} />
                   </button>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={toggleVoiceUnidad}
+                  className={`relative grid h-8 w-8 shrink-0 place-items-center rounded-full transition-all hover:scale-105 focus:outline-none focus:ring-2 ${
+                    listeningUnit
+                      ? 'animate-pulse bg-red-500 text-white shadow-[0_0_12px_rgba(239,68,68,0.6)] focus:ring-red-200'
+                      : 'bg-emerald-500 text-white hover:bg-emerald-600 focus:ring-emerald-200'
+                  }`}
+                  aria-label={listeningUnit ? 'Detener búsqueda por voz' : 'Buscar unidad por voz'}
+                  aria-pressed={listeningUnit}
+                  title={Capacitor.isNativePlatform() || SpeechRecognitionCtor ? 'Buscar máquina por voz' : 'Tu navegador no soporta voz'}
+                >
+                  {Capacitor.isNativePlatform() || SpeechRecognitionCtor ? <Mic size={15} /> : <MicOff size={15} />}
+                </button>
               </div>
+              {voiceUnitMessage ? (
+                <p className="mt-1 max-w-64 text-[10px] leading-snug text-slate-500" role="status" aria-live="polite">
+                  {voiceUnitMessage}
+                </p>
+              ) : null}
               {resultadosRuta.length ? (
                 <ul className="absolute left-0 top-full z-30 mt-1 w-72 max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
                   {resultadosRuta.map((v) => (
@@ -1667,6 +1884,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                           <span className="block font-semibold text-slate-800">{v.placa}{v.descripcion ? ` · ${v.descripcion}` : ''}</span>
                           <span className="block truncate text-[10px] text-slate-400">
                             {(Number(v.velocidad_kmh) || 0) > 0 ? `${Number(v.velocidad_kmh)} km/h` : 'Detenida / sin dato'}{v.ultimo_evento ? ` · ${v.ultimo_evento}` : ''}
+                          </span>
+                          <span className="block truncate text-[10px] text-emerald-700">
+                            Geocerca: {filaCoordenadaPorPlaca.get(v.placa)?.geocerca || geocercaActualUnidad(v)}
                           </span>
                         </span>
                       </button>
@@ -2018,6 +2238,15 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                     {fuentePosiciones !== 'real' ? (
                       <p className="text-slate-400">GPS de demostración</p>
                     ) : null}
+                    <button
+                      type="button"
+                      onClick={() => leerVentanaUnidad(vehicle)}
+                      className="mt-1 inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                      aria-label="Escuchar los datos de la máquina"
+                    >
+                      <Volume2 size={12} aria-hidden="true" />
+                      Escuchar
+                    </button>
                   </div>
                 </Popup>
               </CircleMarker>

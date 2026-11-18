@@ -10,6 +10,14 @@
 -- scripts/agrotrack-flota-unidades.sql: deja las 44 unidades de la maestra y
 -- la última posición se busca por placa con índice (~0,5 s).
 --
+-- IMPORTANTE 2 (18/11/2026): este script REQUIERE que exista y esté poblada
+-- public.agrotrack_posiciones.geom y public.agrotrack_geocercas_subdiv
+-- (índices GIST). Por tanto, EJECUTAR ANTES:
+--   scripts/agrotrack-geometria-reportes.sql
+-- Sin él, la función agrotrack_visitas_geocerca_calc sigue usando el índice
+-- GIST solo para los polígonos y devuelve resultados lentos o errores
+-- (obsolescencia de ST_MakePoint). Es repetible e idempotente.
+--
 -- REQUIERE POSTGIS (sección 0). Si la sección 0 falla con "permission denied
 -- to create extension", ejecutar primero y sola la línea:
 --   create extension if not exists postgis with schema public;

@@ -6,9 +6,11 @@
 --  trabajadas por máquina") + la tabla dinámica de las 6:30 a. m.
 --
 -- Ejecutar completo en el SQL Editor de Supabase DESPUÉS de
--- scripts/agrotrack-geocercas-reportes.sql (usa su motor
--- public.agrotrack_visitas_geocerca_calc). Es repetible e idempotente: no
--- borra posiciones ni geocercas, ni toca las políticas de otras tablas.
+-- scripts/agrotrack-geometria-reportes.sql y scripts/agrotrack-geocercas-reportes.sql
+-- (usa el motor public.agrotrack_visitas_geocerca_calc, que ahora depende de
+-- agrotrack_posiciones.geom y agrotrack_geocercas_subdiv). Es repetible e
+-- idempotente: no borra posiciones ni geocercas, ni toca las políticas de
+-- otras tablas.
 --
 -- POR QUÉ: calcular en vivo las visitas de las ~44 unidades contra las ~178
 -- geocercas de un día entero supera los 8 s que Supabase permite a la web, y
