@@ -482,7 +482,8 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
                 <tfoot>
                   <tr className="bg-slate-50 text-slate-700 font-bold">
                     <td className="px-3 py-2.5" colSpan={2}>
-                      {filasVistas.length} unidad{filasVistas.length === 1 ? '' : 'es'} reportando
+                      {Math.max(0, filasVistas.length - conteos.fuera_servicio)} unidad{filasVistas.length - conteos.fuera_servicio === 1 ? '' : 'es'} reportando
+                      {conteos.fuera_servicio ? ` · ${conteos.fuera_servicio} sin telemetría` : ''}
                       {filasVistas.length !== filas.length ? ` de ${filas.length}` : ''}
                     </td>
                     <td className="px-3 py-2.5" colSpan={2}>

@@ -30,6 +30,10 @@ const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 's
 const ZONA_PERU = 'America/Lima';
 
 function fecha(iso) {
+  // OJO: Number(null) === 0, así que sin esta guarda una unidad sin
+  // telemetría (ultima_fecha null) se mostraba como "31/12 · 19:00"
+  // (el epoch 1970 en hora de Perú) en lugar de "—" / "Sin reporte".
+  if (iso === null || iso === undefined || iso === '') return null;
   const value = typeof iso === 'string' ? Date.parse(iso) : Number(iso);
   return Number.isFinite(value) ? new Date(value) : null;
 }

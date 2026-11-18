@@ -17,6 +17,15 @@ export const UMBRAL_VEL_MAX_KMH = 90;
 /** Cantidad de alertas (alta velocidad / pánico) en el periodo para avisar. */
 export const UMBRAL_ALERTAS = 3;
 
+/**
+ * Días hacia atrás que revisa el vigía. Antes revisaba TODO el periodo
+ * (desde..hasta): con 290 mil puntos la RPC agrotrack_actividad_flota pasaba
+ * de los 8 s de PostgREST y el agente quedaba en error con
+ * "canceling statement due to statement timeout". La revisión es periódica,
+ * así que le basta la última semana de datos.
+ */
+export const VENTANA_VIGIA_DIAS = 7;
+
 const NIVEL_ORDEN = { alto: 0, medio: 1, bajo: 2 };
 
 /**

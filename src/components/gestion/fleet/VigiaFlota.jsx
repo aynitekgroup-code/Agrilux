@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, AlertTriangle, RotateCw, ShieldCheck, CheckCircle, Clock } from 'lucide-react';
 import { useAgentes } from '../../../lib/AgentContext';
 import { obtenerActividadFlota, formatearRango } from '../../../lib/agrotrackFlota';
-import { evaluarReglasVigia } from '../../../lib/vigiaFlota';
+import { evaluarReglasVigia, VENTANA_VIGIA_DIAS } from '../../../lib/vigiaFlota';
 
 /**
  * Agente "Vigía de flota" (FASE 3.4).
@@ -53,12 +53,15 @@ export default function VigiaFlota({ empresaId, periodo = null, fuente = 'real' 
     setEstado('cargando');
     setError(null);
     try {
+      // Ventana acotada: revisar todo el histórico supera el corte de 8 s.
+      const hasta = new Date(periodo.hasta);
+      const desde = new Date(hasta.getTime() - VENTANA_VIGIA_DIAS * 86400000);
       const filas = await obtenerActividadFlota(empresaId, {
-        desde: periodo.desde,
+        desde: desde.toISOString(),
         hasta: periodo.hasta,
         agrupar: 'unidad',
       });
-      const textoRango = formatearRango(periodo.desde, periodo.hasta);
+      const textoRango = formatearRango(desde.toISOString(), periodo.hasta);
       const encontrados = evaluarReglasVigia(filas, { rangoTexto: textoRango });
       setHallazgos(encontrados);
       setRangoTexto(textoRango);
