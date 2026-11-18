@@ -7,7 +7,8 @@ import {
   totalesEventosResumidos,
   formatearHMS,
 } from '../../../lib/agrotrackEventosResumidos';
-import { useRango, ControlesRango, CuerpoEstado, useLimiteFilas, BotonVerMas } from './reportesComunes';
+import { useRango, ControlesRango, CuerpoEstado, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca } from './reportesComunes';
+import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
 
 /**
  * Reporte 15 de Zonar "Eventos resumidos" (FASE 3.6, pedido por el Ing.
@@ -39,18 +40,24 @@ function CeldaTiempo({ segundos, pct, clase }) {
 
 export default function FleetEventsSummary({ empresaId, periodo = null, fuente = 'real', vehicles = [] }) {
   const { rango, setRango, dia, setDia, mes, setMes, desdeHora, setDesdeHora, hastaHora, setHastaHora, consulta, pendienteDeFecha } = useRango(periodo);
-  const [placa, setPlaca] = useState('');
+  const {
+    mostrar,
+    setMostrar,
+    opcionFiltro,
+    setOpcionFiltro,
+    gruposInfo,
+    opcionesGrupos,
+    unidades,
+    unidadesSinPosicion,
+    placasFiltro,
+  } = useFiltroUnidadGrupo({ vehicles, empresaId });
+  const placa = mostrar === 'unidades' ? opcionFiltro : '';
   const [estado, setEstado] = useState('inactivo');
   const [intento, setIntento] = useState(0);
   const [filas, setFilas] = useState([]);
   const [error, setError] = useState(null);
   const [rangoTexto, setRangoTexto] = useState('');
   const [descargaError, setDescargaError] = useState(null);
-
-  const unidades = useMemo(
-    () => vehicles.map((v) => ({ placa: v.placa, descripcion: v.descripcion || '' })),
-    [vehicles]
-  );
 
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
@@ -86,14 +93,46 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
     };
   }, [empresaId, consulta, placa, pendienteDeFecha, intento]);
 
+  const filasFiltradas = useMemo(
+    () => filtrarFilasPorPlaca(filas, placasFiltro, (fila) => fila?.placa),
+    [filas, placasFiltro],
+  );
+
   // Duración real del rango (limitada al periodo cargado): es el denominador
   // de los porcentajes y el Total de cada fila.
   const totalSegundos = useMemo(() => segundosDelRango(consulta, periodo), [consulta, periodo]);
 
-  const filasCalculadas = useMemo(
-    () => calcularEventosResumidos(filas, totalSegundos),
-    [filas, totalSegundos]
+  const filasBaseCalculadas = useMemo(
+    () => calcularEventosResumidos(filasFiltradas, totalSegundos),
+    [filasFiltradas, totalSegundos]
   );
+
+  const unidadesSinTelemetria = useMemo(() => {
+    if (placasFiltro == null) return unidadesSinPosicion;
+    const placas = new Set(placasFiltro.map(normalizarPlaca));
+    return unidadesSinPosicion.filter((unidad) => placas.has(unidad.placa));
+  }, [placasFiltro, unidadesSinPosicion]);
+
+  const filasCalculadas = useMemo(() => {
+    const presentes = new Set(filasBaseCalculadas.map((fila) => normalizarPlaca(fila.placa)).filter(Boolean));
+    return [
+      ...filasBaseCalculadas,
+      ...unidadesSinTelemetria
+        .filter((unidad) => !presentes.has(unidad.placa))
+        .map((unidad) => ({
+          placa: unidad.placa,
+          unidad: unidad.area || unidad.descripcion || unidad.placa,
+          stop: null,
+          idle: null,
+          drive: null,
+          total: null,
+          pct_stop: null,
+          pct_idle: null,
+          pct_drive: null,
+          sin_telemetria: true,
+        })),
+    ];
+  }, [filasBaseCalculadas, unidadesSinTelemetria]);
 
   // Tabla limitada a 15 filas; totales, filtros y Excel usan todo.
   const { filasVistas, expandido, alternar, total } = useLimiteFilas(filasCalculadas);
@@ -112,7 +151,7 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
     setDescargaError(null);
     try {
       const { exportarEventosResumidosExcel } = await import('../../../lib/exportExcel');
-      exportarEventosResumidosExcel(filas, { totalSegundos, rangoTexto, placa });
+      exportarEventosResumidosExcel(filas, { totalSegundos, rangoTexto, placa: '' });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
     }
@@ -137,6 +176,7 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
                 <Database size={12} /> Datos reales: {rangoTexto}
               </span>
             ) : null}
+            <BotonActualizarAhora onClick={() => setIntento((n) => n + 1)} disabled={estado === 'cargando' || pendienteDeFecha} cargando={estado === 'cargando'} />
             <button
               type="button"
               onClick={descargarExcel}
@@ -151,21 +191,15 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
 
         <div className="flex flex-wrap items-end gap-3">
           <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} desdeHora={desdeHora} setDesdeHora={setDesdeHora} hastaHora={hastaHora} setHastaHora={setHastaHora} />
-          <label className="min-w-0">
-            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Unidad</span>
-            <select
-              value={placa}
-              onChange={(e) => setPlaca(e.target.value)}
-              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-            >
-              <option value="">Todas las unidades</option>
-              {unidades.map((u) => (
-                <option key={u.placa} value={u.placa}>
-                  {u.descripcion ? `${u.placa} · ${u.descripcion}` : u.placa}
-                </option>
-              ))}
-            </select>
-          </label>
+          <ControlesFiltroUnidadGrupo
+            mostrar={mostrar}
+            setMostrar={setMostrar}
+            opcionFiltro={opcionFiltro}
+            setOpcionFiltro={setOpcionFiltro}
+            unidades={unidades}
+            opcionesGrupos={opcionesGrupos}
+            gruposInfo={gruposInfo}
+          />
         </div>
       </div>
 
@@ -176,8 +210,9 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
         error={error}
         onReintentar={() => setIntento((n) => n + 1)}
         mensajeVacio={`No hay posiciones en ${rangoTexto || 'el rango elegido'}${placa ? ` para la unidad ${placa}` : ''}. Prueba con otro día/mes o con “Todas las unidades”.`}
+        childrenCuandoVacio={filasCalculadas.length > 0}
       >
-        {estado === 'ok' ? (
+        {estado === 'ok' || filasCalculadas.length ? (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-slate-700">

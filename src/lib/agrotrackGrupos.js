@@ -221,3 +221,115 @@ export function listaGruposConocidos(gruposPorPlaca = {}) {
   });
   return [...valores].sort((a, b) => a.localeCompare(b, 'es'));
 }
+
+/** Normaliza placas para claves estables entre RPC y UI. */
+export function normalizarPlaca(placa) {
+  return String(placa || '').trim().toUpperCase();
+}
+
+/** Grupo de una placa; cuando el RPC no existe, degrada a la descripción. */
+export function grupoPorPlaca(placa, { grupos = {}, disponible = true } = {}, descripcion = '') {
+  const clave = normalizarPlaca(placa);
+  if (!clave) return '';
+  const desdeRpc = String(grupos?.[clave] ?? grupos?.[placa] ?? '').trim();
+  if (desdeRpc) return desdeRpc;
+  if (!disponible) return String(descripcion || '').trim() || GRUPO_SIN_GRUPO;
+  return GRUPO_SIN_GRUPO;
+}
+
+/**
+ * Unión de vehículos reales, padrón y grupos. Las filas del padrón solo se
+ * usan para completar unidades sin telemetría GPS.
+ */
+export function unidadesConPosicionYGrupos(vehicles = [], gruposInfo = {}, maestroInfo = {}) {
+  const porPlaca = new Map();
+  const maestroPorPlaca = new Map(
+    (maestroInfo?.unidades || []).map((unidad) => [normalizarPlaca(unidad.placa), unidad]),
+  );
+
+  (vehicles || []).forEach((vehicle) => {
+    const placa = normalizarPlaca(vehicle?.placa || vehicle?.id);
+    if (!placa) return;
+    const maestro = maestroPorPlaca.get(placa);
+    porPlaca.set(placa, {
+      ...vehicle,
+      placa,
+      id: vehicle?.id || placa,
+      descripcion: String(vehicle?.descripcion || vehicle?.modelo || maestro?.descripcion || '').trim(),
+      fuente: vehicle?.fuente || 'real',
+      area: String(vehicle?.area || maestro?.area || '').trim(),
+      grupo: String(vehicle?.grupo || maestro?.grupo || '').trim(),
+      estado_operativo: String(vehicle?.estado_operativo || maestro?.estado_operativo || '').trim(),
+      estado_movimiento: String(vehicle?.estado_movimiento || maestro?.estado_movimiento || '').trim(),
+    });
+  });
+
+  (maestroInfo?.unidades || []).forEach((unidad) => {
+    const placa = normalizarPlaca(unidad.placa);
+    if (!placa || porPlaca.has(placa)) return;
+    porPlaca.set(placa, {
+      ...unidad,
+      id: placa,
+      placa,
+      descripcion: String(unidad?.area || unidad?.descripcion || '').trim(),
+      area: String(unidad?.area || '').trim(),
+      grupo: String(unidad?.grupo || '').trim(),
+      estado_operativo: String(unidad?.estado_operativo || '').trim(),
+      estado_movimiento: String(unidad?.estado_movimiento || '').trim(),
+      fuente: 'maestro',
+      sin_telemetria: true,
+    });
+  });
+
+  const grupos = gruposInfo?.grupos || {};
+  Object.entries(grupos).forEach(([placaOriginal, grupo]) => {
+    const placa = normalizarPlaca(placaOriginal);
+    if (!placa || porPlaca.has(placa)) return;
+    porPlaca.set(placa, {
+      id: placa,
+      placa,
+      descripcion: '',
+      area: '',
+      grupo: String(grupo || '').trim(),
+      estado_operativo: '',
+      estado_movimiento: '',
+      modelo: '',
+      estado: 'fuera_servicio',
+      lat: null,
+      lng: null,
+      velocidad_kmh: null,
+      ultima_fecha: null,
+      ultimo_evento: '',
+      km_recorridos: null,
+      eventos_alta_velocidad: null,
+      fuente: 'grupo',
+      sin_telemetria: true,
+    });
+  });
+
+  return [...porPlaca.values()].sort((a, b) => a.placa.localeCompare(b.placa, 'es'));
+}
+
+/** Resuelve el radio MOSTRAR a una lista de placas (o null para Todos). */
+export function resolverPlacasFiltro(vehicles = [], gruposInfo = {}, mostrar, opcionFiltro) {
+  const opcion = normalizarPlaca(opcionFiltro || '');
+  const opcionLimpia = String(opcionFiltro || '').trim();
+  if (!opcionLimpia) return null;
+  if (mostrar === 'unidades') return [opcionLimpia.toUpperCase()];
+
+  const grupos = gruposInfo?.grupos || {};
+  const disponible = gruposInfo?.disponible !== false;
+  const porPlaca = new Map();
+  (vehicles || []).forEach((vehicle) => {
+    const placa = normalizarPlaca(vehicle?.placa || vehicle?.id);
+    if (placa) porPlaca.set(placa, String(vehicle?.descripcion || vehicle?.modelo || '').trim());
+  });
+  Object.keys(grupos).forEach((placa) => porPlaca.set(normalizarPlaca(placa), ''));
+
+  const resultado = [];
+  porPlaca.forEach((descripcion, placa) => {
+    const grupo = grupoPorPlaca(placa, { grupos, disponible }, descripcion);
+    if (grupo === opcionLimpia) resultado.push(placa);
+  });
+  return resultado;
+}

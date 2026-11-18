@@ -3,12 +3,12 @@ import {
   Table2, Loader2, AlertTriangle, RotateCw, FileSpreadsheet, Database, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { ultimoDiaLima } from '../../../lib/agrotrackFlota';
-import { cargarGruposUnidades } from '../../../lib/agrotrackGrupos';
 import {
   asegurarVisitasCalculadas, leerVisitasDia, leerTablaGeocercasDia,
   armarMatriz, METRICAS, partesLima, duracionTexto, horasDecimal, codigoArea,
 } from '../../../lib/agrotrackVisitasDia';
-import { hoyLima, rangoRapido, useLimiteFilas, BotonVerMas } from './reportesComunes';
+import { hoyLima, rangoRapido, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, AvisoUnidadesSinTelemetria } from './reportesComunes';
+import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
 
 /**
  * TABLA DIARIA DE GEOCERCAS · TODAS LAS UNIDADES (14/11/2026)
@@ -50,15 +50,25 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
   const [desdeDia, setDesdeDia] = useState('');
   const [hastaDia, setHastaDia] = useState('');
   const [geocerca, setGeocerca] = useState('');
-  const [grupo, setGrupo] = useState('');
   const [metrica, setMetrica] = useState('duracion_segundos');
+  const {
+    mostrar,
+    setMostrar,
+    opcionFiltro,
+    setOpcionFiltro,
+    gruposInfo,
+    grupoDePlaca,
+    opcionesGrupos,
+    unidades,
+    unidadesSinPosicion,
+    placasFiltro,
+  } = useFiltroUnidadGrupo({ vehicles, empresaId });
   const [estado, setEstado] = useState('inactivo'); // inactivo | calculando | cargando | ok | vacio | error
   const [progreso, setProgreso] = useState(null);
   const [error, setError] = useState('');
   const [avisos, setAvisos] = useState([]);
   const [visitas, setVisitas] = useState([]);
   const [tabla, setTabla] = useState([]);
-  const [grupos, setGrupos] = useState({});
   const [intento, setIntento] = useState(0);
   const [verDetalle, setVerDetalle] = useState(false);
   const [paginaDetalle, setPaginaDetalle] = useState(1);
@@ -75,11 +85,6 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
     setDesdeDia(dia);
     setHastaDia(dia);
   }, [periodo?.hasta, desdeDia]);
-
-  useEffect(() => {
-    if (!empresaId) return;
-    cargarGruposUnidades(empresaId).then((r) => setGrupos(r.grupos || {})).catch(() => setGrupos({}));
-  }, [empresaId]);
 
   const rangoValido = desdeDia && hastaDia && hastaDia >= desdeDia && diasEntre(desdeDia, hastaDia) < MAX_DIAS;
 
@@ -121,48 +126,64 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
   // Área (código de Zonar) y grupo de cada placa.
   const infoPlaca = useMemo(() => {
     const info = {};
-    vehicles.forEach((v) => {
-      const placa = v.placa || v.id;
+    unidades.forEach((v) => {
+      const placa = normalizarPlaca(v.placa || v.id);
       if (!placa) return;
-      info[placa] = { area: codigoArea(v.unidad || v.descripcion, placa) || v.descripcion || '', grupo: grupos[placa] || '' };
+      info[placa] = { area: v.area || codigoArea(v.unidad || v.descripcion, placa) || v.descripcion || '', grupo: grupoDePlaca[placa] || '' };
     });
     visitas.forEach((v) => {
-      if (!info[v.placa]) info[v.placa] = { area: codigoArea(v.unidad, v.placa), grupo: grupos[v.placa] || '' };
-      else if (!info[v.placa].area) info[v.placa].area = codigoArea(v.unidad, v.placa);
-    });
-    Object.keys(grupos).forEach((placa) => {
-      if (info[placa]) info[placa].grupo = grupos[placa];
+      const placa = normalizarPlaca(v.placa);
+      if (!placa) return;
+      if (!info[placa]) info[placa] = { area: codigoArea(v.unidad, placa), grupo: grupoDePlaca[placa] || '' };
+      else if (!info[placa].area) info[placa].area = codigoArea(v.unidad, placa);
     });
     return info;
-  }, [vehicles, visitas, grupos]);
+  }, [unidades, visitas, grupoDePlaca]);
 
   const geocercasDisponibles = useMemo(
     () => [...new Set(tabla.map((f) => f.geocerca))].sort((a, b) => a.localeCompare(b, 'es')),
     [tabla],
   );
-  const gruposDisponibles = useMemo(
-    () => [...new Set(Object.values(infoPlaca).map((i) => i.grupo || i.area).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es')),
-    [infoPlaca],
-  );
+  const unidadesSinTelemetria = useMemo(() => {
+    if (placasFiltro == null) return unidadesSinPosicion;
+    const placas = new Set(placasFiltro.map(normalizarPlaca));
+    return unidadesSinPosicion.filter((unidad) => placas.has(unidad.placa));
+  }, [placasFiltro, unidadesSinPosicion]);
 
   const pasaFiltros = useCallback((placa, geo) => {
     if (geocerca && geo !== geocerca) return false;
-    if (grupo) {
-      const i = infoPlaca[placa] || {};
-      if ((i.grupo || i.area) !== grupo) return false;
-    }
+    if (placasFiltro) return placasFiltro.map(normalizarPlaca).includes(normalizarPlaca(placa));
     return true;
-  }, [geocerca, grupo, infoPlaca]);
+  }, [geocerca, placasFiltro]);
 
   const tablaFiltrada = useMemo(() => tabla.filter((f) => pasaFiltros(f.placa, f.geocerca)), [tabla, pasaFiltros]);
   const visitasFiltradas = useMemo(() => visitas.filter((v) => pasaFiltros(v.placa, v.geocerca)), [visitas, pasaFiltros]);
-  const matriz = useMemo(() => armarMatriz(tablaFiltrada, infoPlaca, metrica), [tablaFiltrada, infoPlaca, metrica]);
+  const matrizBase = useMemo(() => armarMatriz(tablaFiltrada, infoPlaca, metrica), [tablaFiltrada, infoPlaca, metrica]);
+  const matriz = useMemo(() => {
+    const presentes = new Set(matrizBase.filas.map((fila) => normalizarPlaca(fila.placa)).filter(Boolean));
+    const rows = unidadesSinTelemetria
+      .filter((unidad) => !presentes.has(unidad.placa))
+      .map((unidad) => ({
+        placa: unidad.placa,
+        area: '',
+        grupo: grupoDePlaca[unidad.placa] || '',
+        valores: {},
+        total: null,
+        sin_telemetria: true,
+      }));
+    if (!rows.length) return matrizBase;
+    const filas = [...matrizBase.filas, ...rows].sort((a, b) =>
+      (a.grupo || a.area || 'zzz').localeCompare(b.grupo || b.area || 'zzz', 'es')
+        || a.placa.localeCompare(b.placa, 'es'));
+    return { ...matrizBase, filas };
+  }, [matrizBase, unidadesSinTelemetria, grupoDePlaca]);
+  const matrizExport = useMemo(() => armarMatriz(tabla, infoPlaca, metrica), [tabla, infoPlaca, metrica]);
   const { filasVistas: filasMatriz, expandido: expandidoMatriz, alternar: alternarMatriz, total: totalMatrizFilas } = useLimiteFilas(matriz.filas);
 
   const kpis = useMemo(() => {
     const s = (c) => tablaFiltrada.reduce((acc, f) => acc + Number(f[c] || 0), 0);
     return {
-      unidades: new Set(tablaFiltrada.map((f) => f.placa)).size,
+      unidades: matriz.filas.length,
       geocercas: new Set(tablaFiltrada.map((f) => f.geocerca)).size,
       visitas: tablaFiltrada.reduce((acc, f) => acc + Number(f.visitas || 0), 0),
       total: s('duracion_segundos'),
@@ -170,7 +191,7 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
       ralenti: s('ralenti_segundos'),
       viaje: s('viaje_segundos'),
     };
-  }, [tablaFiltrada]);
+  }, [tablaFiltrada, matriz.filas.length]);
 
   const detalle = useMemo(() => {
     const q = buscar.trim().toLowerCase();
@@ -192,8 +213,8 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
     setExportError('');
     try {
       const { exportarTablaDinamicaGeocercasExcel } = await import('../../../lib/exportExcelReportes');
-      exportarTablaDinamicaGeocercasExcel(visitasFiltradas, {
-        matriz, infoPlaca, desdeDia, hastaDia,
+      exportarTablaDinamicaGeocercasExcel(visitas, {
+        matriz: matrizExport, infoPlaca, desdeDia, hastaDia,
         metricaLabel: METRICAS.find((m) => m.id === metrica)?.label,
       });
     } catch (e) {
@@ -218,14 +239,7 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIntento((n) => n + 1)}
-              disabled={ocupado || !rangoValido}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40 transition-colors"
-            >
-              <RotateCw size={13} /> Actualizar
-            </button>
+            <BotonActualizarAhora onClick={() => setIntento((n) => n + 1)} disabled={ocupado || !rangoValido} cargando={ocupado} />
             <button
               type="button"
               onClick={descargarExcel}
@@ -272,14 +286,15 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
               {geocercasDisponibles.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
           </label>
-          <label className="min-w-0">
-            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Grupo / área</span>
-            <select value={grupo} onChange={(e) => setGrupo(e.target.value)}
-              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 bg-white max-w-[200px]">
-              <option value="">Todas las unidades</option>
-              {gruposDisponibles.map((g) => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </label>
+          <ControlesFiltroUnidadGrupo
+            mostrar={mostrar}
+            setMostrar={setMostrar}
+            opcionFiltro={opcionFiltro}
+            setOpcionFiltro={setOpcionFiltro}
+            unidades={unidades}
+            opcionesGrupos={opcionesGrupos}
+            gruposInfo={gruposInfo}
+          />
           <label className="min-w-0">
             <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Valores (horas)</span>
             <select value={metrica} onChange={(e) => setMetrica(e.target.value)}
@@ -330,15 +345,16 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
         </div>
       ) : null}
 
-      {estado === 'vacio' ? (
+      {estado === 'vacio' && !matriz.filas.length ? (
         <div className="p-8 text-center">
           <p className="text-sm font-semibold text-slate-600">Sin visitas a geocercas</p>
           <p className="text-xs text-slate-400 mt-1">Ninguna unidad entró a una geocerca entre {fechaCorta(desdeDia)} y {fechaCorta(hastaDia)}.</p>
         </div>
       ) : null}
 
-      {estado === 'ok' ? (
+      {(estado === 'ok' || (estado === 'vacio' && matriz.filas.length > 0)) ? (
         <>
+          <AvisoUnidadesSinTelemetria unidades={unidadesSinTelemetria} />
           {avisos.length ? (
             <div className="mx-4 mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-800">
               Algunas unidades no se pudieron calcular (se reintentará solo): {avisos.join(' · ')}
@@ -383,10 +399,10 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
                     <td className="sticky left-[110px] bg-white px-2 py-1.5 font-bold text-slate-800 whitespace-nowrap">{f.placa}</td>
                     {matriz.geocercas.map((g) => (
                       <td key={g} className={`px-2 py-1.5 text-right tabular-nums ${f.valores[g] ? 'text-slate-800' : 'text-slate-300'}`}>
-                        {h2(f.valores[g] || 0)}
+                        {f.sin_telemetria ? '—' : h2(f.valores[g] || 0)}
                       </td>
                     ))}
-                    <td className="px-2 py-1.5 text-right font-bold tabular-nums">{h2(f.total)}</td>
+                    <td className="px-2 py-1.5 text-right font-bold tabular-nums">{f.sin_telemetria ? '—' : h2(f.total)}</td>
                   </tr>
                 ))}
               </tbody>

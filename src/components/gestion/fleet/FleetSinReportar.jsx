@@ -5,7 +5,8 @@ import { obtenerEstadoVivo } from '../../../lib/agrotrackTiempoReal';
 import { formatearFechaHora } from '../../../lib/agrotrackFlota';
 import { armarContextoReporte } from '../../../lib/reportesIa';
 import { llamarIaGestion } from '../../../lib/agrotrackIa';
-import { CuerpoEstado, haceCuanto, useLimiteFilas, BotonVerMas } from './reportesComunes';
+import { CuerpoEstado, haceCuanto, useLimiteFilas, BotonVerMas, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca } from './reportesComunes';
+import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
 
 /**
  * Reporte "Unidades sin reportar" (réplica de la captura de Zonar:
@@ -63,6 +64,22 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
   const [explicacion, setExplicacion] = useState(null);
   const [errorExplicacion, setErrorExplicacion] = useState(null);
 
+  const vehiclesFromFilas = useMemo(
+    () => filas.map((fila) => ({ placa: fila.placa, descripcion: fila.unidad || '' })),
+    [filas],
+  );
+  const {
+    mostrar,
+    setMostrar,
+    opcionFiltro,
+    setOpcionFiltro,
+    gruposInfo,
+    opcionesGrupos,
+    unidades,
+    unidadesSinPosicion,
+    placasFiltro,
+  } = useFiltroUnidadGrupo({ vehicles: vehiclesFromFilas, empresaId });
+
   // Última posición conocida de cada unidad (rangos nulos = histórico completo).
   useEffect(() => {
     if (!empresaId) {
@@ -101,9 +118,34 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
 
   // Filas con la antigüedad calculada contra la ventana elegida, ordenadas
   // por mayor antigüedad primero (las que nunca reportaron quedan arriba).
+  const unidadesSinTelemetria = useMemo(() => {
+    if (placasFiltro == null) return unidadesSinPosicion;
+    const placas = new Set(placasFiltro.map(normalizarPlaca));
+    return unidadesSinPosicion.filter((unidad) => placas.has(unidad.placa));
+  }, [placasFiltro, unidadesSinPosicion]);
+
+  const filasConSinTelemetria = useMemo(() => {
+    const presentes = new Set(filas.map((fila) => normalizarPlaca(fila.placa)).filter(Boolean));
+    return [
+      ...filas,
+      ...unidadesSinTelemetria
+        .filter((unidad) => !presentes.has(unidad.placa))
+        .map((unidad) => ({
+          placa: unidad.placa,
+          unidad: unidad.area || unidad.descripcion || unidad.placa,
+          ultima_fecha: null,
+          direccion: '',
+          ultimo_evento: '',
+          geocerca: '',
+          geocerca_ultima: '',
+          sin_telemetria: true,
+        })),
+    ];
+  }, [filas, unidadesSinTelemetria]);
+
   const filasVistas = useMemo(() => {
     const umbralMs = ahora.getTime() - ventana * 3600 * 1000;
-    return filas
+    return filtrarFilasPorPlaca(filasConSinTelemetria, placasFiltro, (fila) => fila.placa)
       .map((f) => {
         const t = Date.parse(f.ultima_fecha || '');
         const tieneFecha = Number.isFinite(t);
@@ -116,7 +158,7 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
         };
       })
       .sort((a, b) => (a.antiguedadMs === b.antiguedadMs ? 0 : b.antiguedadMs - a.antiguedadMs));
-  }, [filas, ahora, ventana]);
+  }, [filasConSinTelemetria, placasFiltro, ahora, ventana]);
 
   // Tabla limitada a 15 filas; Excel e IA usan la lista completa.
   const { filasVistas: filasTabla, expandido, alternar, total } = useLimiteFilas(filasVistas);
@@ -128,7 +170,7 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
 
   const pendienteDeFecha = !empresaId;
   const mensajePendiente = 'Selecciona una empresa activa para consultar las unidades sin reportar.';
-  const puedeExportar = estado === 'ok' && filasVistas.length > 0;
+  const puedeExportar = estado === 'ok' && filas.length > 0;
 
   // El XLSX se importa bajo demanda: la librería pesa ~430 kB y solo se
   // necesita cuando el usuario pide el archivo.
@@ -136,7 +178,7 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
     setDescargaError(null);
     try {
       const { exportarSinReportarExcel } = await import('../../../lib/exportExcelReportes');
-      exportarSinReportarExcel(filasVistas, { ventanaHoras: ventana, generado: generadoEn || ahora });
+      exportarSinReportarExcel(filas, { ventanaHoras: ventana, generado: generadoEn || ahora });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
     }
@@ -246,6 +288,16 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
           </div>
         ) : null}
 
+        <ControlesFiltroUnidadGrupo
+          mostrar={mostrar}
+          setMostrar={setMostrar}
+          opcionFiltro={opcionFiltro}
+          setOpcionFiltro={setOpcionFiltro}
+          unidades={unidades}
+          opcionesGrupos={opcionesGrupos}
+          gruposInfo={gruposInfo}
+        />
+
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Ventana sin reportar</p>
           <div className="flex flex-wrap gap-1.5">
@@ -272,8 +324,9 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
         error={error}
         onReintentar={() => setIntento((n) => n + 1)}
         mensajeVacio="Esta empresa todavía no tiene unidades con posición conocida en agrotrack_posiciones, así que no hay nada que comparar contra la ventana."
+        childrenCuandoVacio={filasVistas.length > 0}
       >
-        {estado === 'ok' ? (
+        {estado === 'ok' || filasVistas.length ? (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-slate-700">

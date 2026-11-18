@@ -24,8 +24,9 @@ import {
   numero,
   useLimiteFilas,
   BotonVerMas,
+  useFiltroUnidadGrupo,
+  ControlesFiltroUnidadGrupo,
 } from '../../components/gestion/fleet/reportesComunes';
-import { cargarGruposUnidades, GRUPO_SIN_GRUPO } from '../../lib/agrotrackGrupos';
 
 /**
  * src/modules/gestion/ReportesPage.jsx
@@ -312,25 +313,6 @@ function mapearFilas(report, crudas, ctx) {
   }
 }
 
-/** Placas a incluir cuando el selector "Mostrar" filtra por unidad o por grupo.
- *  null = sin filtro. Misma regla de agrupación que el mapa (descripción si
- *  falta el RPC de grupos). */
-const placasDelFiltro = (vehicles, gruposInfo, mostrar, opcion) => {
-  if (!opcion) return null;
-  if (mostrar === 'unidades') return [opcion];
-  const grupos = gruposInfo?.disponible ? gruposInfo.grupos : {};
-  return (vehicles || [])
-    .filter((v) => {
-      const placa = String(v?.placa || '').trim();
-      if (!placa) return false;
-      const g = grupos[placa]
-        || (!gruposInfo?.disponible ? String(v?.descripcion || '').trim() : '')
-        || GRUPO_SIN_GRUPO;
-      return g === opcion;
-    })
-    .map((v) => String(v.placa).trim());
-};
-
 export default function ReportesPage({
   selectedModuleId,
   empresaId = null,
@@ -349,14 +331,21 @@ export default function ReportesPage({
   const [explicacion, setExplicacion] = useState(null);
   const [explicando, setExplicando] = useState(false);
   const [errorExplicacion, setErrorExplicacion] = useState(null);
-  // "Reporte básico" permite elegir si se ve por Unidades o por Grupos: el
-  // selector se adapta a los datos (placas con descripción o grupos reales).
-  const [mostrar, setMostrar] = useState('unidades');
-  const [opcionFiltro, setOpcionFiltro] = useState('');
-  const [gruposInfo, setGruposInfo] = useState({ grupos: {}, disponible: true, aviso: null });
   // Reporte "Geocercas: entradas y salidas": desplegable de geocercas (reemplaza
   // al antiguo "Agrupar"; filtra la tabla a la geocerca elegida).
   const [geocercaSel, setGeocercaSel] = useState('');
+
+  const {
+    mostrar,
+    setMostrar,
+    opcionFiltro,
+    setOpcionFiltro,
+    gruposInfo,
+    grupoDePlaca,
+    opcionesGrupos,
+    unidades,
+    placasFiltro,
+  } = useFiltroUnidadGrupo({ vehicles, empresaId });
 
   const { rango, setRango, dia, setDia, mes, setMes, desdeHora, setDesdeHora, hastaHora, setHastaHora, consulta, pendienteDeFecha } = useRango(periodo);
 
@@ -374,19 +363,6 @@ export default function ReportesPage({
   // el efecto de carga lo usa para recalcular con las placas elegidas sin
   // recargar los demás reportes.
   const filtroKey = esGeocercas || esLimiteVel ? `${mostrar}|${opcionFiltro}` : '';
-
-  // Grupos reales de las unidades (RPC); si no existe, se agrupa por la
-  // descripción de la unidad (mismo criterio que el mapa de flota).
-  useEffect(() => {
-    if (!(esBasico || esGeocercas || esLimiteVel) || !empresaId) return undefined;
-    let cancelado = false;
-    cargarGruposUnidades(empresaId).then((info) => {
-      if (!cancelado) setGruposInfo(info);
-    });
-    return () => {
-      cancelado = true;
-    };
-  }, [esBasico, esGeocercas, esLimiteVel, empresaId]);
 
   const requierePlaca = report?.fuente === 'recorrido';
   const sinRango = report?.fuente === 'conteo';
@@ -432,11 +408,11 @@ export default function ReportesPage({
           return obtenerActividadFlota(empresaId, { desde, hasta, agrupar });
         }
         case 'alertas': {
-          const placas = esLimiteVel ? placasDelFiltro(vehicles, gruposInfo, mostrar, opcionFiltro) : null;
+          const placas = esLimiteVel ? placasFiltro : null;
           return obtenerAlertasFlota(empresaId, { desde, hasta, limite: 500, placas });
         }
         case 'geocerca': {
-          const placas = placasDelFiltro(vehicles, gruposInfo, mostrar, opcionFiltro);
+          const placas = placasFiltro;
           return obtenerEventosGeocerca(empresaId, { desde, hasta, agrupar: 'geocerca', limite: 500, placas });
         }
         case 'estado':
@@ -493,36 +469,11 @@ export default function ReportesPage({
     return mapearFilas(report, filas, { agrupar, totalSegundos, placa });
   }, [report, esGeocercas, esLimiteVel, estado, filas, rango, totalSegundos, placa]);
 
-  const unidades = useMemo(
-    () => (vehicles || []).map((v) => ({ placa: v.placa, descripcion: v.descripcion || v.modelo || '' })),
-    [vehicles],
-  );
-
-  // Grupo de cada placa (RPC real; si falta, cae a la descripción de la unidad,
-  // igual que el mapa de flota) y filas tras el selector Mostrar del BAJO.
-  const grupoDePlaca = useMemo(() => {
-    const mapa = {};
-    const grupos = gruposInfo.disponible ? gruposInfo.grupos : {};
-    (vehicles || []).forEach((v) => {
-      const placa = String(v.placa || '').trim();
-      if (!placa) return;
-      mapa[placa] = grupos[placa]
-        || (!gruposInfo.disponible ? String(v.descripcion || '').trim() : '')
-        || GRUPO_SIN_GRUPO;
-    });
-    return mapa;
-  }, [vehicles, gruposInfo]);
-
-  const opcionesGrupos = useMemo(
-    () => [...new Set(Object.values(grupoDePlaca))].sort((a, b) => a.localeCompare(b, 'es')),
-    [grupoDePlaca],
-  );
-
   const filasMostradas = useMemo(() => {
     if (!esBasico || !opcionFiltro) return filasVisibles;
     return filasVisibles.filter((row) => (mostrar === 'unidades'
       ? row.unidad === opcionFiltro
-      : (grupoDePlaca[row.unidad] || GRUPO_SIN_GRUPO) === opcionFiltro));
+      : grupoDePlaca[String(row.unidad || '').trim()] === opcionFiltro));
   }, [esBasico, opcionFiltro, filasVisibles, mostrar, grupoDePlaca]);
 
   // Geocercas del desplegable: entradas/salidas lista las presentes en los
@@ -543,16 +494,16 @@ export default function ReportesPage({
 
   const [descargaError, setDescargaError] = useState(null);
   const descargarExcel = async () => {
-    if (!filasGeocercas.length) return;
+    if (!filasVisibles.length) return;
     setDescargaError(null);
     try {
       const { exportarTablaExcel } = await import('../../lib/exportExcelReportes');
-      exportarTablaExcel(`Agrilux_${report?.id || 'reporte'}`, filasGeocercas, {
+      exportarTablaExcel(`Agrilux_${report?.id || 'reporte'}`, filasVisibles, {
         columnas: columnas.map(([key, label]) => [key, label]),
         modelo: report?.label ? `${report.label}${report?.group ? ` · ${report.group}` : ''}` : 'Reporte',
         criterio: [
           { Concepto: 'Rango cargado', Detalle: rangoTexto || (sinRango ? 'todo el periodo cargado' : '—') },
-          { Concepto: 'Filas', Detalle: String(filasGeocercas.length) },
+          { Concepto: 'Filas', Detalle: String(filasVisibles.length) },
         ],
       });
     } catch (e) {
@@ -679,49 +630,15 @@ export default function ReportesPage({
                 </div>
 
                 {esBasico || esGeocercas || esLimiteVel ? (
-                  <div className="flex flex-wrap items-end gap-3 mb-4">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Mostrar</p>
-                      <div className="flex gap-1.5" role="radiogroup" aria-label="Mostrar por grupos o por unidades">
-                        {[['grupos', 'Grupos'], ['unidades', 'Unidades']].map(([id, label]) => (
-                          <button
-                            key={id}
-                            type="button"
-                            role="radio"
-                            aria-checked={mostrar === id}
-                            onClick={() => { setMostrar(id); setOpcionFiltro(''); }}
-                            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
-                              mostrar === id ? 'bg-forest text-white' : 'bg-slate-50 text-slate-500 hover:text-forest'
-                            }`}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <label className="min-w-0">
-                      <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">{mostrar === 'grupos' ? 'Grupo' : 'Unidad'}</span>
-                      <select
-                        value={opcionFiltro}
-                        onChange={(e) => setOpcionFiltro(e.target.value)}
-                        className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 bg-white min-w-[240px] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                      >
-                        <option value="">{mostrar === 'grupos' ? 'Todos los grupos' : 'Todas las unidades'}</option>
-                        {mostrar === 'grupos'
-                          ? opcionesGrupos.map((grupo) => <option key={grupo} value={grupo}>{grupo}</option>)
-                          : unidades.map((u) => (
-                              <option key={u.placa} value={u.placa}>
-                                {u.placa}{u.descripcion ? ` - ${u.descripcion}` : ''}
-                              </option>
-                            ))}
-                      </select>
-                      {mostrar === 'grupos' && !gruposInfo.disponible && gruposInfo.aviso ? (
-                        <span className="block mt-1 text-[10px] text-amber-600 max-w-[280px] leading-snug">
-                          Grupos no disponibles en la base: se agrupa por la descripción de la unidad. {gruposInfo.aviso}
-                        </span>
-                      ) : null}
-                    </label>
-                  </div>
+                  <ControlesFiltroUnidadGrupo
+                    mostrar={mostrar}
+                    setMostrar={setMostrar}
+                    opcionFiltro={opcionFiltro}
+                    setOpcionFiltro={setOpcionFiltro}
+                    unidades={unidades}
+                    opcionesGrupos={opcionesGrupos}
+                    gruposInfo={gruposInfo}
+                  />
                 ) : null}
 
                 <div className="flex flex-wrap items-end gap-3 mb-4">

@@ -335,12 +335,14 @@ grant execute on function public.agrotrack_eventos_geocerca_flota(uuid, timestam
 -- ---------------------------------------------------------------------------
 drop function if exists public.agrotrack_lotes_flota(uuid, timestamptz, timestamptz, integer);
 drop function if exists public.agrotrack_lotes_flota(uuid, timestamptz, timestamptz, text, time, time, integer);
+drop function if exists public.agrotrack_lotes_flota(uuid, timestamptz, timestamptz, text, text[], time, time, integer);
 
 create function public.agrotrack_lotes_flota(
   p_empresa_id  uuid,
   p_desde       timestamptz default null,
   p_hasta       timestamptz default null,
   p_placa       text        default null,
+  p_placas      text[]      default null,
   p_hora_desde  time        default null,
   p_hora_hasta  time        default null,
   p_limite      integer     default 200
@@ -404,9 +406,12 @@ as $$
       and p.empresa_id = p_empresa_id
       and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
       and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
-      -- Filtros pedidos por el Ing. Carlos Perez: una máquina y/o una franja
-      -- horaria del día (hora de Perú, con minutos). null = sin filtro.
+      -- Filtros pedidos por el Ing. Carlos Perez: una o varias máquinas y/o
+      -- una franja horaria del día (hora de Perú, con minutos). null = sin
+      -- filtro. `p_placas` es el arreglo que envía el selector Mostrar de
+      -- Agrilux para filtrar por grupos de unidades.
       and (p_placa is null or p.placa = p_placa)
+      and (p_placas is null or p.placa = any(p_placas))
       and (p_hora_desde is null
         or (p.fecha at time zone 'America/Lima')::time >= p_hora_desde)
       and (p_hora_hasta is null
@@ -535,7 +540,7 @@ as $$
   limit greatest(coalesce(p_limite, 200), 1);
 $$;
 
-grant execute on function public.agrotrack_lotes_flota(uuid, timestamptz, timestamptz, text, time, time, integer)
+grant execute on function public.agrotrack_lotes_flota(uuid, timestamptz, timestamptz, text, text[], time, time, integer)
   to anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------

@@ -12,7 +12,8 @@ import {
   LIMITE_FILAS_ACTIVIDAD,
 } from '../../../lib/agrotrackFlota';
 import { generarResumenFlota } from '../../../lib/agrotrackInsights';
-import { rangoRapido, useLimiteFilas, BotonVerMas } from './reportesComunes';
+import { rangoRapido, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca } from './reportesComunes';
+import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
 
 /**
  * Reporte de actividad de flota (FASE 3).
@@ -52,7 +53,6 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
   // buscadores datetime-local en hora de Perú.
   const [desdeHora, setDesdeHora] = useState('');
   const [hastaHora, setHastaHora] = useState('');
-  const [placa, setPlaca] = useState('');
   const [estado, setEstado] = useState('inactivo');
   const [intento, setIntento] = useState(0);
   const [filas, setFilas] = useState([]);
@@ -76,11 +76,18 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
     setHastaHora((prev) => prev || `${ultimo}T23:59`);
   }, [periodo?.hasta]);
 
-  // Unidades reales para el selector (si no hay datos, no hay qué elegir).
-  const unidades = useMemo(
-    () => vehicles.map((v) => ({ placa: v.placa, descripcion: v.descripcion || '' })),
-    [vehicles]
-  );
+  const {
+    mostrar,
+    setMostrar,
+    opcionFiltro,
+    setOpcionFiltro,
+    gruposInfo,
+    unidades,
+    unidadesSinPosicion,
+    placasFiltro,
+    opcionesGrupos,
+  } = useFiltroUnidadGrupo({ vehicles, empresaId });
+  const placa = mostrar === 'unidades' ? opcionFiltro : '';
 
   const consulta = useMemo(() => {
     if (modo === 'dia') return { ...rangoDiaLima(dia), agrupar: 'dia', texto: dia };
@@ -145,12 +152,52 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
     };
   }, [empresaId, consulta, placa, pendienteDeFecha, intento]);
 
+  const filasFiltradas = useMemo(
+    () => filtrarFilasPorPlaca(filas, placasFiltro, (fila) => fila?.placa),
+    [filas, placasFiltro],
+  );
+
+  const unidadesSinTelemetria = useMemo(() => {
+    if (placasFiltro == null) return unidadesSinPosicion;
+    const placas = new Set(placasFiltro.map(normalizarPlaca));
+    return unidadesSinPosicion.filter((unidad) => placas.has(unidad.placa));
+  }, [placasFiltro, unidadesSinPosicion]);
+
+  const periodoPlaceholder = useMemo(() => {
+    if (modo === 'dia') return dia || null;
+    if (modo === 'mes') return mes || null;
+    if (modo === 'libre') return consulta?.texto || null;
+    return null;
+  }, [modo, dia, mes, consulta]);
+
+  const filasConSinTelemetria = useMemo(() => {
+    const presentes = new Set(filasFiltradas.map((fila) => normalizarPlaca(fila.placa)).filter(Boolean));
+    return [
+      ...filasFiltradas,
+      ...unidadesSinTelemetria
+        .filter((unidad) => !presentes.has(unidad.placa))
+        .map((unidad) => ({
+          placa: unidad.placa,
+          unidad: unidad.area || unidad.descripcion || unidad.placa,
+          periodo: periodoPlaceholder,
+          km_recorridos: null,
+          prendido_segundos: null,
+          viaje_segundos: null,
+          ralenti_segundos: null,
+          vel_max_kmh: null,
+          alertas: null,
+          posiciones: null,
+          sin_telemetria: true,
+        })),
+    ];
+  }, [filasFiltradas, unidadesSinTelemetria, periodoPlaceholder]);
+
   // Orden por columna (los encabezados son botones).
   const filasOrdenadas = useMemo(() => {
     const { campo, dir } = orden;
     const col = COLUMNAS.find((c) => c.id === campo);
     const signo = dir === 'asc' ? 1 : -1;
-    return [...filas].sort((a, b) => {
+    return [...filasConSinTelemetria].sort((a, b) => {
       if (campo === 'placa' || campo === 'unidad' || campo === 'periodo') {
         const av = String(a[campo] ?? a.unidad ?? '');
         const bv = String(b[campo] ?? b.unidad ?? '');
@@ -159,13 +206,13 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
       if (col?.numerica) return (Number(a[campo] || 0) - Number(b[campo] || 0)) * signo;
       return 0;
     });
-  }, [filas, orden]);
+  }, [filasConSinTelemetria, orden]);
 
   // Tabla limitada a 15 filas; el pie y el Excel usan el total completo.
   const { filasVistas: filasTabla, expandido, alternar, total } = useLimiteFilas(filasOrdenadas);
 
   const totales = useMemo(() => {
-    const sum = (campo) => filas.reduce((s, f) => s + Number(f[campo] || 0), 0);
+    const sum = (campo) => filasConSinTelemetria.reduce((s, f) => s + Number(f[campo] || 0), 0);
     return {
       km: sum('km_recorridos'),
       prendido: sum('prendido_segundos'),
@@ -173,12 +220,13 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
       ralenti: sum('ralenti_segundos'),
       alertas: sum('alertas'),
     };
-  }, [filas]);
+  }, [filasConSinTelemetria]);
 
   const alternarOrden = (campo) =>
     setOrden((prev) => (prev.campo === campo ? { campo, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { campo, dir: 'desc' }));
 
   const cargando = estado === 'cargando';
+  const hayTabla = (estado === 'ok' || estado === 'vacio') && filasConSinTelemetria.length > 0;
   const puedeExportar = estado === 'ok' && filas.length > 0;
 
   // El XLSX se importa bajo demanda: la librería xlsx pesa ~430 kB y solo se
@@ -238,6 +286,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
                 <Database size={12} /> Datos reales: {rangoTexto}
               </span>
             ) : null}
+            <BotonActualizarAhora onClick={() => setIntento((n) => n + 1)} disabled={cargando || pendienteDeFecha} cargando={cargando} />
             <button
               type="button"
               onClick={generarResumen}
@@ -356,21 +405,15 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
             </>
           ) : null}
 
-          <label className="min-w-0">
-            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Unidad</span>
-            <select
-              value={placa}
-              onChange={(e) => setPlaca(e.target.value)}
-              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-            >
-              <option value="">Todas las unidades</option>
-              {unidades.map((u) => (
-                <option key={u.placa} value={u.placa}>
-                  {u.descripcion ? `${u.placa} · ${u.descripcion}` : u.placa}
-                </option>
-              ))}
-            </select>
-          </label>
+          <ControlesFiltroUnidadGrupo
+            mostrar={mostrar}
+            setMostrar={setMostrar}
+            opcionFiltro={opcionFiltro}
+            setOpcionFiltro={setOpcionFiltro}
+            unidades={unidades}
+            opcionesGrupos={opcionesGrupos}
+            gruposInfo={gruposInfo}
+          />
         </div>
       </div>
 
@@ -409,7 +452,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
         </div>
       ) : null}
 
-      {!pendienteDeFecha && estado === 'vacio' ? (
+      {!pendienteDeFecha && estado === 'vacio' && !hayTabla ? (
         <div className="p-8 text-center">
           <p className="text-sm font-semibold text-slate-600">Sin datos para ese rango</p>
           <p className="text-xs text-slate-400 mt-1 leading-relaxed">
@@ -419,7 +462,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
         </div>
       ) : null}
 
-      {!pendienteDeFecha && estado === 'ok' ? (
+      {!pendienteDeFecha && hayTabla ? (
         <>
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-slate-700">
@@ -469,7 +512,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
               <tfoot>
                 <tr className="bg-slate-50 text-slate-700 font-bold">
                   <td className="px-3 py-2.5" colSpan={2}>
-                    Totales de {filas.length} fila{filas.length === 1 ? '' : 's'}
+                    Totales de {filasConSinTelemetria.length} fila{filasConSinTelemetria.length === 1 ? '' : 's'}
                   </td>
                   <td className="px-3 py-2.5 text-right">{numero(totales.km, 1)}</td>
                   <td className="px-3 py-2.5 text-right">{formatearDuracion(totales.prendido)}</td>
@@ -484,7 +527,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
 
           <BotonVerMas expandido={expandido} onAlternar={alternar} total={total} />
 
-          {filas.length >= LIMITE_FILAS_ACTIVIDAD ? (
+          {filasConSinTelemetria.length >= LIMITE_FILAS_ACTIVIDAD ? (
             <p className="px-4 py-2 text-[10px] text-amber-600 border-t border-slate-50">
               Se alcanzó el tope de {LIMITE_FILAS_ACTIVIDAD} filas (límite de PostgREST). Reduce el rango o agrupa por mes.
             </p>

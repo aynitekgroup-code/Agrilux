@@ -3,7 +3,8 @@ import { Database, FileSpreadsheet, MapPinned, Gauge, RotateCw, Radio } from 'lu
 import { obtenerEstadoVivo, obtenerLatidos, suscribirEstadoVivo, describirLatido } from '../../../lib/agrotrackTiempoReal';
 import { obtenerEstadoUnidadesFlota, LIMITE_ESTADO_UNIDADES } from '../../../lib/agrotrackReportesGeocerca';
 import { formatearFechaHora, clasificarEstado } from '../../../lib/agrotrackFlota';
-import { useRango, ControlesRango, CuerpoEstado, numero, useLimiteFilas, BotonVerMas } from './reportesComunes';
+import { useRango, ControlesRango, CuerpoEstado, numero, useLimiteFilas, BotonVerMas, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca } from './reportesComunes';
+import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
 import { StatusPill } from './VehicleList';
 
 /**
@@ -65,10 +66,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
   const [rangoTexto, setRangoTexto] = useState('');
   const [descargaError, setDescargaError] = useState(null);
   const [generadoEn, setGeneradoEn] = useState(null);
-  // Filtros pedidos por el Ing. Carlos Perez (12:22 p. m.): buscar por
-  // máquina (placa) y por geocerca. Se aplican sobre las filas ya traídas
-  // por la RPC (una por placa), sin volver a llamar a la base.
-  const [filtroPlaca, setFiltroPlaca] = useState('');
+
   const [filtroGeocerca, setFiltroGeocerca] = useState('');
   // 14/11/2026 (observación III): modo TIEMPO REAL con los datos que el
   // agente trae de Zonar cada 2 minutos (agrotrack_estado_vivo). Activo por
@@ -81,6 +79,22 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
   // está fuera, la última en la que estuvo (fallback de la RPC).
   const geocercaMostrada = (f) => f.geocerca || f.geocerca_ultima || '';
   const FUERA = '__fuera__';
+
+  const vehiclesFromFilas = useMemo(
+    () => filas.map((fila) => ({ placa: fila.placa, descripcion: fila.unidad || '' })),
+    [filas],
+  );
+  const {
+    mostrar,
+    setMostrar,
+    opcionFiltro,
+    setOpcionFiltro,
+    gruposInfo,
+    opcionesGrupos,
+    unidades,
+    unidadesSinPosicion,
+    placasFiltro,
+  } = useFiltroUnidadGrupo({ vehicles: vehiclesFromFilas, empresaId });
 
   // ---- Tiempo real: lectura + Realtime + respaldo cada 60 s ----
   useEffect(() => {
@@ -170,40 +184,61 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
     return () => clearInterval(reloj);
   }, [empresaId]);
 
-  // Opciones de los selectores de filtro, derivadas de los datos cargados.
-  const opcionesPlacas = useMemo(
-    () => [...new Set(filas.map((f) => f.placa))].sort((a, b) => a.localeCompare(b, 'es')),
-    [filas],
-  );
+  const unidadesSinTelemetria = useMemo(() => {
+    if (placasFiltro == null) return unidadesSinPosicion;
+    const placas = new Set(placasFiltro.map(normalizarPlaca));
+    return unidadesSinPosicion.filter((unit) => placas.has(unit.placa));
+  }, [placasFiltro, unidadesSinPosicion]);
+
+  const filasConSinTelemetria = useMemo(() => {
+    const presentes = new Set(filas.map((fila) => normalizarPlaca(fila.placa)).filter(Boolean));
+    return [
+      ...filas,
+      ...unidadesSinTelemetria
+        .filter((unidad) => !presentes.has(unidad.placa))
+        .map((unidad) => ({
+          placa: unidad.placa,
+          unidad: unidad.area || unidad.descripcion || unidad.placa,
+          ultima_fecha: null,
+          estado_movimiento: unidad.estado_movimiento || 'detenido',
+          ultima_velocidad: null,
+          geocerca: '',
+          geocerca_ultima: '',
+          sin_telemetria: true,
+        })),
+    ];
+  }, [filas, unidadesSinTelemetria]);
+
   const opcionesGeocercas = useMemo(() => {
-    const set = new Set(filas.map(geocercaMostrada));
+    const set = new Set(filasConSinTelemetria.map(geocercaMostrada));
     return [...set].sort((a, b) => String(a || 'zzz').localeCompare(String(b || 'zzz'), 'es'));
-  }, [filas]);
+  }, [filasConSinTelemetria]);
 
   // Filas visibles con los filtros aplicados (la tabla, el pie y el Excel
   // usan estas; sin filtros es exactamente lo que devolvió la RPC).
-  const filasVistas = useMemo(() => filas.filter((f) => {
-    if (filtroPlaca && f.placa !== filtroPlaca) return false;
-    if (filtroGeocerca) {
-      const g = geocercaMostrada(f);
-      if (filtroGeocerca === FUERA ? g !== '' : g !== filtroGeocerca) return false;
-    }
-    return true;
-  }), [filas, filtroPlaca, filtroGeocerca]);
+  const filasVistas = useMemo(() => filtrarFilasPorPlaca(filasConSinTelemetria, placasFiltro, (fila) => fila.placa)
+    .filter((f) => {
+      if (filtroGeocerca) {
+        const g = geocercaMostrada(f);
+        if (filtroGeocerca === FUERA ? g !== '' : g !== filtroGeocerca) return false;
+      }
+      return true;
+    }), [filasConSinTelemetria, placasFiltro, filtroGeocerca]);
 
   // Tabla limitada a 15 filas; Excel y contadores usan la lista completa.
   const { filasVistas: filasTabla, expandido, alternar, total } = useLimiteFilas(filasVistas);
 
   const filtroTexto = [
-    filtroPlaca ? `máquina ${filtroPlaca}` : '',
+    mostrar === 'unidades' && opcionFiltro ? `máquina ${opcionFiltro}` : '',
+    mostrar === 'grupos' && opcionFiltro ? `grupo ${opcionFiltro}` : '',
     filtroGeocerca ? `geocerca ${filtroGeocerca === FUERA ? 'sin geocerca' : filtroGeocerca}` : '',
   ].filter(Boolean).join(' · ');
 
   // Cantidad de unidades en cada estado (el criterio es el de la consola).
   const conteos = useMemo(() => {
-    const c = { en_ruta: 0, detenido: 0, offline: 0 };
+    const c = { en_ruta: 0, detenido: 0, offline: 0, fuera_servicio: 0 };
     filasVistas.forEach((f) => {
-      const e = clasificarEstado(f, tiempoReal ? ahoraRef : periodo?.hasta);
+      const e = f.sin_telemetria ? 'fuera_servicio' : clasificarEstado(f, tiempoReal ? ahoraRef : periodo?.hasta);
       c[e] = (c[e] || 0) + 1;
     });
     return c;
@@ -221,7 +256,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
     setDescargaError(null);
     try {
       const { exportarEstadoUnidadesExcel } = await import('../../../lib/exportExcel');
-      exportarEstadoUnidadesExcel(filasVistas, { rangoTexto, periodo, filtro: filtroTexto });
+      exportarEstadoUnidadesExcel(filas, { rangoTexto, periodo, filtro: '' });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
     }
@@ -322,21 +357,17 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
           <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} desdeHora={desdeHora} setDesdeHora={setDesdeHora} hastaHora={hastaHora} setHastaHora={setHastaHora} />
         ) : null}
 
-        {estado === 'ok' && filas.length > 0 ? (
+        {estado === 'ok' || filasVistas.length > 0 ? (
           <div className="flex flex-wrap items-end gap-3">
-            <label className="min-w-0">
-              <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Máquina</span>
-              <select
-                value={filtroPlaca}
-                onChange={(e) => setFiltroPlaca(e.target.value)}
-                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-              >
-                <option value="">Todas las unidades</option>
-                {opcionesPlacas.map((p) => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
-            </label>
+            <ControlesFiltroUnidadGrupo
+              mostrar={mostrar}
+              setMostrar={setMostrar}
+              opcionFiltro={opcionFiltro}
+              setOpcionFiltro={setOpcionFiltro}
+              unidades={unidades}
+              opcionesGrupos={opcionesGrupos}
+              gruposInfo={gruposInfo}
+            />
             <label className="min-w-0">
               <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Geocerca</span>
               <select
@@ -350,10 +381,10 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
                 ))}
               </select>
             </label>
-            {filtroPlaca || filtroGeocerca ? (
+            {opcionFiltro || filtroGeocerca ? (
               <button
                 type="button"
-                onClick={() => { setFiltroPlaca(''); setFiltroGeocerca(''); }}
+                onClick={() => { setOpcionFiltro(''); setFiltroGeocerca(''); }}
                 className="px-2 py-1.5 rounded-lg text-[10px] font-semibold text-slate-400 hover:text-slate-600 hover:bg-slate-50"
                 title="Quitar filtros de máquina y geocerca"
               >
@@ -371,8 +402,9 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
         error={error}
         onReintentar={() => setIntento((n) => n + 1)}
         mensajeVacio={`No hay posiciones en ${rangoTexto || 'el rango elegido'}. Prueba con otro día/mes o con “Todo el periodo”.`}
+        childrenCuandoVacio={filasVistas.length > 0}
       >
-        {estado === 'ok' ? (
+        {estado === 'ok' || filasVistas.length ? (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-slate-700">
@@ -405,7 +437,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
                         {formatearFechaHora(fila.ultima_fecha)}
                       </td>
                       <td className="px-3 py-2">
-                        <StatusPill estado={clasificarEstado(fila, tiempoReal ? ahoraRef : periodo?.hasta)} />
+                        <StatusPill estado={fila.sin_telemetria ? 'fuera_servicio' : clasificarEstado(fila, tiempoReal ? ahoraRef : periodo?.hasta)} />
                       </td>
                       <td className="px-3 py-2 text-slate-500 max-w-[260px]">
                         <span className="block truncate" title={fila.direccion || ''}>
@@ -458,6 +490,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
                         <span>En ruta: <b className="font-bold text-slate-700">{conteos.en_ruta}</b></span>
                         <span>Detenidas: <b className="font-bold text-slate-700">{conteos.detenido}</b></span>
                         <span>Sin conexión: <b className="font-bold text-slate-700">{conteos.offline}</b></span>
+                        <span>Fuera de servicio: <b className="font-bold text-slate-700">{conteos.fuera_servicio}</b></span>
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-right" colSpan={4}>
