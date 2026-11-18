@@ -8,7 +8,7 @@ import {
   asegurarVisitasCalculadas, leerVisitasDia, leerTablaGeocercasDia,
   armarMatriz, METRICAS, partesLima, duracionTexto, horasDecimal, codigoArea,
 } from '../../../lib/agrotrackVisitasDia';
-import { hoyLima, rangoRapido } from './reportesComunes';
+import { hoyLima, rangoRapido, useLimiteFilas, BotonVerMas } from './reportesComunes';
 
 /**
  * TABLA DIARIA DE GEOCERCAS · TODAS LAS UNIDADES (14/11/2026)
@@ -157,6 +157,7 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
   const tablaFiltrada = useMemo(() => tabla.filter((f) => pasaFiltros(f.placa, f.geocerca)), [tabla, pasaFiltros]);
   const visitasFiltradas = useMemo(() => visitas.filter((v) => pasaFiltros(v.placa, v.geocerca)), [visitas, pasaFiltros]);
   const matriz = useMemo(() => armarMatriz(tablaFiltrada, infoPlaca, metrica), [tablaFiltrada, infoPlaca, metrica]);
+  const { filasVistas: filasMatriz, expandido: expandidoMatriz, alternar: alternarMatriz, total: totalMatrizFilas } = useLimiteFilas(matriz.filas);
 
   const kpis = useMemo(() => {
     const s = (c) => tablaFiltrada.reduce((acc, f) => acc + Number(f[c] || 0), 0);
@@ -366,9 +367,9 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
           <div className="overflow-x-auto mx-4 mb-4 rounded-xl border border-slate-100">
             <table className="text-[11px] text-slate-700 border-collapse">
               <thead>
-                <tr className="bg-orange-500 text-white">
-                  <th className="sticky left-0 z-10 bg-orange-500 px-2 py-2 text-left font-bold min-w-[110px]">Área / grupo</th>
-                  <th className="sticky left-[110px] z-10 bg-orange-500 px-2 py-2 text-left font-bold min-w-[80px]">Placa</th>
+                <tr className="bg-green-700 text-white">
+                  <th className="sticky left-0 z-10 bg-green-700 px-2 py-2 text-left font-bold min-w-[110px]">Área / grupo</th>
+                  <th className="sticky left-[110px] z-10 bg-green-700 px-2 py-2 text-left font-bold min-w-[80px]">Placa</th>
                   {matriz.geocercas.map((g) => (
                     <th key={g} className="px-2 py-2 text-right font-bold align-bottom min-w-[70px] max-w-[90px] leading-tight">{g}</th>
                   ))}
@@ -376,8 +377,8 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
                 </tr>
               </thead>
               <tbody>
-                {matriz.filas.map((f) => (
-                  <tr key={f.placa} className="border-b border-slate-50 hover:bg-orange-50/40">
+                {filasMatriz.map((f) => (
+                  <tr key={f.placa} className="border-b border-slate-50 hover:bg-green-50/60">
                     <td className="sticky left-0 bg-white px-2 py-1.5 text-slate-500 truncate max-w-[110px]">{f.grupo || f.area || '—'}</td>
                     <td className="sticky left-[110px] bg-white px-2 py-1.5 font-bold text-slate-800 whitespace-nowrap">{f.placa}</td>
                     {matriz.geocercas.map((g) => (
@@ -390,9 +391,9 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
                 ))}
               </tbody>
               <tfoot>
-                <tr className="bg-orange-100 font-bold">
-                  <td className="sticky left-0 bg-orange-100 px-2 py-2" colSpan={1}>Total general</td>
-                  <td className="sticky left-[110px] bg-orange-100 px-2 py-2">{matriz.filas.length}</td>
+                <tr className="bg-green-100 font-bold">
+                  <td className="sticky left-0 bg-green-100 px-2 py-2" colSpan={1}>Total general</td>
+                  <td className="sticky left-[110px] bg-green-100 px-2 py-2">{matriz.filas.length}</td>
                   {matriz.geocercas.map((g) => (
                     <td key={g} className="px-2 py-2 text-right tabular-nums">{h2(matriz.totales[g])}</td>
                   ))}
@@ -401,6 +402,8 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
               </tfoot>
             </table>
           </div>
+
+          <BotonVerMas expandido={expandidoMatriz} onAlternar={alternarMatriz} total={totalMatrizFilas} />
 
           <div className="px-4 pb-4">
             <button type="button" onClick={() => setVerDetalle((v) => !v)}
