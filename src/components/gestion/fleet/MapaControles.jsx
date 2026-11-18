@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   Check,
@@ -82,7 +82,7 @@ export function LeyendaGrupos({ geofences = [] }) {
 /* Ficha de la geocerca seleccionada                                   */
 /* ------------------------------------------------------------------ */
 
-export function FichaGeocerca({ geocerca, onCerrar }) {
+export function FichaGeocerca({ geocerca, onCerrar, unidadesDentro = null }) {
   if (!geocerca) return null;
 
   const tipo = geocerca.tipo && COLORES_GRUPO[geocerca.tipo] ? geocerca.tipo : 'poligono';
@@ -134,7 +134,19 @@ export function FichaGeocerca({ geocerca, onCerrar }) {
         ) : null}
       </div>
 
-      <dl className="grid grid-cols-2 gap-px bg-slate-100 mt-2 border-t border-slate-100">
+      <div
+        className="mt-2 flex items-baseline justify-between gap-3 border-t border-slate-100 bg-emerald-50/70 px-3 py-2"
+        title="Unidades cuya última posición cae dentro de este polígono"
+      >
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+          Unidades dentro
+        </span>
+        <span className="text-[20px] font-extrabold leading-none tabular-nums text-forest">
+          {Number.isFinite(unidadesDentro) ? unidadesDentro.toLocaleString('es-PE') : '—'}
+        </span>
+      </div>
+
+      <dl className="grid grid-cols-2 gap-px bg-slate-100 border-t border-slate-100">
         <div className="bg-white px-3 py-2">
           <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Vértices</dt>
           <dd className="text-[15px] font-bold text-slate-800">{vertices}</dd>
@@ -527,7 +539,7 @@ export function TablaCoordenadas({
 
       {filas.length ? (
         <>
-          <div className="max-h-80 overflow-auto">
+          <div className="max-h-80 overflow-auto scroll-consola">
             <table className="w-full text-xs text-slate-700">
               <thead className="sticky top-0 z-10 bg-white">
                 <tr className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400">
@@ -609,16 +621,26 @@ export function TablaRecorrido({
   errorExportar = '',
   onPagina = () => {},
   onExportar = () => {},
+  integrado = false,
 }) {
+  // Paginación interna de filas: 20 puntos por vista, como siempre.
+  const POR_PAGINA = 20;
+  const [filaPagina, setFilaPagina] = useState(1);
+  useEffect(() => setFilaPagina(1), [puntos]);
+  const totalFilaPaginas = Math.max(1, Math.ceil((puntos || []).length / POR_PAGINA));
+  const paginaActual = Math.min(filaPagina, totalFilaPaginas);
+  const inicio = (paginaActual - 1) * POR_PAGINA;
+  const fin = Math.min(inicio + POR_PAGINA, puntos.length);
+  const puntosPagina = puntos.slice(inicio, fin);
+  const irAPagina = (n) => setFilaPagina(Math.min(Math.max(1, n), totalFilaPaginas));
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
-      <div className="p-4 sm:p-5 border-b border-slate-50 flex flex-wrap items-center gap-2">
+    <div className={integrado ? 'min-w-0' : 'bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0'}>
+      <div className={integrado ? 'flex flex-wrap items-center gap-2 pb-3' : 'p-4 sm:p-5 border-b border-slate-50 flex flex-wrap items-center gap-2'}>
         <div className="min-w-0">
           <h3 className="text-base font-bold text-slate-900">Coordenadas del recorrido</h3>
           <p className="text-xs text-slate-500">
             {placa ? `${placa} · ` : ''}
-            {puntos.length} punto(s) en la página {pagina} de {totalPaginas}
-            {ventanaTexto ? ` · ${ventanaTexto}` : ''}
+            {puntos.length} punto(s) en total{ventanaTexto ? ` · ${ventanaTexto}` : ''}
           </p>
         </div>
         <button
@@ -635,38 +657,38 @@ export function TablaRecorrido({
         <p className="px-4 pt-2 text-[10px] text-red-600" role="alert">{errorExportar}</p>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2">
+      <div className={integrado ? 'flex flex-wrap items-center gap-2 border-y border-slate-100 bg-slate-50/60 px-3 py-2' : 'flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2'}>
         <button
           type="button"
-          onClick={() => onPagina(pagina - 1)}
-          disabled={cargando || pagina <= 1}
+          onClick={() => irAPagina(paginaActual - 1)}
+          disabled={cargando || paginaActual <= 1}
           className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40"
         >
           <ChevronLeft size={13} /> Anterior
         </button>
         <span className="text-[11px] font-bold text-slate-600">
-          Página {pagina} de {totalPaginas}
+          Página {paginaActual} de {totalFilaPaginas}
         </span>
         <button
           type="button"
-          onClick={() => onPagina(pagina + 1)}
-          disabled={cargando || pagina >= totalPaginas}
+          onClick={() => irAPagina(paginaActual + 1)}
+          disabled={cargando || paginaActual >= totalFilaPaginas}
           className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40"
         >
           Siguiente <ChevronRight size={13} />
         </button>
         {cargando ? (
           <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-500">
-            <LoaderCircle size={13} className="animate-spin" /> Cargando página…
+            <LoaderCircle size={13} className="animate-spin" /> Cargando recorrido…
           </span>
         ) : null}
         <span className="ml-auto text-[10px] text-slate-400">
-          Cada página es una ventana temporal (máx. 900 puntos por llamada)
+          {puntos.length ? `${inicio + 1}–${fin} de ${puntos.length} · máx. 20 puntos por página` : 'máx. 20 puntos por página'}
         </span>
       </div>
 
       {puntos.length ? (
-        <div className="max-h-80 overflow-auto">
+        <div className="max-h-80 overflow-auto scroll-consola">
           <table className="w-full text-xs text-slate-700">
             <thead className="sticky top-0 z-10 bg-white">
               <tr className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400">
@@ -681,7 +703,7 @@ export function TablaRecorrido({
               </tr>
             </thead>
             <tbody>
-              {puntos.map((punto) => (
+              {puntosPagina.map((punto) => (
                 <tr key={punto.id ?? `${punto.fecha}-${punto.latitud}`} className="border-b border-slate-50 hover:bg-slate-50/60">
                   <td className="px-3 py-2 whitespace-nowrap text-slate-600">{formatearFechaLarga(punto.fecha)}</td>
                   <td className="px-3 py-2 text-slate-700">{punto.evento || '—'}</td>
@@ -717,7 +739,7 @@ export function TablaRecorrido({
       <p className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-[10px] text-slate-500">
         {muestreada
           ? 'Esta ventana superó el tope de 900 puntos y la RPC la muestreó (conserva inicio, fin y alertas). Reduce el rango para ver todos los puntos.'
-          : 'El navegador solo conserva la página actual; usa ◀ ▶ para moverte por el rango.'}
+          : 'Se muestran 20 puntos por página; usa Anterior / Siguiente para moverte.'}
       </p>
     </div>
   );
@@ -772,7 +794,7 @@ export function PanelUnidadesGeocerca({
         <p className="p-6 text-center text-xs font-semibold text-slate-500">Ninguna unidad dentro</p>
       ) : (
         <>
-        <div className="max-h-72 overflow-auto">
+        <div className="max-h-72 overflow-auto scroll-consola">
           <table className="w-full text-xs text-slate-700">
             <thead className="sticky top-0 z-10 bg-white">
               <tr className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400">

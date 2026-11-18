@@ -30,6 +30,7 @@ export const COLORES_GRUPO = {
 export const ACCIONES_VALIDAS = [
   'enfocar',         // { geocerca_id } zoom a la geocerca
   'seleccionar',     // { geocerca_id } seleccionarla (ficha + resalte)
+  'enfocar_unidad',  // { placa } volar a la unidad y decir/mostrar sus datos
   'filtrar_grupo',   // { grupo } mostrar solo campos/oficinas/distritos
   'limpiar',         // quitar filtros y selección
   'ajustar_todo',    // encuadrar todas las geocercas visibles
@@ -58,6 +59,19 @@ export function resumenGeocercasParaIA(geofences) {
       centro,
     };
   });
+}
+
+/**
+ * Resumen compacto de las unidades (placa, estado, km/h, geocerca) para el
+ * contexto de la IA. Nunca se manda más que estos campos.
+ */
+export function resumenUnidadesParaIA(unidades) {
+  return (unidades || []).map((u) => ({
+    placa: u.placa || u.id || '',
+    descripcion: u.descripcion || u.modelo || '',
+    estado: u.estado || '',
+    velocidad: Number.isFinite(Number(u.velocidad_kmh)) ? Number(u.velocidad_kmh) : null,
+  }));
 }
 
 /** Extrae el primer objeto JSON balanceado de un texto (con o sin markdown). */
@@ -118,12 +132,16 @@ export function parseRespuestaAsistente(texto) {
       if (a.tipo === 'enfocar' || a.tipo === 'seleccionar') {
         return { tipo: a.tipo, geocerca_id: String(a.geocerca_id || a.id || '') };
       }
+      if (a.tipo === 'enfocar_unidad') {
+        return { tipo: a.tipo, placa: String(a.placa || '').trim().toUpperCase() };
+      }
       if (a.tipo === 'filtrar_grupo') {
         return { tipo: a.tipo, grupo: String(a.grupo || '') };
       }
       return { tipo: a.tipo };
     })
     .filter((a) => a.tipo !== 'enfocar' && a.tipo !== 'seleccionar' ? true : Boolean(a.geocerca_id))
+    .filter((a) => a.tipo !== 'enfocar_unidad' || Boolean(a.placa))
     .filter((a) => a.tipo !== 'filtrar_grupo' || ['autorizada', 'oficina', 'distrito', 'poligono'].includes(a.grupo))
     .slice(0, 4);
 

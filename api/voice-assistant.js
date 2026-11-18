@@ -726,22 +726,25 @@ export default async function handler(req, res) {
 /*  (el mapa las valida otra vez antes de ejecutarlas).                       */
 /* ========================================================================== */
 
-const ACCIONES_PERMITIDAS = ['enfocar', 'seleccionar', 'filtrar_grupo', 'limpiar', 'ajustar_todo'];
+const ACCIONES_PERMITIDAS = ['enfocar', 'seleccionar', 'enfocar_unidad', 'filtrar_grupo', 'limpiar', 'ajustar_todo'];
 const GRUPOS_PERMITIDOS = ['autorizada', 'oficina', 'distrito', 'poligono'];
 
 const SYSTEM_PROMPT_MAPA = `Eres JARVIS, el asistente inteligente del mapa de flota de Agrilux (AgroTrack).
-Trabajas con las GEOCERCAS de la empresa que te paso en el contexto: linderos (campos), oficinas y distritos.
+Trabajas con las GEOCERCAS de la empresa y con sus UNIDADES (máquinas) que te paso en el contexto.
+Las geocercas son linderos (campos), oficinas y distritos. Las unidades son las máquinas con placa.
 Responde SIEMPRE en español, breve (máximo 3 frases), con tono técnico y cercano.
 
 REGLAS DE ACCIÓN:
 - Si el usuario quiere IR a una geocerca, VERLA o LLEVARSE hasta ella: acción {"tipo":"enfocar","geocerca_id":"<id>"}.
 - Si quiere seleccionarla (ver su ficha): {"tipo":"seleccionar","geocerca_id":"<id>"}.
+- Si quiere IR a una máquina por su placa o decir "ve a la BPI-733", "llévame a la 1639-1K", "dónde está <placa>", "lleva a la unidad X": acción {"tipo":"enfocar_unidad","placa":"<placa exacta del contexto>"}.
+- Si pide las características, estado, velocidad o dónde está una máquina (qué hace, a qué geocerca pertenece): acción {"tipo":"enfocar_unidad","placa":"<placa exacta del contexto>"} además de responder con lo que hay en el contexto.
 - Si quiere ver SOLO un grupo (solo oficinas, solo distritos, solo linderos): {"tipo":"filtrar_grupo","grupo":"oficina"|"distrito"|"autorizada"}.
 - Si quiere ver todo de nuevo o quitar filtros: {"tipo":"limpiar"}.
 - Si quiere encuadrar todas las geocercas: {"tipo":"ajustar_todo"}.
-- Usa el id EXACTO del contexto. Si dudas entre varias, elige la más probable y di cuál elegiste.
+- Usa el id/placa EXACTO del contexto. Si dudas entre varias, elige la más probable y di cuál elegiste.
 - Si la pregunta no necesita acción (conteo, comparación, cuántas hay), responde con "acciones": [].
-- NUNCA inventes ids ni nombres: usa solo los del contexto.
+- NUNCA inventes ids, placas ni nombres: usa solo los del contexto.
 
 RESPUESTA OBLIGATORIA (solo JSON, sin markdown):
 {"respuesta":"<texto para el usuario>","acciones":[{"tipo":"..."}]}`;
@@ -787,17 +790,21 @@ function validarAccionesMapa(acciones) {
       if (a.tipo === 'enfocar' || a.tipo === 'seleccionar') {
         return { tipo: a.tipo, geocerca_id: String(a.geocerca_id || a.id || '') };
       }
+      if (a.tipo === 'enfocar_unidad') {
+        return { tipo: a.tipo, placa: String(a.placa || '').trim().toUpperCase() };
+      }
       if (a.tipo === 'filtrar_grupo') {
         return { tipo: a.tipo, grupo: String(a.grupo || '') };
       }
       return { tipo: a.tipo };
     })
     .filter((a) => (a.tipo === 'enfocar' || a.tipo === 'seleccionar' ? Boolean(a.geocerca_id) : true))
+    .filter((a) => (a.tipo === 'enfocar_unidad' ? Boolean(a.placa) : true))
     .filter((a) => (a.tipo === 'filtrar_grupo' ? GRUPOS_PERMITIDOS.includes(a.grupo) : true))
     .slice(0, 4);
 }
 
-function armarContextoMapa(geocercas, seleccion) {
+function armarContextoMapa(geocercas, seleccion, unidades) {
   const porGrupo = {};
   for (const g of geocercas) porGrupo[g.grupo] = (porGrupo[g.grupo] || 0) + 1;
   const resumen = Object.entries(porGrupo)
@@ -817,7 +824,21 @@ function armarContextoMapa(geocercas, seleccion) {
     ? `\nGEOCERCA SELECCIONADA AHORA: ${seleccion.nombre} (id ${seleccion.id})`
     : '';
 
-  return `GEOCERCAS DE LA EMPRESA (${geocercas?.length || 0}): ${resumen}\n\nFORMATO id | nombre | grupo | división | vértices | centro\n${lineas}${sel}`;
+  const lineasUnidades = (unidades || [])
+    .slice(0, 220)
+    .map((u) => {
+      const vel = u.velocidad != null ? ` | ${u.velocidad} km/h` : '';
+      const est = u.estado ? ` | estado ${u.estado}` : '';
+      const desc = u.descripcion ? ` | ${u.descripcion}` : '';
+      return `${u.placa}${desc}${est}${vel}`;
+    })
+    .join('\n');
+
+  const bloqueUnidades = lineasUnidades
+    ? `\n\nUNIDADES DE LA EMPRESA (${unidades.length}):\n${lineasUnidades}`
+    : '\n\nUNIDADES DE LA EMPRESA: sin unidades cargadas.';
+
+  return `GEOCERCAS DE LA EMPRESA (${geocercas?.length || 0}): ${resumen}\n\nFORMATO id | nombre | grupo | división | vértices | centro\n${lineas}${sel}${bloqueUnidades}`;
 }
 
 async function llamarProviderMapa(url, apiKey, headersExtra, body) {
@@ -835,12 +856,12 @@ async function llamarProviderMapa(url, apiKey, headersExtra, body) {
 }
 
 async function handlerMapa(req, res, { OPENROUTER_API_KEY, DEEPSEEK_API_KEY, GITHUB_TOKEN }) {
-  const { mensaje, historial = [], geocercas = [], seleccion = null } = req.body || {};
+  const { mensaje, historial = [], geocercas = [], unidades = [], seleccion = null } = req.body || {};
   if (!mensaje || typeof mensaje !== 'string') {
     return res.status(400).json({ error: 'Falta el campo mensaje' });
   }
 
-  const contexto = armarContextoMapa(geocercas, seleccion);
+  const contexto = armarContextoMapa(geocercas, seleccion, unidades);
   const messages = [
     { role: 'system', content: `${SYSTEM_PROMPT_MAPA}\n\nCONTEXTO:\n${contexto}` },
     ...historial

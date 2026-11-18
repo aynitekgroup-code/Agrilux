@@ -232,7 +232,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
   };
 
   return (
-    <div className="space-y-4 pb-4">
+    <div className="space-y-4 pb-4 min-w-0 overflow-x-hidden">
       <FleetHeader activeSection={section} onSectionChange={setSection} pendingAlerts={pendientes} />
 
       {section === 'consola' ? (
@@ -401,6 +401,8 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             onSelect={setSelectedVehicleId}
             fuentePosiciones={fuentePosiciones}
             periodo={conDatosReales ? panel.periodo : null}
+            consolaVisible
+            mostrarTablasAlFinal={false}
           />
         </div>
       ) : null}

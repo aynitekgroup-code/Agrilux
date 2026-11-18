@@ -341,8 +341,8 @@ export default function WebLayout({ children }) {
         </header>
 
         {/* Área de contenido */}
-        <main className="flex-1 px-6 py-5 overflow-y-auto">
-          <div className="w-full max-w-none">
+        <main className="flex-1 px-6 py-5 overflow-y-auto overflow-x-hidden">
+          <div className="w-full max-w-none min-w-0">
             <div className="mb-4">
               <AgentStatus />
             </div>

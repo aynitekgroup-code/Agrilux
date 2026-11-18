@@ -108,3 +108,26 @@ body::before {
   border-bottom-color: #fff;
   display: block;
 }
+
+/* Consola PRINCIPAL y tablas del mapa: scrollbar delgado, redondeado y agarrable */
+.scroll-consola {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5ce transparent;
+}
+.scroll-consola::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.scroll-consola::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-consola::-webkit-scrollbar-thumb {
+  background: #c8d4cd;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.scroll-consola::-webkit-scrollbar-thumb:hover {
+  background: #aabbb1;
+  background-clip: padding-box;
+}

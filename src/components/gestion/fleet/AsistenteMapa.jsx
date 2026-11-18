@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowUp, Bot, LoaderCircle, Sparkles, X } from 'lucide-react';
-import { resumenGeocercasParaIA } from '../../../lib/asistenteMapa';
+import { resumenGeocercasParaIA, resumenUnidadesParaIA } from '../../../lib/asistenteMapa';
 
 /**
  * Asistente JARVIS del mapa (FASE 3.8): botón flotante grande y brillante que
@@ -17,6 +17,7 @@ const SpeechRecognitionCtor =
 const SUGERENCIAS = [
   '¿Cuántas geocercas hay y de qué grupos?',
   'Llévame a la oficina central',
+  'Ve a la BPI-733',
   'Muestra solo los distritos',
 ];
 
@@ -34,12 +35,12 @@ function burbujasCargando() {
   );
 }
 
-export default function AsistenteMapa({ geofences = [], seleccion = null, onAccion }) {
+export default function AsistenteMapa({ geofences = [], seleccion = null, onAccion, unidades = [] }) {
   const [abierto, setAbierto] = useState(false);
   const [mensajes, setMensajes] = useState([
     {
       rol: 'asistente',
-      texto: 'Hola, soy JARVIS. Pregúntame por las geocercas o dime qué hacer: "llévame a Medano", "solo oficinas", "¿cuántos campos hay?".',
+      texto: 'Hola, soy JARVIS. Pregúntame por las geocercas o por una máquina: "llévame a Medano", "ve a la BPI-733", "solo oficinas".',
       notas: [],
     },
   ]);
@@ -77,6 +78,7 @@ export default function AsistenteMapa({ geofences = [], seleccion = null, onAcci
           mensaje: pregunta,
           historial: mensajes.slice(-6).map((m) => ({ rol: m.rol, texto: m.texto })),
           geocercas: resumenGeocercasParaIA(geofences),
+          unidades: resumenUnidadesParaIA(unidades),
           seleccion: seleccion
             ? { id: seleccion.id, nombre: seleccion.nombre }
             : null,
@@ -190,7 +192,7 @@ export default function AsistenteMapa({ geofences = [], seleccion = null, onAcci
         <div className="min-w-0 flex-1">
           <p className="text-xs font-bold text-white">JARVIS</p>
           <p className="text-[10px] text-emerald-100/80">
-            Asistente del mapa · {geofences.length} geocercas
+            Asistente del mapa · {geofences.length} geocercas · {unidades.length} unidades
           </p>
         </div>
         <button

@@ -35,6 +35,7 @@ import {
 } from '../../../lib/geocercasGeometria';
 import { GeocercaEditorPanel, GeocercaVertexLayer } from './GeocercaEditor';
 import AsistenteMapa from './AsistenteMapa';
+import ConsolaPrincipal from './ConsolaPrincipal';
 import { ControlVistaSatelite, FichaGeocerca, LeyendaGrupos, PanelGruposUnidades, PanelUnidadesGeocerca, TablaCoordenadas, TablaRecorrido } from './MapaControles';
 import { COLORES_GRUPO, ETIQUETAS_GRUPO, resumenGeocercasParaIA } from '../../../lib/asistenteMapa';
 import {
@@ -379,7 +380,7 @@ function ZoomRutaTracker({ onZoom }) {
 
 /* ---------- Componente ---------- */
 
-export default function FleetMap({ empresaId, userId, canImport = false, canDelete = false, vehicles = [], selectedId, onSelect, fuentePosiciones = 'demo', periodo = null }) {
+export default function FleetMap({ empresaId, userId, canImport = false, canDelete = false, vehicles = [], selectedId, onSelect, fuentePosiciones = 'demo', periodo = null, consolaVisible = false, mostrarTablasAlFinal = true }) {
   const [rawGeofences, setRawGeofences] = useState([]);
   const [loading, setLoading] = useState(Boolean(empresaId));
   const [importing, setImporting] = useState(false);
@@ -428,6 +429,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // ~4.5 px, a zoom 16 ya son picos visibles sobre el satélite).
   const radioPuntoRuta = Math.min(10, Math.max(3, (zoomRuta - 9) * 1.5));
   const [rutaCargando, setRutaCargando] = useState(false);
+  // Progreso de carga completa del recorrido (todas las ventanas).
+  const [rutaProgreso, setRutaProgreso] = useState(null);
   const [rutaError, setRutaError] = useState('');
   const [rutaMuestreada, setRutaMuestreada] = useState(false);
   const [rutaFitToken, setRutaFitToken] = useState(0);
@@ -461,6 +464,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // Referencias a los marcadores de vehículo en Leaflet, para abrir su
   // popup de estado al enfocar la unidad (localizador o tabla de coordenadas).
   const markerRefs = useRef(new Map());
+  // Recorrido pendiente de cargar desde la consola PRINCIPAL: la placa ya
+  // cambió, el efecto sobre selectedId lo consume y carga la página 1.
+  const rutaPendienteRef = useRef(null);
 
   const geofences = useMemo(() => rawGeofences.map(normalizeGeofence), [rawGeofences]);
   const withoutGeometry = useMemo(
@@ -776,6 +782,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     const lat = Number(objetivo.lat);
     const lon = Number(objetivo.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat === 0 || lon === 0) return;
+    if (typeof document !== 'undefined') {
+      document.getElementById('mapa-flota')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
     setFocusUnidadRequest({ lat, lon, placa, token: Date.now() });
   }, [vehiclesConPosicion, vehicles]);
 
@@ -915,24 +924,66 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     }
   }, [empresaId, selectedId]);
 
-  const cargarRecorrido = useCallback(async () => {
+  // Carga TODO el recorrido dentro del rango elegido (todas las ventanas):
+  // pide pagina por pagina y las fusiona; el navegador solo conserva el total
+  // (<= 900 filas por llamada, nunca el histórico crudo completo).
+  const cargarRecorridoCon = useCallback(async (desde, hasta) => {
     if (!empresaId || !selectedId) return;
-    const { desde, hasta, texto } = rangoLibreLima(rutaDesde, rutaHasta);
-    if (!desde || !hasta) {
+    const { desde: d, hasta: h, texto } = rangoLibreLima(desde, hasta);
+    if (!d || !h) {
       setRutaError('Elige la fecha y hora de inicio y de fin del recorrido (hora de Perú).');
       return;
     }
-    const plan = planearPaginas(desde, hasta);
+    const plan = planearPaginas(d, h);
     if (!plan.ok) {
       setRutaPlan(null);
       setRutaPuntos(null);
       setRutaError(plan.motivo || 'No se pudo preparar el rango del recorrido.');
       return;
     }
-    setRutaPlan(plan);
-    setRutaRangoTexto(texto);
-    await ejecutarPaginaRuta(plan, 1);
-  }, [empresaId, selectedId, rutaDesde, rutaHasta, ejecutarPaginaRuta]);
+    setRutaCargando(true);
+    setRutaError('');
+    setRutaProgreso({ hecho: 0, total: plan.totalPaginas });
+    setRutaDesde(desde);
+    setRutaHasta(hasta);
+    const todos = [];
+    let muestreada = false;
+    try {
+      for (let i = 1; i <= plan.totalPaginas; i += 1) {
+        const ventana = plan.paginas[i - 1];
+        // eslint-disable-next-line no-await-in-loop
+        const { puntos, muestreada: llena } = await cargarPaginaRecorrido(empresaId, {
+          placa: selectedId,
+          pagina: ventana,
+        });
+        // Si cambió la unidad mientras cargaba, se descarta la respuesta.
+        if (selectedId !== activePlacaRef.current) return;
+        todos.push(...puntos);
+        muestreada = muestreada || llena;
+        setRutaProgreso({ hecho: i, total: plan.totalPaginas });
+      }
+      setRutaPlan({
+        ...plan,
+        totalPaginas: 1,
+        paginas: [{ indice: 1, desdeMs: plan.desdeMs, hastaMs: plan.hastaMs, desde: d, hasta: h }],
+      });
+      setRutaPuntos(todos);
+      setRutaPagina(1);
+      setRutaMuestreada(muestreada);
+      setRutaRangoTexto(texto);
+      setRutaFitToken(Date.now());
+    } catch (err) {
+      setRutaPuntos(null);
+      setRutaError(err?.message || 'No se pudo cargar el recorrido.');
+    } finally {
+      setRutaCargando(false);
+      setRutaProgreso(null);
+    }
+  }, [empresaId, selectedId]);
+
+  const cargarRecorrido = useCallback(async () => {
+    return cargarRecorridoCon(rutaDesde, rutaHasta);
+  }, [cargarRecorridoCon, rutaDesde, rutaHasta]);
 
   const cambiarPaginaRuta = useCallback((indice) => {
     if (!rutaPlan) return;
@@ -986,6 +1037,56 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     enfocarUnidad(placa);
     setBusquedaRuta('');
   };
+
+  /* ----- Consola PRINCIPAL · Ubicaciones Históricas (dictado → recorrido) ----- */
+
+  // Buscador de unidades con placa normalizada (voz y escritura): exactas o
+  // por contenido, hasta 8, tal como el buscador de recorrido en el cabecera.
+  const buscarUnidadesConsola = useCallback((texto) => {
+    const termRaw = String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    const termPlaca = normalizarVozPlaca(texto);
+    if (!termRaw && !termPlaca) return [];
+    return vehiclesConPosicion
+      .filter((v) => [v.placa, v.descripcion, v.modelo, v.conductor_nombre, v.ultimo_evento]
+        .filter(Boolean)
+        .some((campo) => {
+          const textoCampo = String(campo).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          if (termRaw && textoCampo.includes(termRaw)) return true;
+          return termPlaca.length >= 3 && normalizarVozPlaca(textoCampo).includes(termPlaca);
+        }))
+      .slice(0, 8);
+  }, [vehiclesConPosicion]);
+
+  // Recibe la elección desde la consola PRINCIPAL: selecciona la unidad, fija
+  // las fechas del recorrido y encola la carga (o carga de inmediato si la
+  // unidad ya estaba seleccionada).
+  const elegirUnidadConsola = useCallback((placa, { desde, hasta } = {}) => {
+    const placaFinal = String(placa || '').trim().toUpperCase();
+    const d = desde || rutaDesde;
+    const h = hasta || rutaHasta;
+    if (!placaFinal) return 'Falta la placa de la unidad.';
+    if (onSelect) onSelect(placaFinal);
+    if (selectedId === placaFinal) {
+      cargarRecorridoCon(d, h);
+    } else {
+      rutaPendienteRef.current = { desde: d, hasta: h };
+    }
+    if (typeof document !== 'undefined') {
+      document.getElementById('mapa-flota')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    return `Recorrido de «${placaFinal}» · cargando…`;
+  }, [onSelect, rutaDesde, rutaHasta, selectedId, cargarRecorridoCon]);
+
+  // Consumo del recorrido pendiente tras cambiar la unidad: la limpieza del
+  // estado anterior ocurre antes (su efecto está declarado más arriba) y aquí
+  // se dispara la carga con las fechas elegidas en la consola.
+  useEffect(() => {
+    const pen = rutaPendienteRef.current;
+    if (!pen || !selectedId) return undefined;
+    rutaPendienteRef.current = null;
+    cargarRecorridoCon(pen.desde, pen.hasta);
+    return undefined;
+  }, [selectedId, cargarRecorridoCon]);
 
   const exportarRecorridoPagina = async () => {
     setExportandoRecorrido(true);
@@ -1240,6 +1341,16 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         ? `Llevándote a «${objetivo.nombre}».`
         : `Seleccionada «${objetivo.nombre}».`;
     }
+    if (accion.tipo === 'enfocar_unidad') {
+      const placa = String(accion.placa || '').trim().toUpperCase();
+      const objetivo = vehiclesConPosicion.find((v) => String(v.placa).toUpperCase() === placa)
+        || vehicles.find((v) => String(v.placa).toUpperCase() === placa);
+      if (!objetivo) throw new Error(`No encontré la unidad «${placa}».`);
+      if (onSelect) onSelect(objetivo.placa);
+      enfocarUnidad(objetivo.placa);
+      leerVentanaUnidad(objetivo);
+      return `Llevándote a «${objetivo.placa}» · geocerca ${geocercaActualUnidad(objetivo)}.`;
+    }
     if (accion.tipo === 'filtrar_grupo') {
       const grupo = accion.grupo;
       if (!grupo || !COLORES_GRUPO[grupo]) throw new Error('Ese grupo no existe.');
@@ -1257,7 +1368,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       return 'Encuadrando todas las geocercas.';
     }
     return '';
-  }, [geofences, focusGeofence]);
+  }, [geofences, focusGeofence, vehiclesConPosicion, vehicles, onSelect, enfocarUnidad]);
 
   /* ----- Editor de geocercas (FASE 3.7) ----- */
 
@@ -1598,6 +1709,72 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     }
   };
 
+  /* ----- Tablas VI compartidas entre la Consola principal y Mapas ----- */
+  const localizadorNodo = vehicles.length ? (
+    <PanelGruposUnidades
+      unidades={vehiclesConPosicion}
+      gruposPorPlaca={gruposPorPlaca}
+      gruposConocidos={gruposConocidos}
+      editable={gruposEditables && !gruposCargando}
+      cargando={gruposCargando}
+      aviso={gruposAviso && gruposAviso !== estadoAviso ? gruposAviso : ''}
+      error={gruposError}
+      guardandoPlaca={guardandoGrupo}
+      seleccionadoId={selectedId}
+      modoDescripcion={!gruposEditables && !gruposCargando}
+      onSeleccionar={(placa) => {
+        if (onSelect) onSelect(placa);
+        enfocarUnidad(placa);
+      }}
+      onGuardar={guardarGrupoDeUnidad}
+    />
+  ) : null;
+
+  const coordenadasNodo = vehicles.length ? (
+    <TablaCoordenadas
+      filas={filasCoordenadas}
+      rangoTexto={rangoCoordenadasTexto}
+      exportando={exportandoCoordenadas}
+      errorExportar={errorExportarCoordenadas}
+      onExportar={exportarCoordenadas}
+      onEnfocar={(placa) => {
+        if (onSelect) onSelect(placa);
+        enfocarUnidad(placa);
+      }}
+    />
+  ) : null;
+
+  const estadoAvisoNodo = estadoAviso ? (
+    <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800" role="status">
+      <AlertCircle size={13} className="mt-0.5 shrink-0" />
+      <span>{estadoAviso}</span>
+    </p>
+  ) : null;
+
+  const localizadorConAviso = (
+    <>
+      {estadoAvisoNodo ? <div className="mb-3">{estadoAvisoNodo}</div> : null}
+      {localizadorNodo}
+    </>
+  );
+
+  const nodoRecorrido = rutaPlan ? (
+    <TablaRecorrido
+      puntos={rutaValidos}
+      placa={selectedId}
+      pagina={rutaPagina}
+      totalPaginas={rutaPlan.totalPaginas}
+      ventanaTexto={ventanaRutaTexto}
+      muestreada={rutaMuestreada}
+      cargando={rutaCargando}
+      exportando={exportandoRecorrido}
+      errorExportar={errorExportarRecorrido}
+      onPagina={cambiarPaginaRuta}
+      onExportar={exportarRecorridoPagina}
+      integrado={consolaVisible}
+    />
+  ) : null;
+
   return (
     <section className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden min-w-0">
       <div className="p-4 sm:p-5 flex flex-wrap items-start gap-3">
@@ -1926,7 +2103,11 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               className="inline-flex items-center gap-1.5 rounded-lg bg-forest px-3 py-2 text-xs font-semibold text-white hover:bg-forest-dark disabled:opacity-50"
             >
               {rutaCargando ? <LoaderCircle size={14} className="animate-spin" /> : <MapPin size={14} />}
-              {rutaCargando ? 'Cargando…' : 'Ver recorrido'}
+              {rutaCargando
+                ? rutaProgreso
+                  ? `Cargando ${rutaProgreso.hecho}/${rutaProgreso.total}…`
+                  : 'Cargando…'
+                : 'Ver recorrido'}
             </button>
             {rutaPlan ? (
               <button
@@ -1974,7 +2155,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </div>
       ) : null}
 
-      <div className="relative z-0 isolate px-3 sm:px-5 pb-2">
+      <div id="mapa-flota" className="relative z-0 isolate px-3 sm:px-5 pb-2 scroll-mt-4">
         <MapContainer
           center={[-6.78, -79.83]}
           zoom={12}
@@ -2265,75 +2446,58 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           <FichaGeocerca
             geocerca={selectedGeofence}
             onCerrar={() => setSelectedGeofenceId('')}
+            unidadesDentro={
+              unidadesEnGeocerca.estado === 'cargando' || unidadesEnGeocerca.estado === 'error'
+                ? null
+                : unidadesEnGeocerca.filas.length
+            }
           />
           <AsistenteMapa
             geofences={geofences}
             seleccion={selectedGeofence || null}
             onAccion={ejecutarAccionAsistente}
+            unidades={vehiclesConPosicion}
           />
         </MapContainer>
       </div>
 
-      {/* VI: localizador de unidades con grupos + tabla de coordenadas
-          (una fila por marcador visible, exportable a Excel). */}
-      {vehicles.length ? (
+      {mostrarTablasAlFinal ? (
         <>
-          {estadoAviso ? (
-            <p className="mx-4 sm:mx-5 mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800" role="status">
-              <AlertCircle size={13} className="mt-0.5 shrink-0" />
-              <span>{estadoAviso}</span>
-            </p>
+          {estadoAvisoNodo ? (
+            <div className="mx-4 sm:mx-5 mb-3">{estadoAvisoNodo}</div>
           ) : null}
-          <div className="grid grid-cols-1 gap-3 px-4 sm:px-5 pb-3 xl:grid-cols-2">
-            <PanelGruposUnidades
-              unidades={vehiclesConPosicion}
-              gruposPorPlaca={gruposPorPlaca}
-              gruposConocidos={gruposConocidos}
-              editable={gruposEditables && !gruposCargando}
-              cargando={gruposCargando}
-              aviso={gruposAviso && gruposAviso !== estadoAviso ? gruposAviso : ''}
-              error={gruposError}
-              guardandoPlaca={guardandoGrupo}
-              seleccionadoId={selectedId}
-              modoDescripcion={!gruposEditables && !gruposCargando}
-              onSeleccionar={(placa) => {
-                if (onSelect) onSelect(placa);
-                enfocarUnidad(placa);
-              }}
-              onGuardar={guardarGrupoDeUnidad}
-            />
-            <TablaCoordenadas
-              filas={filasCoordenadas}
-              rangoTexto={rangoCoordenadasTexto}
-              exportando={exportandoCoordenadas}
-              errorExportar={errorExportarCoordenadas}
-              onExportar={exportarCoordenadas}
-              onEnfocar={(placa) => {
-                if (onSelect) onSelect(placa);
-                enfocarUnidad(placa);
-              }}
-            />
-          </div>
+          {localizadorNodo ? (
+            <div className="grid grid-cols-1 gap-3 px-4 sm:px-5 pb-3 xl:grid-cols-2">
+              {localizadorNodo}
+              {coordenadasNodo}
+            </div>
+          ) : null}
         </>
       ) : null}
 
-      {/* VII: tabla de la página (ventana) del recorrido cargada. */}
-      {rutaPlan ? (
+      {/* VI: consola Principal dentro de Mapas, con las mismas tablas al inicio. */}
+      {consolaVisible ? (
         <div className="px-4 sm:px-5 pb-3">
-          <TablaRecorrido
-            puntos={rutaValidos}
-            placa={selectedId}
-            pagina={rutaPagina}
-            totalPaginas={rutaPlan.totalPaginas}
-            ventanaTexto={ventanaRutaTexto}
-            muestreada={rutaMuestreada}
-            cargando={rutaCargando}
-            exportando={exportandoRecorrido}
-            errorExportar={errorExportarRecorrido}
-            onPagina={cambiarPaginaRuta}
-            onExportar={exportarRecorridoPagina}
+          <ConsolaPrincipal
+            localizador={localizadorConAviso}
+            coordenadas={coordenadasNodo}
+            buscarUnidades={buscarUnidadesConsola}
+            elegirUnidad={elegirUnidadConsola}
+            unidadExterna={selectedId || ''}
+            rutaDesde={rutaDesde}
+            rutaHasta={rutaHasta}
+            onRutaDesde={setRutaDesde}
+            onRutaHasta={setRutaHasta}
+            recorrido={nodoRecorrido}
           />
         </div>
+      ) : null}
+
+      {/* VII: tabla de la página (ventana) del recorrido cargada.
+          En Mapas vive dentro de la consola PRINCIPAL, al final de
+          «Ubicaciones Históricas»; en la Consola principal se queda aquí. */}
+      {!consolaVisible && nodoRecorrido ? (
+        <div className="px-4 sm:px-5 pb-3">{nodoRecorrido}</div>
       ) : null}
 
       {/* VIII: unidades dentro de la geocerca seleccionada. */}
