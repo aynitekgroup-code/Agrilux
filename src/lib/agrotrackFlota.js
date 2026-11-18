@@ -91,6 +91,45 @@ export function formatearRango(desde, hasta) {
     : `${dia(d)} ${mes(d)} – ${dia(h)} ${mes(h)} ${anio(h)}`;
 }
 
+/**
+ * P4: aviso cuando el rango consultado cae (total o parcialmente) fuera del
+ * periodo cargado. Compara fechas en America/Lima para que el mensaje no
+ * cambie con la zona horaria del navegador.
+ */
+export function rangoFueraDelPeriodo(consulta, periodo) {
+  if (!consulta?.desde || !consulta?.hasta || !periodo?.desde || !periodo?.hasta) return null;
+  const diaLima = (iso) => {
+    const value = fecha(iso);
+    if (!value) return null;
+    try {
+      const partes = new Intl.DateTimeFormat('es-PE', {
+        timeZone: ZONA_PERU, year: 'numeric', month: '2-digit', day: '2-digit',
+      }).formatToParts(value);
+      const parte = (tipo) => partes.find((p) => p.type === tipo)?.value;
+      return `${parte('year')}-${parte('month')}-${parte('day')}`;
+    } catch {
+      return null;
+    }
+  };
+  const desdeConsulta = diaLima(consulta.desde);
+  const hastaConsulta = diaLima(consulta.hasta);
+  const desdeCargado = diaLima(periodo.desde);
+  const hastaCargado = diaLima(periodo.hasta);
+  if (!desdeConsulta || !hastaConsulta || !desdeCargado || !hastaCargado) return null;
+
+  const rango = formatearRango(periodo.desde, periodo.hasta);
+  if (desdeConsulta < desdeCargado && hastaConsulta > hastaCargado) {
+    return `Rango fuera del periodo cargado (${rango}): no hay datos en esas fechas.`;
+  }
+  if (desdeConsulta < desdeCargado) {
+    return `El rango consultado empieza antes del periodo cargado (${rango}). Esos días no tienen datos.`;
+  }
+  if (hastaConsulta > hastaCargado) {
+    return `El rango consultado termina después del periodo cargado (${rango}). Esos días no tienen datos.`;
+  }
+  return null;
+}
+
 /** Texto obligatorio del criterio de estado, con el periodo cargado. */
 export function textoPeriodoCargado(periodo) {
   if (!periodo?.desde || !periodo?.hasta) return 'Último estado del periodo cargado: sin datos';

@@ -3,9 +3,17 @@ import { AlertCircle, CheckCircle2, FileSpreadsheet, LoaderCircle, X } from 'luc
 import { cargarPosicionesZonar } from '../../../lib/agrotrackPosiciones';
 
 const numberFormat = new Intl.NumberFormat('es-PE');
+const fechaPeriodo = new Intl.DateTimeFormat('es-PE', {
+  day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Lima',
+});
+
+function textoPeriodo(periodo) {
+  if (!periodo?.desde || !periodo?.hasta) return '';
+  return `${fechaPeriodo.format(new Date(periodo.desde))} – ${fechaPeriodo.format(new Date(periodo.hasta))}`;
+}
 
 /**
- * Botón "Cargar reporte de unidades". Acepta el ZIP de Zonar o varios .xlsx.
+ * Botón "Cargar reporte de unidades". Acepta ZIP de Zonar o .xlsx/.xls/.csv.
  * El resumen se muestra debajo del encabezado de la tarjeta.
  */
 export default function PosicionesImport({ empresaId, userId, disabled = false, onDone }) {
@@ -53,10 +61,10 @@ export default function PosicionesImport({ empresaId, userId, disabled = false, 
         ref={inputRef}
         type="file"
         multiple
-        accept=".zip,.xlsx,application/zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        accept=".zip,.xlsx,.xls,.csv,application/zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
         className="hidden"
         onChange={handleFiles}
-        aria-label="Seleccionar reporte por placa (ZIP o Excel)"
+        aria-label="Seleccionar reporte por placa (ZIP, Excel .xlsx/.xls o CSV)"
       />
 
       {/* Los avisos ocupan todo el ancho de la fila de botones */}
@@ -83,6 +91,9 @@ export default function PosicionesImport({ empresaId, userId, disabled = false, 
           <div className="flex items-start gap-2">
             <CheckCircle2 size={15} className="mt-0.5 shrink-0" />
             <p className="min-w-0 flex-1">
+              {textoPeriodo(summary.periodo)
+                ? <>Periodo cargado: <strong>{textoPeriodo(summary.periodo)}</strong>. </>
+                : null}
               {summary.unidades} unidades en {summary.archivos} archivos:{' '}
               <strong>{numberFormat.format(summary.nuevas)}</strong> posiciones nuevas
               {summary.yaExistentes ? `, ${numberFormat.format(summary.yaExistentes)} ya estaban guardadas` : ''}

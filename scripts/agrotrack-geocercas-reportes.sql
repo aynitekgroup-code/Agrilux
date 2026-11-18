@@ -393,7 +393,7 @@ as $$
       ((g.geometria->'bbox')->>2)::double precision            as lon_max,
       ((g.geometria->'bbox')->>3)::double precision            as lat_max,
       ST_SetSRID(ST_GeomFromGeoJSON(g.geometria::text), 4326)  as poligono
-    from public.agrotrack_geocercas g
+    from public.agrotrack_geocercas_reportes g
     where g.empresa_id = p_empresa_id
       and g.activa is true
       -- Filtra por incluir_reportes (todas activas tras el UPDATE de la
@@ -614,7 +614,7 @@ as $$
       ((g.geometria->'bbox')->>2)::double precision as lon_max,
       ((g.geometria->'bbox')->>3)::double precision as lat_max,
       ST_SetSRID(ST_GeomFromGeoJSON(g.geometria::text), 4326) as poligono
-    from public.agrotrack_geocercas g
+    from public.agrotrack_geocercas_reportes g
     where g.empresa_id = p_empresa_id
       and g.activa is true
       -- Desplegable "Geocercas": filtrar a UNA geocerca (nombre tolerante a caso).
@@ -813,7 +813,7 @@ as $$
       ((g.geometria->'bbox')->>2)::double precision           as lon_max,
       ((g.geometria->'bbox')->>3)::double precision           as lat_max,
       ST_SetSRID(ST_GeomFromGeoJSON(g.geometria::text), 4326) as poligono
-    from public.agrotrack_geocercas g
+    from public.agrotrack_geocercas_reportes g
     where g.empresa_id = p_empresa_id
       and g.activa is true
       -- Filtra por incluir_reportes (todas activas tras el UPDATE de la
@@ -974,7 +974,7 @@ as $$
       ((g.geometria->'bbox')->>2)::double precision            as lon_max,
       ((g.geometria->'bbox')->>3)::double precision            as lat_max,
       ST_SetSRID(ST_GeomFromGeoJSON(g.geometria::text), 4326)  as poligono
-    from public.agrotrack_geocercas g
+    from public.agrotrack_geocercas_reportes g
     where g.empresa_id = p_empresa_id
       and g.activa is true
       and g.incluir_reportes

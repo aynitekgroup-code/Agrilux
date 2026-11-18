@@ -216,6 +216,7 @@ function textoResumenImportacion(resumen) {
   });
   if (resumen?.excluidas?.length) partes.push(`capa ${resumen.excluidas.join(', ')} ignorada (divisiones)`);
   if (resumen?.ignoradas?.length) partes.push(`capas sin reconocer: ${resumen.ignoradas.join(', ')}`);
+  if (resumen?.diagnostico?.texto) partes.push(`Revisión de capas: ${resumen.diagnostico.texto}`);
   return `Importación correcta: ${partes.join(' · ')}.`;
 }
 

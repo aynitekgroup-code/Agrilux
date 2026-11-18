@@ -7,6 +7,7 @@ import {
   rangoLibreLima,
   formatearDuracion,
   formatearRango,
+  rangoFueraDelPeriodo,
   etiquetaPeriodoReporte,
   ultimoDiaLima,
   LIMITE_FILAS_ACTIVIDAD,
@@ -104,6 +105,11 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
       texto: periodo?.desde ? formatearRango(periodo.desde, periodo.hasta) : '',
     };
   }, [modo, dia, mes, desdeHora, hastaHora, periodo]);
+
+  const avisoFueraDePeriodo = useMemo(
+    () => rangoFueraDelPeriodo(consulta, periodo),
+    [consulta, periodo],
+  );
 
   const pendienteDeFecha = (modo === 'dia' && !dia) || (modo === 'mes' && !mes)
     || (modo === 'libre' && (!desdeHora || !hastaHora))
@@ -280,6 +286,11 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
               </p>
             ) : null}
           </div>
+          {avisoFueraDePeriodo ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800" role="status">
+              <AlertTriangle size={12} /> {avisoFueraDePeriodo}
+            </span>
+          ) : null}
           <div className="ml-auto flex items-center gap-2">
             {fuente === 'real' && rangoTexto ? (
               <span className="hidden lg:inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">

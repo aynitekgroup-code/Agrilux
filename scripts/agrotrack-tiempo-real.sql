@@ -207,7 +207,7 @@ as $$
       -- los lotes ganan a distritos/divisiones cuando se solapan
       case when coalesce(g.tipo, '') in ('distrito') then 2
            when coalesce(g.tipo, '') in ('oficina') then 1 else 0 end as prioridad
-    from public.agrotrack_geocercas g
+    from public.agrotrack_geocercas_reportes g
     where g.empresa_id = p_empresa_id
       and g.activa is true
       and coalesce(g.incluir_reportes, true)

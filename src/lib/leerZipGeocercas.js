@@ -23,6 +23,67 @@ import * as shpjs from 'shpjs';
 
 const MAX_PROFUNDIDAD_ZIP = 3;
 
+// P3: capas que debe traer el ZIP de geocercas y archivos que forman cada capa.
+const CAPAS_ESPERADAS = ['linderos', 'oficinas', 'distritos'];
+const COMPONENTES_CAPA = ['shp', 'shx', 'dbf', 'prj', 'cpg'];
+const COMPONENTES_ESENCIALES = ['shp', 'dbf'];
+
+function nombreCapa(ruta) {
+  const base = nombreBase(ruta).toLowerCase();
+  return CAPAS_ESPERADAS.find(
+    (capa) => base === capa
+      || base.startsWith(`${capa}_`)
+      || base.startsWith(`${capa}-`)
+      || base.startsWith(`${capa} `),
+  ) || null;
+}
+
+/**
+ * P3: resumen legible de capas encontradas / faltantes / incompletas.
+ * Se arma desde la lista plana del ZIP (ya descomprime ZIP internos), así que
+ * funciona aunque los archivos estén dentro de carpetas.
+ */
+export function diagnosticarCapasZip(archivos, nombresGeojson = []) {
+  const porCapa = new Map(CAPAS_ESPERADAS.map((capa) => [capa, new Set()]));
+  for (const archivo of archivos) {
+    if (archivo.ilegible || !COMPONENTES_CAPA.includes(archivo.ext)) continue;
+    const capa = nombreCapa(archivo.ruta);
+    if (capa) porCapa.get(capa).add(archivo.ext);
+  }
+  const geojson = new Set(nombresGeojson.map(nombreCapa).filter(Boolean));
+  const encontradas = CAPAS_ESPERADAS.filter((capa) => porCapa.get(capa).size || geojson.has(capa));
+  const faltan = CAPAS_ESPERADAS.filter((capa) => !encontradas.includes(capa));
+  const incompletas = CAPAS_ESPERADAS
+    .filter((capa) => porCapa.get(capa).size && !geojson.has(capa))
+    .map((capa) => ({
+      capa,
+      faltan: COMPONENTES_CAPA.filter((extension) => !porCapa.get(capa).has(extension)),
+    }))
+    .filter((item) => item.faltan.length);
+
+  const partes = [
+    `Capas encontradas: ${encontradas.length ? encontradas.join(', ') : 'ninguna'}`,
+  ];
+  if (faltan.length) partes.push(`capas faltantes: ${faltan.join(', ')}`);
+  if (incompletas.length) {
+    partes.push(
+      `archivos faltantes: ${incompletas
+        .map((item) => `${item.capa} (${item.faltan.map((e) => `.${e}`).join(', ')})`)
+        .join('; ')}`,
+    );
+  }
+
+  return {
+    encontradas,
+    faltan,
+    incompletas,
+    porCapa: Object.fromEntries(
+      CAPAS_ESPERADAS.map((capa) => [capa, [...porCapa.get(capa)].sort()]),
+    ),
+    texto: partes.join(' · '),
+  };
+}
+
 function lector(nombre) {
   const fn = shpjs[nombre] || shpjs.default?.[nombre];
   if (typeof fn !== 'function') {
@@ -113,16 +174,31 @@ export async function leerCapasZip(buffer) {
   for (const a of archivos.filter((x) => x.ext === 'geojson' || x.ext === 'json')) {
     try {
       const json = JSON.parse(await a.archivo.async('string'));
-      if (json?.type === 'FeatureCollection') capas.push({ ...json, fileName: nombreBase(a.ruta) });
+      if (json?.type === 'FeatureCollection') {
+        capas.push({ ...json, fileName: nombreBase(a.ruta) });
+      }
     } catch {
       /* no es un GeoJSON válido: se ignora */
     }
   }
 
-  // Agrupa .shp/.dbf/.prj/.cpg por ruta base (sin distinguir mayúsculas).
+  // P3: valida capas antes de procesar e incluye el diagnóstico en el error.
+  const diagnostico = diagnosticarCapasZip(archivos, capas.map((capa) => capa.fileName));
+  const capasSinEsenciales = diagnostico.incompletas.filter((item) => (
+    COMPONENTES_ESENCIALES.some((extension) => item.faltan.includes(extension))
+  ));
+  if (!diagnostico.encontradas.length || capasSinEsenciales.length) {
+    throw new Error(
+      `No se pudieron encontrar capas válidas en el ZIP. ${diagnostico.texto}. `
+      + 'Comprime la carpeta completa con linderos, oficinas y distritos '
+      + '(.shp, .shx, .dbf, .prj y .cpg con el mismo nombre).',
+    );
+  }
+
+  // Agrupa .shp/.shx/.dbf/.prj/.cpg por ruta base (sin distinguir mayúsculas).
   const grupos = new Map();
   for (const a of archivos) {
-    if (!['shp', 'dbf', 'prj', 'cpg'].includes(a.ext) || a.ilegible) continue;
+    if (!COMPONENTES_CAPA.includes(a.ext) || a.ilegible) continue;
     const clave = sinExtension(a.ruta).toLowerCase();
     const g = grupos.get(clave) || { nombre: nombreBase(a.ruta) };
     g[a.ext] = a.archivo;
@@ -143,6 +219,7 @@ export async function leerCapasZip(buffer) {
       const propiedades = g.dbf ? await parseDbf(await g.dbf.async('arraybuffer'), cpg) : undefined;
       const coleccion = await combine([geometrias, propiedades]);
       coleccion.fileName = g.nombre;
+      coleccion.diagnostico = diagnostico;
       capas.push(coleccion);
     } catch (e) {
       errores.push(`${g.nombre}: ${e?.message || e}`);
@@ -151,9 +228,12 @@ export async function leerCapasZip(buffer) {
 
   if (!capas.length) {
     if (errores.length) {
-      throw new Error(`Los shapefiles del ZIP no se pudieron leer: ${errores.join(' · ')}`);
+      throw new Error(
+        `Los shapefiles del ZIP no se pudieron leer: ${errores.join(' · ')}. ${diagnostico.texto}.`,
+      );
     }
-    throw new Error(mensajeSinShapefiles(archivos));
+    throw new Error(`${mensajeSinShapefiles(archivos)} ${diagnostico.texto}.`);
   }
+  for (const capa of capas) capa.diagnostico = diagnostico;
   return capas;
 }

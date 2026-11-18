@@ -104,6 +104,10 @@ async function leerLibroExcel(buffer, nombreArchivo, XLSX, empresaId, userId, ac
   }
 }
 
+// P4: el "Reporte por placa" de Zonar llega como .xlsx, .xls o .csv (a veces
+// dentro de un ZIP). Los tres los lee la librería xlsx con type 'array'.
+const EXTENSIONES_REPORTE = /\.(xlsx|xls|csv)$/i;
+
 async function expandirArchivos(files) {
   const excels = [];
   for (const file of files) {
@@ -115,23 +119,24 @@ async function expandirArchivos(files) {
         const base = entry.name.split('/').pop();
         return (
           !entry.dir &&
-          /\.xlsx$/i.test(entry.name) &&
-          !entry.name.startsWith('__MACOSX') &&
+          EXTENSIONES_REPORTE.test(entry.name) &&
+          !entry.name.includes('__MACOSX') &&
+          !base.startsWith('._') &&
           !base.startsWith('~$')
         );
       });
       for (const entry of entries) {
         excels.push({ nombre: entry.name.split('/').pop(), leer: () => entry.async('arraybuffer') });
       }
-    } else if (lower.endsWith('.xlsx')) {
-      if (!name.startsWith('~$')) excels.push({ nombre: name, leer: () => file.arrayBuffer() });
+    } else if (EXTENSIONES_REPORTE.test(name) && !name.startsWith('~$')) {
+      excels.push({ nombre: name, leer: () => file.arrayBuffer() });
     }
   }
   return excels;
 }
 
 /**
- * @param {File[]|FileList} files   ZIP y/o .xlsx de "Reporte por placa"
+ * @param {File[]|FileList} files   ZIP y/o .xlsx, .xls, .csv de "Reporte por placa"
  * @param {string} empresaId
  * @param {string} userId
  * @param {(p:{fase:string,actual:number,total:number})=>void} [onProgress]
@@ -141,11 +146,13 @@ export async function cargarPosicionesZonar(files, empresaId, userId, onProgress
     throw new Error('Se requiere una empresa activa y una sesión iniciada.');
   }
   const lista = Array.from(files || []);
-  if (!lista.length) throw new Error('Selecciona un ZIP o archivos .xlsx.');
+  if (!lista.length) throw new Error('Selecciona un ZIP o archivos .xlsx, .xls o .csv.');
 
   const XLSX = await import('xlsx');
   const excels = await expandirArchivos(lista);
-  if (!excels.length) throw new Error('No se encontraron archivos .xlsx en la selección.');
+  if (!excels.length) {
+    throw new Error('No se encontraron archivos .xlsx, .xls ni .csv en la selección.');
+  }
 
   const acumulado = {
     archivos: 0,
@@ -193,8 +200,13 @@ export async function cargarPosicionesZonar(files, empresaId, userId, onProgress
   }
 
   const unidades = new Set(filas.map((fila) => fila.placa));
+  // P4: periodo realmente cargado (se muestra en la pantalla y se compara con
+  // el rango consultado para avisar cuando no hay datos en esas fechas).
+  const fechas = filas.map((fila) => fila.fecha).filter(Boolean).sort();
+  const periodo = fechas.length ? { desde: fechas[0], hasta: fechas[fechas.length - 1] } : null;
   return {
     archivos: acumulado.archivos,
+    periodo,
     archivosConError: acumulado.archivosConError,
     unidades: unidades.size,
     filasLeidas: acumulado.filasLeidas,

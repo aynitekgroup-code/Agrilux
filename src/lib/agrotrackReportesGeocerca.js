@@ -21,7 +21,7 @@
  * (crea la extensión postGIS en su sección 0).
  */
 import { supabase } from './supabase';
-import { llamarRpcReporte } from './rpcReportes';
+import { llamarRpcReporte } from './rpcReportes.js';
 
 /** Tope de filas de cada reporte: PostgREST corta en 1000. */
 export const LIMITE_EVENTOS_GEOCERCA = 500;

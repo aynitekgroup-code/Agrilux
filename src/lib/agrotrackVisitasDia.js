@@ -14,7 +14,7 @@
  * y se prueban con node (tests/visitasDia.test.mjs).
  */
 
-import { llamarRpcReporte } from './rpcReportes';
+import { llamarRpcReporte } from './rpcReportes.js';
 
 const PAGINA = 1000;
 const MAX_PAGINAS = 50; // 50 000 visitas: un mes completo de toda la flota

@@ -313,7 +313,7 @@ as $$
   ),
   geos as (
     select distinct on (btrim(g.nombre)) btrim(g.nombre) as nombre, g.division
-    from public.agrotrack_geocercas g
+    from public.agrotrack_geocercas_reportes g
     where g.empresa_id = p_empresa_id
     order by btrim(g.nombre), g.activa desc, g.id
   )

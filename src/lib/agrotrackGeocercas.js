@@ -12,6 +12,20 @@ import { conBbox, validarGeometria } from './geocercasGeometria';
 const GEOCERCAS_TABLE = 'agrotrack_geocercas';
 const IMPORT_BATCH_SIZE = 25;
 
+/**
+ * P1: reconstruye la tabla auxiliar de polígonos subdivididos (ST_Subdivide)
+ * después de importar, crear, editar o quitar geocercas.
+ * Si la RPC aún no está aplicada en Supabase, no bloquea la operación.
+ */
+export async function refrescarGeocercasReportes() {
+  const { error } = await supabase.rpc('agrotrack_refrescar_geocercas_subdiv');
+  if (error) {
+    console.warn('No se pudo refrescar la geometría de reportes:', error.message);
+    return false;
+  }
+  return true;
+}
+
 export async function listarGeocercas(empresaId) {
   if (!empresaId) return [];
 
@@ -86,9 +100,11 @@ export async function importarGeocercasZip(file, empresaId, userId) {
     const encontradas = capas.map((capa) => capa.name || '(sin nombre)').join(', ');
     const partes = [];
     if (excluidas.length) partes.push(`se ignoró ${excluidas.join(', ')} (a pedido)`);
+    const diagnostico = capas[0]?.diagnostico?.texto || '';
     throw new Error(
       'El ZIP debe traer una capa llamada linderos, oficinas o distritos. ' +
-      `Capas encontradas: ${encontradas}${partes.length ? ` · ${partes.join(' · ')}` : ''}.`,
+      `Capas encontradas: ${encontradas}${partes.length ? ` · ${partes.join(' · ')}` : ''}.` +
+      `${diagnostico ? ` ${diagnostico}.` : ''}`,
     );
   }
 
@@ -133,6 +149,8 @@ export async function importarGeocercasZip(file, empresaId, userId) {
 
   resumen.guardadas = resumen.grupos.reduce((suma, g) => suma + g.guardadas, 0);
   resumen.omitidas = resumen.grupos.reduce((suma, g) => suma + g.omitidas, 0);
+  resumen.diagnostico = capas[0]?.diagnostico || null;
+  await refrescarGeocercasReportes();
   return resumen;
 }
 
@@ -184,6 +202,7 @@ export async function guardarGeocerca(empresaId, { id, nombre, geometria }) {
       '(se requiere administrador o ingeniero) o la geocerca ya no existe.',
     );
   }
+  await refrescarGeocercasReportes();
   return data[0];
 }
 
@@ -215,6 +234,7 @@ export async function crearGeocerca(empresaId, { nombre, geometria, tipo = 'poli
       '(se requiere administrador o ingeniero).',
     );
   }
+  await refrescarGeocercasReportes();
   return data[0];
 }
 
@@ -236,6 +256,7 @@ export async function quitarGeocerca(empresaId, id) {
       'o la geocerca ya no existe.',
     );
   }
+  await refrescarGeocercasReportes();
   return true;
 }
 
