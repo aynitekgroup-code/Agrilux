@@ -78,18 +78,12 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
 
   const consulta = useMemo(() => rangoLibreLima(desdeHora, hastaHora), [desdeHora, hastaHora]);
 
-<<<<<<< HEAD
   const avisoFueraDePeriodo = useMemo(
     () => rangoFueraDelPeriodo(consulta, periodo),
     [consulta, periodo],
   );
 
-  const pendienteDeFecha = (modo === 'dia' && !dia) || (modo === 'mes' && !mes)
-    || (modo === 'libre' && (!desdeHora || !hastaHora))
-    || (modo === 'total' && !periodo?.desde);
-=======
   const pendienteDeFecha = !desdeHora || !hastaHora;
->>>>>>> 106eb2c (reportes: unifica controles de fecha, filtros Grupos/Unidades y estados sin telemetría)
 
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
