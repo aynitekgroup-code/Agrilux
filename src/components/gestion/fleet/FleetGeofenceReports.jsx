@@ -161,7 +161,7 @@ function CardEventos({ empresaId, periodo, fuente, vehicles = [] }) {
               type="button"
               onClick={descargarExcel}
               disabled={!puedeExportar}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-forest bg-forest px-2.5 py-1.5 text-[11px] font-semibold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <FileSpreadsheet size={13} /> Descargar Excel
             </button>
@@ -304,14 +304,12 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
     unidadesSinPosicion,
     placasFiltro,
   } = useFiltroUnidadGrupo({ vehicles, empresaId });
-  const [horaDesde, setHoraDesde] = useState('');
-  const [horaHasta, setHoraHasta] = useState('');
+  const [descargaError, setDescargaError] = useState(null);
   const [estado, setEstado] = useState('inactivo');
   const [filas, setFilas] = useState([]);
   const [error, setError] = useState(null);
   const [rangoTexto, setRangoTexto] = useState('');
   const [intento, setIntento] = useState(0);
-  const [descargaError, setDescargaError] = useState(null);
 
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
@@ -326,8 +324,6 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
       desde: consulta.desde,
       hasta: consulta.hasta,
       placas: placasFiltro,
-      horaDesde,
-      horaHasta,
     })
       .then((resultado) => {
         if (cancelado) return;
@@ -344,7 +340,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
     return () => {
       cancelado = true;
     };
-  }, [empresaId, consulta, placasFiltro, horaDesde, horaHasta, pendienteDeFecha, intento]);
+  }, [empresaId, consulta, placasFiltro, pendienteDeFecha, intento]);
 
   const unidadesSinTelemetria = useMemo(() => {
     if (placasFiltro == null) return unidadesSinPosicion;
@@ -381,7 +377,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
     setDescargaError(null);
     try {
       const { exportarLotesExcel } = await import('../../../lib/exportExcel');
-      exportarLotesExcel(filas, { rangoTexto, placa: '', horaDesde, horaHasta });
+      exportarLotesExcel(filas, { rangoTexto, placa: '' });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
     }
@@ -391,7 +387,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
       <div className="p-4 sm:p-5 border-b border-slate-50 space-y-3">
         <div className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
             <LogOut size={17} />
           </div>
           <div className="min-w-0">
@@ -411,7 +407,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
               type="button"
               onClick={descargarExcel}
               disabled={!puedeExportar}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-forest bg-forest px-2.5 py-1.5 text-[11px] font-semibold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <FileSpreadsheet size={13} /> Descargar Excel
             </button>
@@ -430,36 +426,6 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
             opcionesGrupos={opcionesGrupos}
             gruposInfo={gruposInfo}
           />
-          <div>
-            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Horas del día</span>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="time"
-                value={horaDesde}
-                onChange={(e) => setHoraDesde(e.target.value)}
-                aria-label="Hora desde"
-                className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-              />
-              <span className="text-[10px] text-slate-400">a</span>
-              <input
-                type="time"
-                value={horaHasta}
-                onChange={(e) => setHoraHasta(e.target.value)}
-                aria-label="Hora hasta"
-                className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-              />
-              {horaDesde || horaHasta ? (
-                <button
-                  type="button"
-                  onClick={() => { setHoraDesde(''); setHoraHasta(''); }}
-                  className="px-2 py-1.5 rounded-lg text-[10px] font-semibold text-slate-400 hover:text-slate-600 hover:bg-slate-50"
-                  title="Quitar franja horaria"
-                >
-                  Quitar
-                </button>
-              ) : null}
-            </div>
-          </div>
         </div>
       </div>
 
@@ -469,7 +435,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
         estado={estado}
         error={error}
         onReintentar={() => setIntento((n) => n + 1)}
-        mensajeVacio={`Ningún lote tuvo posiciones dentro de su polígono en ${rangoTexto || 'el rango elegido'}${opcionFiltro ? ` para ${mostrar === 'grupos' ? 'el grupo' : 'la unidad'} ${opcionFiltro}` : ''}${horaDesde || horaHasta ? ` entre las ${horaDesde || '00:00'} y las ${horaHasta || '23:59'}` : ''}. Prueba con otro día/mes, con “Todo el periodo” o quitando los filtros.`}
+        mensajeVacio={`Ningún lote tuvo posiciones dentro de su polígono en ${rangoTexto || 'el rango elegido'}${opcionFiltro ? ` para ${mostrar === 'grupos' ? 'el grupo' : 'la unidad'} ${opcionFiltro}` : ''}. Prueba con otro día/mes, con “Todo el periodo” o quitando los filtros.`}
         childrenCuandoVacio={unidadesSinTelemetria.length > 0}
       >
         <AvisoUnidadesSinTelemetria unidades={unidadesSinTelemetria} />
@@ -850,7 +816,7 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
       <div className="p-4 sm:p-5 border-b border-slate-50 space-y-3">
         <div className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
             <MapPinned size={17} />
           </div>
           <div className="min-w-0">
@@ -903,7 +869,7 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
               type="button"
               onClick={descargarExcel}
               disabled={!puedeExportar}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-forest bg-forest px-2.5 py-1.5 text-[11px] font-semibold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <FileSpreadsheet size={13} /> Descargar Excel
             </button>

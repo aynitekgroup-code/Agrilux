@@ -192,7 +192,7 @@ export function BotonActualizarAhora({ onClick, disabled = false, cargando = fal
       className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
     >
       <RotateCw size={13} className={cargando ? 'animate-spin' : ''} />
-      {cargando ? 'Actualizando…' : 'Actualizar ahora'}
+      {cargando ? 'Actualizando…' : 'Actualizar'}
     </button>
   );
 }
@@ -217,13 +217,6 @@ export function BotonVerMas({ expandido, onAlternar, total, limite = FILAS_INICI
     </div>
   );
 }
-
-export const RANGOS = [
-  { id: 'todo', label: 'Todo el periodo' },
-  { id: 'dia', label: 'Por día' },
-  { id: 'mes', label: 'Por mes' },
-  { id: 'libre', label: 'Desde / hasta' },
-];
 
 /** Número localizado con el mínimo de decimales pedido. */
 export function numero(valor, decimales = 1) {
@@ -258,9 +251,7 @@ export function haceCuanto(iso, ahora = new Date()) {
  * mes con el último dato real y expone `consulta` ({ desde, hasta, texto })
  * listo para la RPC.
  */
-export function useRango(periodo, rangoInicial = 'dia') {
-  // 14/11/2026: por defecto "Por día". "Todo el periodo" recorre todo el
-  // histórico y con varios meses cargados supera los 8 s de Supabase.
+export function useRango(periodo, rangoInicial = 'libre') {
   const [rango, setRango] = useState(rangoInicial);
   const [dia, setDia] = useState('');
   const [mes, setMes] = useState('');
@@ -345,7 +336,7 @@ const ATAJOS = [
   { id: 'semana-anterior', label: 'Semana anterior' },
 ];
 
-/** Botones del rango + date/month/libre, compartidos por las tarjetas. */
+/** Atajos + From/To con hora, compartidos por las tarjetas. */
 export function ControlesRango({
   rango, setRango, dia, setDia, mes, setMes,
   desdeHora = '', setDesdeHora = () => {}, hastaHora = '', setHastaHora = () => {},
@@ -353,20 +344,27 @@ export function ControlesRango({
   const aplicarAtajo = (id) => {
     const r = rangoRapido(id);
     if (!r) return;
-    if (id === 'hoy' || id === 'ayer') {
-      setDia(r.desde.slice(0, 10));
-      setRango('dia');
-      return;
-    }
     setDesdeHora(r.desde);
     setHastaHora(r.hasta);
     setRango('libre');
   };
+  const cambiarDesde = (valor) => {
+    if (valor) {
+      setDesdeHora(valor);
+      setRango('libre');
+    }
+  };
+  const cambiarHasta = (valor) => {
+    if (valor) {
+      setHastaHora(valor);
+      setRango('libre');
+    }
+  };
   return (
     <div className="flex flex-wrap items-end gap-3">
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Atajos (como Zonar)</p>
-        <div className="flex gap-1.5">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Atajos</p>
+        <div className="flex flex-wrap gap-1.5">
           {ATAJOS.map((a) => (
             <button
               key={a.id}
@@ -379,70 +377,29 @@ export function ControlesRango({
           ))}
         </div>
       </div>
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Rango</p>
-        <div className="flex gap-1.5">
-          {RANGOS.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => setRango(r.id)}
-              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
-                rango === r.id ? 'bg-forest text-white' : 'bg-slate-50 text-slate-500 hover:text-forest'
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      {rango === 'dia' ? (
-        <label className="min-w-0">
-          <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Día</span>
-          <input
-            type="date"
-            value={dia}
-            onChange={(e) => setDia(e.target.value)}
-            className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-          />
-        </label>
-      ) : null}
+      <label className="min-w-0">
+        <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Desde</span>
+        <input
+          type="datetime-local"
+          step="60"
+          value={desdeHora}
+          onChange={(e) => cambiarDesde(e.target.value)}
+          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+        />
+      </label>
 
-      {rango === 'mes' ? (
-        <label className="min-w-0">
-          <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Mes</span>
-          <input
-            type="month"
-            value={mes}
-            onChange={(e) => setMes(e.target.value)}
-            className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-          />
-        </label>
-      ) : null}
+      <label className="min-w-0">
+        <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Hasta</span>
+        <input
+          type="datetime-local"
+          step="60"
+          value={hastaHora}
+          onChange={(e) => cambiarHasta(e.target.value)}
+          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+        />
+      </label>
 
-      {rango === 'libre' ? (
-        <>
-          <label className="min-w-0">
-            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Desde · hora de Perú</span>
-            <input
-              type="datetime-local"
-              value={desdeHora}
-              onChange={(e) => setDesdeHora(e.target.value)}
-              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-            />
-          </label>
-          <label className="min-w-0">
-            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Hasta · hora de Perú</span>
-            <input
-              type="datetime-local"
-              value={hastaHora}
-              onChange={(e) => setHastaHora(e.target.value)}
-              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-            />
-          </label>
-        </>
-      ) : null}
     </div>
   );
 }

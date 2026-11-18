@@ -7,6 +7,7 @@ import { cargarGruposUnidades } from '../../../lib/agrotrackGrupos';
 import {
   asegurarVisitasCalculadas, leerVisitasDia, leerTablaGeocercasDia,
   armarMatriz, METRICAS, partesLima, duracionTexto, horasDecimal, codigoArea,
+  filtrarVisitasPorRango,
 } from '../../../lib/agrotrackVisitasDia';
 import { hoyLima, rangoRapido, useLimiteFilas, BotonVerMas } from './reportesComunes';
 
@@ -46,9 +47,55 @@ function fechaCorta(fecha) {
   return `${d}/${m}/${y}`;
 }
 
+function fechaHoraCorta(iso) {
+  if (!iso) return '—';
+  const [fecha, hora = '00:00'] = iso.split('T');
+  return `${fechaCorta(fecha)} ${hora}`;
+}
+
+function aIsoLima(iso) {
+  const [fecha, hora = '00:00'] = String(iso || '').split('T');
+  return `${fecha || ''}T${hora || '00:00'}:00-05:00`;
+}
+
+function rangoDiaCompleto(desde, hasta) {
+  return String(desde || '').endsWith('T00:00') && String(hasta || '').endsWith('T23:59');
+}
+
+function visitasComoTabla(visitas = []) {
+  const porPar = new Map();
+  (visitas || []).forEach((v) => {
+    const placa = String(v?.placa || '').trim();
+    const geocerca = String(v?.geocerca || '').trim();
+    if (!placa || !geocerca) return;
+    const clave = `${placa}|${geocerca}`;
+    const fila = porPar.get(clave) || {
+      placa,
+      geocerca,
+      visitas: 0,
+      duracion_segundos: 0,
+      apagado_segundos: 0,
+      ralenti_segundos: 0,
+      viaje_segundos: 0,
+      primera_entrada: v?.entrada || null,
+      ultima_salida: v?.salida || v?.entrada || null,
+    };
+    fila.visitas += v?.continua_dia_anterior ? 0 : 1;
+    fila.duracion_segundos += Number(v?.duracion_segundos || 0);
+    fila.apagado_segundos += Number(v?.apagado_segundos || 0);
+    fila.ralenti_segundos += Number(v?.ralenti_segundos || 0);
+    fila.viaje_segundos += Number(v?.viaje_segundos || 0);
+    if (v?.entrada && (!fila.primera_entrada || v.entrada < fila.primera_entrada)) fila.primera_entrada = v.entrada;
+    const salida = v?.salida || v?.entrada || null;
+    if (salida && (!fila.ultima_salida || salida > fila.ultima_salida)) fila.ultima_salida = salida;
+    porPar.set(clave, fila);
+  });
+  return [...porPar.values()];
+}
+
 export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, fuente = 'real', vehicles = [] }) {
-  const [desdeDia, setDesdeDia] = useState('');
-  const [hastaDia, setHastaDia] = useState('');
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
   const [geocerca, setGeocerca] = useState('');
   const [grupo, setGrupo] = useState('');
   const [metrica, setMetrica] = useState('duracion_segundos');
@@ -68,6 +115,9 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
   // default de "ayer" no debe quedarse fijo si los datos terminan antes.
   const [fechaElegida, setFechaElegida] = useState(false);
 
+  const desdeDia = String(desde || '').split('T')[0];
+  const hastaDia = String(hasta || '').split('T')[0];
+
   // Por defecto: AYER (la tabla de las 6:30 es del día anterior). Si los
   // datos cargados terminan antes, el último día con datos.
   useEffect(() => {
@@ -75,8 +125,8 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
     const ayer = sumarDias(hoyLima(), -1);
     const ultimo = periodo?.hasta ? ultimoDiaLima(periodo.hasta) : '';
     const dia = ultimo && ultimo < ayer ? ultimo : ayer;
-    setDesdeDia(dia);
-    setHastaDia(dia);
+    setDesde(`${dia}T00:00`);
+    setHasta(`${dia}T23:59`);
   }, [periodo?.hasta, fechaElegida]);
 
   useEffect(() => {
@@ -98,21 +148,23 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
       if (cancelado()) return;
       if (errores.length) setAvisos(errores.slice(0, 5));
       setEstado('cargando');
-      const [v, t] = await Promise.all([
-        leerVisitasDia(empresaId, { desdeDia, hastaDia }),
-        leerTablaGeocercasDia(empresaId, { desdeDia, hastaDia }),
-      ]);
+      const rangoCompleto = rangoDiaCompleto(desde, hasta);
+      const v = await leerVisitasDia(empresaId, { desdeDia, hastaDia });
+      const visitasEnRango = filtrarVisitasPorRango(v, aIsoLima(desde), aIsoLima(hasta));
+      const t = rangoCompleto
+        ? await leerTablaGeocercasDia(empresaId, { desdeDia, hastaDia })
+        : visitasComoTabla(visitasEnRango);
       if (cancelado()) return;
-      setVisitas(v);
+      setVisitas(visitasEnRango);
       setTabla(t);
       setPaginaDetalle(1);
-      setEstado(v.length || t.length ? 'ok' : 'vacio');
+      setEstado(visitasEnRango.length || t.length ? 'ok' : 'vacio');
     } catch (e) {
       if (cancelado()) return;
       setError(e?.message || 'No se pudo cargar la tabla de geocercas.');
       setEstado('error');
     }
-  }, [empresaId, desdeDia, hastaDia]);
+  }, [empresaId, desde, hasta]);
 
   useEffect(() => {
     if (!empresaId || !rangoValido) return undefined;
@@ -188,8 +240,8 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
     const r = rangoRapido(id);
     if (!r) return;
     setFechaElegida(true);
-    setDesdeDia(r.desde.slice(0, 10));
-    setHastaDia(r.hasta.slice(0, 10));
+    setDesde(r.desde);
+    setHasta(r.hasta);
   };
 
   const descargarExcel = async () => {
@@ -259,13 +311,13 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
             </div>
           </div>
           <label className="min-w-0">
-            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Desde (día)</span>
-            <input type="date" value={desdeDia} onChange={(e) => { setFechaElegida(true); setDesdeDia(e.target.value); }}
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Desde</span>
+            <input type="datetime-local" step="60" value={desde} onChange={(e) => { setFechaElegida(true); setDesde(e.target.value); }}
               className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700" />
           </label>
           <label className="min-w-0">
-            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Hasta (día)</span>
-            <input type="date" value={hastaDia} onChange={(e) => { setFechaElegida(true); setHastaDia(e.target.value); }}
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Hasta</span>
+            <input type="datetime-local" step="60" value={hasta} onChange={(e) => { setFechaElegida(true); setHasta(e.target.value); }}
               className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700" />
           </label>
           <label className="min-w-0">
@@ -322,7 +374,7 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
 
       {estado === 'error' ? (
         <div className="p-8 text-center">
-          <div className="mx-auto w-9 h-9 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
+          <div className="mx-auto w-9 h-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
             <AlertTriangle size={17} />
           </div>
           <p className="mt-2 text-sm font-semibold text-slate-700">No se pudo cargar la tabla</p>
@@ -337,7 +389,7 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
       {estado === 'vacio' ? (
         <div className="p-8 text-center">
           <p className="text-sm font-semibold text-slate-600">Sin visitas a geocercas</p>
-          <p className="text-xs text-slate-400 mt-1">Ninguna unidad entró a una geocerca entre {fechaCorta(desdeDia)} y {fechaCorta(hastaDia)}.</p>
+          <p className="text-xs text-slate-400 mt-1">Ninguna unidad entró a una geocerca entre {fechaHoraCorta(desde)} y {fechaHoraCorta(hasta)}.</p>
         </div>
       ) : null}
 
@@ -366,7 +418,7 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
           </div>
 
           <div className="px-4 pb-1 text-[11px] text-slate-500">
-            Suma de <b>{etiquetaMetrica}</b> (horas) · {fechaCorta(desdeDia)}{hastaDia !== desdeDia ? ` a ${fechaCorta(hastaDia)}` : ''}
+            Suma de <b>{etiquetaMetrica}</b> (horas) · {fechaHoraCorta(desde)}{desde !== hasta ? ` a ${fechaHoraCorta(hasta)}` : ''}
           </div>
           <div className="overflow-x-auto mx-4 mb-4 rounded-xl border border-slate-100">
             <table className="text-[11px] text-slate-700 border-collapse">

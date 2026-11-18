@@ -23,12 +23,7 @@ import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
  * conocida de cada placa en todo el histórico, sin descargar posiciones al
  * navegador (PostgREST corta en 1000 filas).
  */
-const VENTANAS = [
-  { horas: 8, label: '8 h' },
-  { horas: 16, label: '16 h' },
-  { horas: 24, label: '24 h' },
-  { horas: 48, label: '48 h' },
-];
+const VENTANAS_RAPIDO = [8, 16, 24, 48];
 
 const COLUMNAS = [
   { label: 'Unidad', clase: 'text-left' },
@@ -157,6 +152,7 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
           sinReportar: !tieneFecha || t < umbralMs,
         };
       })
+      .filter((f) => f.sinReportar)
       .sort((a, b) => (a.antiguedadMs === b.antiguedadMs ? 0 : b.antiguedadMs - a.antiguedadMs));
   }, [filasConSinTelemetria, placasFiltro, ahora, ventana]);
 
@@ -223,7 +219,7 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
       <div className="p-4 sm:p-5 border-b border-slate-50 space-y-3">
         <div className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
             <Clock size={17} />
           </div>
           <div className="min-w-0">
@@ -252,7 +248,7 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <RotateCw size={13} className={estado === 'cargando' ? 'animate-spin' : ''} />
-              {estado === 'cargando' ? 'Actualizando…' : 'Actualizar ahora'}
+              {estado === 'cargando' ? 'Actualizando…' : 'Actualizar'}
             </button>
             <button
               type="button"
@@ -268,7 +264,7 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
               type="button"
               onClick={descargarExcel}
               disabled={!puedeExportar}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-forest bg-forest px-2.5 py-1.5 text-[11px] font-semibold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <FileSpreadsheet size={13} /> Descargar Excel
             </button>
@@ -288,29 +284,55 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
           </div>
         ) : null}
 
-        <ControlesFiltroUnidadGrupo
-          mostrar={mostrar}
-          setMostrar={setMostrar}
-          opcionFiltro={opcionFiltro}
-          setOpcionFiltro={setOpcionFiltro}
-          unidades={unidades}
-          opcionesGrupos={opcionesGrupos}
-          gruposInfo={gruposInfo}
-        />
+        <div className="flex flex-wrap items-end gap-3">
+          <ControlesFiltroUnidadGrupo
+            mostrar={mostrar}
+            setMostrar={setMostrar}
+            opcionFiltro={opcionFiltro}
+            setOpcionFiltro={setOpcionFiltro}
+            unidades={unidades}
+            opcionesGrupos={opcionesGrupos}
+            gruposInfo={gruposInfo}
+          />
+
+          <label className="min-w-0">
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">
+              Unidades sin reportar en las últimas
+            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                max="720"
+                step="1"
+                value={ventana}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  if (Number.isFinite(n) && n >= 1) setVentana(Math.min(720, Math.round(n)));
+                  setExplicacion(null);
+                  setErrorExplicacion(null);
+                }}
+                className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 w-[86px] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                aria-label="Unidades sin reportar en las últimas horas"
+              />
+              <span className="text-xs font-semibold text-slate-500">horas</span>
+            </div>
+          </label>
+        </div>
 
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Ventana sin reportar</p>
+          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">VENTANA SIN REPORTAR</p>
           <div className="flex flex-wrap gap-1.5">
-            {VENTANAS.map((v) => (
+            {VENTANAS_RAPIDO.map((h) => (
               <button
-                key={v.horas}
+                key={h}
                 type="button"
-                onClick={() => { setVentana(v.horas); setExplicacion(null); setErrorExplicacion(null); }}
+                onClick={() => { setVentana(h); setExplicacion(null); setErrorExplicacion(null); }}
                 className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
-                  ventana === v.horas ? 'bg-forest text-white' : 'bg-slate-50 text-slate-500 hover:text-forest'
+                  ventana === h ? 'bg-forest text-white' : 'bg-slate-50 text-slate-500 hover:text-forest'
                 }`}
               >
-                {v.label}
+                {h} h
               </button>
             ))}
           </div>

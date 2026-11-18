@@ -2,8 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, AlertTriangle, RotateCw, Database, FileChartColumn, ArrowUpDown, CalendarClock, FileSpreadsheet, Sparkles } from 'lucide-react';
 import {
   obtenerActividadFlota,
-  rangoDiaLima,
-  rangoMesLima,
   rangoLibreLima,
   formatearDuracion,
   formatearRango,
@@ -22,13 +20,6 @@ import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
  * hora de viaje y ralentí por separado. Todo sale de una RPC (SQL), nunca de
  * 103 mil filas descargadas al navegador.
  */
-const MODOS = [
-  { id: 'dia', label: 'Por día' },
-  { id: 'mes', label: 'Por mes' },
-  { id: 'total', label: 'Todo el periodo' },
-  { id: 'libre', label: 'Desde / hasta' },
-];
-
 const COLUMNAS = [
   { id: 'periodo', label: 'Período', numerica: false },
   { id: 'unidad', label: 'Unidad', numerica: false },
@@ -47,9 +38,6 @@ function numero(valor, decimales = 1) {
 }
 
 export default function FleetReports({ empresaId, empresaNombre = '', periodo = null, vehicles = [], fuente = 'real' }) {
-  const [modo, setModo] = useState('dia');
-  const [dia, setDia] = useState('');
-  const [mes, setMes] = useState('');
   // Rango libre con fecha Y hora (pedido por el Ing. Carlos Perez): dos
   // buscadores datetime-local en hora de Perú.
   const [desdeHora, setDesdeHora] = useState('');
@@ -71,8 +59,6 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
     if (!periodo?.hasta) return;
     const ultimo = ultimoDiaLima(periodo.hasta);
     if (!ultimo) return;
-    setDia((prev) => prev || ultimo);
-    setMes((prev) => prev || ultimo.slice(0, 7));
     setDesdeHora((prev) => prev || `${ultimo}T00:00`);
     setHastaHora((prev) => prev || `${ultimo}T23:59`);
   }, [periodo?.hasta]);
@@ -90,22 +76,9 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
   } = useFiltroUnidadGrupo({ vehicles, empresaId });
   const placa = mostrar === 'unidades' ? opcionFiltro : '';
 
-  const consulta = useMemo(() => {
-    if (modo === 'dia') return { ...rangoDiaLima(dia), agrupar: 'dia', texto: dia };
-    if (modo === 'mes') return { ...rangoMesLima(mes), agrupar: 'mes', texto: mes };
-    if (modo === 'libre') {
-      // Rango libre con hora: se agrupa por día dentro de ese rango exacto.
-      const { desde, hasta, texto } = rangoLibreLima(desdeHora, hastaHora);
-      return { desde, hasta, agrupar: 'dia', texto };
-    }
-    return {
-      desde: periodo?.desde || null,
-      hasta: periodo?.hasta || null,
-      agrupar: 'unidad',
-      texto: periodo?.desde ? formatearRango(periodo.desde, periodo.hasta) : '',
-    };
-  }, [modo, dia, mes, desdeHora, hastaHora, periodo]);
+  const consulta = useMemo(() => rangoLibreLima(desdeHora, hastaHora), [desdeHora, hastaHora]);
 
+<<<<<<< HEAD
   const avisoFueraDePeriodo = useMemo(
     () => rangoFueraDelPeriodo(consulta, periodo),
     [consulta, periodo],
@@ -114,6 +87,9 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
   const pendienteDeFecha = (modo === 'dia' && !dia) || (modo === 'mes' && !mes)
     || (modo === 'libre' && (!desdeHora || !hastaHora))
     || (modo === 'total' && !periodo?.desde);
+=======
+  const pendienteDeFecha = !desdeHora || !hastaHora;
+>>>>>>> 106eb2c (reportes: unifica controles de fecha, filtros Grupos/Unidades y estados sin telemetría)
 
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
@@ -169,12 +145,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
     return unidadesSinPosicion.filter((unidad) => placas.has(unidad.placa));
   }, [placasFiltro, unidadesSinPosicion]);
 
-  const periodoPlaceholder = useMemo(() => {
-    if (modo === 'dia') return dia || null;
-    if (modo === 'mes') return mes || null;
-    if (modo === 'libre') return consulta?.texto || null;
-    return null;
-  }, [modo, dia, mes, consulta]);
+  const periodoPlaceholder = useMemo(() => consulta?.texto || null, [consulta]);
 
   const filasConSinTelemetria = useMemo(() => {
     const presentes = new Set(filasFiltradas.map((fila) => normalizarPlaca(fila.placa)).filter(Boolean));
@@ -241,7 +212,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
     setDescargaError(null);
     try {
       const { exportarActividadExcel } = await import('../../../lib/exportExcel');
-      exportarActividadExcel(filas, { modo, rangoTexto, placa });
+      exportarActividadExcel(filas, { modo: 'libre', rangoTexto, placa });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
     }
@@ -257,7 +228,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
       const { resumen, detalleEnviado, totalFilas } = await generarResumenFlota({
         empresa: empresaNombre,
         rango: rangoTexto,
-        agrupacion: MODOS.find((m) => m.id === modo)?.label || modo,
+        agrupacion: 'Desde / hasta',
         filas,
       });
       setResumenIA({ texto: resumen, detalleEnviado, totalFilas });
@@ -278,7 +249,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
           <div className="min-w-0">
             <h2 className="text-base font-bold text-slate-900">Reporte de actividad</h2>
             <p className="text-xs text-slate-500">
-              Recorrido, horas prendido, hora de viaje y ralentí por unidad, por día o por mes.
+              Recorrido, horas prendido, hora de viaje y ralentí por unidad dentro del rango elegido.
             </p>
             {generadoEn ? (
               <p className="text-[11px] text-slate-400 mt-0.5">
@@ -311,7 +282,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
               type="button"
               onClick={descargarExcel}
               disabled={!puedeExportar}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-forest bg-forest px-2.5 py-1.5 text-[11px] font-semibold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <FileSpreadsheet size={13} /> Descargar Excel
             </button>
@@ -321,7 +292,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
 
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Atajos (como Zonar)</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Atajos</p>
             <div className="flex gap-1.5">
               {[
                 { id: 'hoy', label: 'Hoy' },
@@ -335,14 +306,8 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
                   onClick={() => {
                     const r = rangoRapido(a.id);
                     if (!r) return;
-                    if (a.id === 'hoy' || a.id === 'ayer') {
-                      setDia(r.desde.slice(0, 10));
-                      setModo('dia');
-                    } else {
-                      setDesdeHora(r.desde);
-                      setHastaHora(r.hasta);
-                      setModo('libre');
-                    }
+                    setDesdeHora(r.desde);
+                    setHastaHora(r.hasta);
                   }}
                   className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 bg-white text-slate-600 hover:border-forest hover:text-forest transition-colors"
                 >
@@ -351,70 +316,28 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
               ))}
             </div>
           </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Agrupación</p>
-            <div className="flex gap-1.5">
-              {MODOS.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setModo(m.id)}
-                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
-                    modo === m.id ? 'bg-forest text-white' : 'bg-slate-50 text-slate-500 hover:text-forest'
-                  }`}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-          </div>
 
-          {modo === 'dia' ? (
-            <label className="min-w-0">
-              <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Día</span>
-              <input
-                type="date"
-                value={dia}
-                onChange={(e) => setDia(e.target.value)}
-                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-              />
-            </label>
-          ) : null}
+          <label className="min-w-0">
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Desde</span>
+            <input
+              type="datetime-local"
+              step="60"
+              value={desdeHora}
+              onChange={(e) => setDesdeHora(e.target.value)}
+              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            />
+          </label>
 
-          {modo === 'mes' ? (
-            <label className="min-w-0">
-              <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Mes</span>
-              <input
-                type="month"
-                value={mes}
-                onChange={(e) => setMes(e.target.value)}
-                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-              />
-            </label>
-          ) : null}
-
-          {modo === 'libre' ? (
-            <>
-              <label className="min-w-0">
-                <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Desde · hora de Perú</span>
-                <input
-                  type="datetime-local"
-                  value={desdeHora}
-                  onChange={(e) => setDesdeHora(e.target.value)}
-                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                />
-              </label>
-              <label className="min-w-0">
-                <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Hasta · hora de Perú</span>
-                <input
-                  type="datetime-local"
-                  value={hastaHora}
-                  onChange={(e) => setHastaHora(e.target.value)}
-                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                />
-              </label>
-            </>
-          ) : null}
+          <label className="min-w-0">
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Hasta</span>
+            <input
+              type="datetime-local"
+              step="60"
+              value={hastaHora}
+              onChange={(e) => setHastaHora(e.target.value)}
+              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            />
+          </label>
 
           <ControlesFiltroUnidadGrupo
             mostrar={mostrar}
@@ -432,10 +355,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
         <div className="p-8 flex flex-col items-center gap-2 text-slate-400">
           <CalendarClock size={18} />
           <p className="text-xs text-center leading-relaxed max-w-md">
-            {modo === 'total'
-              ? 'Esta empresa todavía no tiene periodo cargado en agrotrack_posiciones, así que no hay totales que mostrar.'
-              : 'Esperando el periodo cargado para precargar el selector…'}
-          </p>
+            'Esperando el periodo cargado para precargar el selector…'</p>
         </div>
       ) : null}
 
@@ -448,7 +368,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
 
       {!pendienteDeFecha && estado === 'error' ? (
         <div className="p-8 text-center">
-          <div className="mx-auto w-9 h-9 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
+          <div className="mx-auto w-9 h-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
             <AlertTriangle size={17} />
           </div>
           <p className="mt-2 text-sm font-semibold text-slate-700">No se pudo cargar el reporte</p>
@@ -468,7 +388,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
           <p className="text-sm font-semibold text-slate-600">Sin datos para ese rango</p>
           <p className="text-xs text-slate-400 mt-1 leading-relaxed">
             No hay filas en agrotrack_posiciones para {rangoTexto || 'el rango elegido'}
-            {placa ? ` y la unidad ${placa}` : ''}. Prueba con otro día/mes o con “Todas las unidades”.
+            {placa ? ` y la unidad ${placa}` : ''}. Prueba con otro rango o con “Todas las unidades”.
           </p>
         </div>
       ) : null}
@@ -498,7 +418,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
               <tbody>
                 {filasTabla.map((fila, i) => (
                   <tr key={`${fila.placa}-${fila.periodo || 'total'}-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
-                    <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-600">{etiquetaPeriodoReporte(fila, modo)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-600">{etiquetaPeriodoReporte(fila, 'libre')}</td>
                     <td className="px-3 py-2">
                       <span className="font-bold text-slate-800">{fila.placa}</span>
                       {fila.unidad && fila.unidad !== fila.placa ? (
@@ -540,7 +460,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
 
           {filasConSinTelemetria.length >= LIMITE_FILAS_ACTIVIDAD ? (
             <p className="px-4 py-2 text-[10px] text-amber-600 border-t border-slate-50">
-              Se alcanzó el tope de {LIMITE_FILAS_ACTIVIDAD} filas (límite de PostgREST). Reduce el rango o agrupa por mes.
+              Se alcanzó el tope de {LIMITE_FILAS_ACTIVIDAD} filas (límite de PostgREST). Reduce el rango o prueba con un día específico.
             </p>
           ) : null}
 

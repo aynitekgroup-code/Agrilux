@@ -161,7 +161,7 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
       <div className="p-4 sm:p-5 border-b border-slate-50 space-y-3">
         <div className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
             <Timer size={17} />
           </div>
           <div className="min-w-0">
@@ -181,7 +181,7 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
               type="button"
               onClick={descargarExcel}
               disabled={!puedeExportar}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-forest bg-forest px-2.5 py-1.5 text-[11px] font-semibold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <FileSpreadsheet size={13} /> Descargar Excel
             </button>
