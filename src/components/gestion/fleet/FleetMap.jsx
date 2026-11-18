@@ -1995,7 +1995,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                       </p>
                     ) : null}
                     {Number.isFinite(Number(vehicle.km_recorridos)) && Number(vehicle.km_recorridos) > 0 ? (
-                      <p className="text-slate-500">Km recorridos: <span className="text-slate-700">{Number(vehicle.km_recorridos).toLocaleString('es-PE')} km</span></p>
+                      <p className="text-slate-500">Km recorridos (24 h): <span className="text-slate-700">{Number(vehicle.km_recorridos).toLocaleString('es-PE')} km</span></p>
                     ) : null}
                     {Number.isFinite(Number(vehicle.odometro_km)) && Number(vehicle.odometro_km) > 0 ? (
                       <p className="text-slate-500">Odómetro: <span className="text-slate-700">{Number(vehicle.odometro_km).toLocaleString('es-PE')} km</span></p>

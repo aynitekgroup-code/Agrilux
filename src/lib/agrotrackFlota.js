@@ -398,6 +398,14 @@ function aAlerta(fila) {
 }
 
 /**
+ * Ventana del panel de consola. El panel es "estado actual", no un reporte
+ * historico: con 290 mil puntos, pedir TODO el periodo hacia que el resumen y
+ * las alertas barrieran la tabla entera en paralelo, rozaran el corte de 8 s
+ * de PostgREST y la consola quedara vacia con un 500.
+ */
+export const VENTANA_PANEL_HORAS = 24;
+
+/**
  * Carga todo el panel de la Fase 1 en una sola llamada.
  * @returns {{
  *   estado: 'real'|'vacio'|'error',
@@ -414,9 +422,14 @@ export async function cargarPanelFlota(empresaId) {
     if (!periodo.registros) {
       return { estado: 'vacio', periodo: null, unidades: [], alertas: [], error: null };
     }
+    // Se toma como referencia el ultimo dato real (no el reloj del navegador),
+    // para que el panel siga siendo correcto si la telemetria viene atrasada.
+    const hasta = periodo.hasta ? new Date(periodo.hasta) : new Date();
+    const desde = new Date(hasta.getTime() - VENTANA_PANEL_HORAS * 3600 * 1000);
+    const rango = { desde: desde.toISOString(), hasta: hasta.toISOString() };
     const [filasResumen, filasAlertas] = await Promise.all([
-      obtenerResumenFlota(empresaId),
-      obtenerAlertasFlota(empresaId, { limite: LIMITE_ALERTAS_PANEL }),
+      obtenerResumenFlota(empresaId, rango),
+      obtenerAlertasFlota(empresaId, { ...rango, limite: LIMITE_ALERTAS_PANEL }),
     ]);
     return {
       estado: filasResumen.length ? 'real' : 'vacio',
