@@ -285,24 +285,44 @@ stable
 security definer
 set search_path = public, pg_catalog, pg_temp
 as $$
-  with unidades as (
-    select distinct on (p.placa) p.placa, p.unidad
-    from public.agrotrack_posiciones p
-    where p.empresa_id = p_empresa_id
-      and p.fecha >= (p_desde_dia::timestamp) at time zone 'America/Lima'
-      and p.fecha <  ((p_hasta_dia + 1)::timestamp) at time zone 'America/Lima'
-    order by p.placa, p.fecha desc
+  -- 18/11/2026: antes se escaneaban TODAS las posiciones del rango con
+  -- DISTINCT ON para sacar la descripción de cada placa (~72 buffers por
+  -- fila devuelta, 4-7 s por página). Ahora solo se buscan las ~40 placas
+  -- que tienen visitas, por índice (empresa_id, placa, fecha), y las
+  -- geocercas se convierten una sola vez en vez de con un JOIN LATERAL por
+  -- fila. Misma salida, lectura en milisegundos.
+  with placas as (
+    select distinct v.placa
+    from public.agrotrack_visitas_dia v
+    where v.empresa_id = p_empresa_id
+      and v.dia between p_desde_dia and p_hasta_dia
+      and (p_placa is null or v.placa = p_placa)
+  ),
+  unidades as (
+    select pl.placa, u.unidad
+    from placas pl
+    left join lateral (
+      select p.unidad from public.agrotrack_posiciones p
+      where p.empresa_id = p_empresa_id
+        and p.placa = pl.placa
+        and p.fecha >= (p_desde_dia::timestamp) at time zone 'America/Lima'
+        and p.fecha <  ((p_hasta_dia + 1)::timestamp) at time zone 'America/Lima'
+      order by p.fecha desc
+      limit 1
+    ) u on true
+  ),
+  geos as (
+    select distinct on (btrim(g.nombre)) btrim(g.nombre) as nombre, g.division
+    from public.agrotrack_geocercas g
+    where g.empresa_id = p_empresa_id
+    order by btrim(g.nombre), g.activa desc, g.id
   )
   select v.dia, v.placa, coalesce(u.unidad, v.placa), v.geocerca, g.division,
          v.entrada, v.salida, v.duracion_segundos, v.apagado_segundos,
          v.ralenti_segundos, v.viaje_segundos, v.abierta, v.continua_dia_anterior
   from public.agrotrack_visitas_dia v
   left join unidades u on u.placa = v.placa
-  left join lateral (
-    select g.division from public.agrotrack_geocercas g
-    where g.empresa_id = p_empresa_id and btrim(g.nombre) = btrim(v.geocerca)
-    order by g.activa desc limit 1
-  ) g on true
+  left join geos g on btrim(v.geocerca) = g.nombre
   where (select public.onboarding_es_miembro(p_empresa_id))
     and v.empresa_id = p_empresa_id
     and v.dia between p_desde_dia and p_hasta_dia

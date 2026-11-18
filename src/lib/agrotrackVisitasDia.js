@@ -81,12 +81,24 @@ export async function asegurarVisitasCalculadas(empresaId, desdeDia, hastaDia, o
   return { calculadas: hechas, errores };
 }
 
+/**
+ * Lectura paginada. Las páginas se piden de a 3 en paralelo: la RPC tarda
+ * ~0,2 s en la base pero cada respuesta de 1000 filas tarda ~2-3 s en viajar,
+ * y en secuencial un día de 2566 visitas tardaba ~9 s. Se mantiene el orden
+ * de las páginas y se descartan las que quedan después de la última completa.
+ */
 async function paginado(nombre, params, contexto) {
   const filas = [];
-  for (let pagina = 0; pagina < MAX_PAGINAS; pagina += 1) {
-    const lote = await rpc(nombre, { ...params, p_offset: pagina * PAGINA, p_limite: PAGINA }, contexto);
-    filas.push(...lote);
-    if (lote.length < PAGINA) break;
+  const EN_PARALELO = 3;
+  for (let base = 0; base < MAX_PAGINAS; base += EN_PARALELO) {
+    const offsets = Array.from({ length: EN_PARALELO }, (_, i) => base + i).filter((i) => i < MAX_PAGINAS);
+    const lotes = await Promise.all(
+      offsets.map((pagina) => rpc(nombre, { ...params, p_offset: pagina * PAGINA, p_limite: PAGINA }, contexto)),
+    );
+    const corte = lotes.findIndex((lote) => lote.length < PAGINA);
+    const utiles = corte < 0 ? lotes : lotes.slice(0, corte + 1);
+    utiles.forEach((lote) => filas.push(...lote));
+    if (corte >= 0) break;
   }
   return filas;
 }

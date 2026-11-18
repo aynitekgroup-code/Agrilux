@@ -64,17 +64,20 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
   const [paginaDetalle, setPaginaDetalle] = useState(1);
   const [buscar, setBuscar] = useState('');
   const [exportError, setExportError] = useState('');
+  // El panel de flota llega después del primer render: mientras tanto, el
+  // default de "ayer" no debe quedarse fijo si los datos terminan antes.
+  const [fechaElegida, setFechaElegida] = useState(false);
 
   // Por defecto: AYER (la tabla de las 6:30 es del día anterior). Si los
   // datos cargados terminan antes, el último día con datos.
   useEffect(() => {
-    if (desdeDia) return;
+    if (fechaElegida) return;
     const ayer = sumarDias(hoyLima(), -1);
     const ultimo = periodo?.hasta ? ultimoDiaLima(periodo.hasta) : '';
     const dia = ultimo && ultimo < ayer ? ultimo : ayer;
     setDesdeDia(dia);
     setHastaDia(dia);
-  }, [periodo?.hasta, desdeDia]);
+  }, [periodo?.hasta, fechaElegida]);
 
   useEffect(() => {
     if (!empresaId) return;
@@ -184,6 +187,7 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
   const atajo = (id) => {
     const r = rangoRapido(id);
     if (!r) return;
+    setFechaElegida(true);
     setDesdeDia(r.desde.slice(0, 10));
     setHastaDia(r.hasta.slice(0, 10));
   };
@@ -256,12 +260,12 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
           </div>
           <label className="min-w-0">
             <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Desde (día)</span>
-            <input type="date" value={desdeDia} onChange={(e) => setDesdeDia(e.target.value)}
+            <input type="date" value={desdeDia} onChange={(e) => { setFechaElegida(true); setDesdeDia(e.target.value); }}
               className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700" />
           </label>
           <label className="min-w-0">
             <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Hasta (día)</span>
-            <input type="date" value={hastaDia} onChange={(e) => setHastaDia(e.target.value)}
+            <input type="date" value={hastaDia} onChange={(e) => { setFechaElegida(true); setHastaDia(e.target.value); }}
               className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700" />
           </label>
           <label className="min-w-0">
