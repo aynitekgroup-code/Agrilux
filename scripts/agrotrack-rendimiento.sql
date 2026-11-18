@@ -141,7 +141,11 @@ from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'
   and p.proname = 'agrotrack_eventos_geocerca_flota'
-having count(*) > 1
+  and (select count(*)
+         from pg_proc p2
+         join pg_namespace n2 on n2.oid = p2.pronamespace
+        where n2.nspname = 'public'
+          and p2.proname = 'agrotrack_eventos_geocerca_flota') > 1
 order by 1, 2;
 
 
