@@ -962,61 +962,41 @@ stable
 security definer
 set search_path = public, extensions, pg_catalog, pg_temp
 as $$
-  -- Mismo bloque de geocercas que agrotrack_lotes_flota (129 filas
-  -- materializadas: el GeoJSON se convierte UNA sola vez y el bbox sirve de
-  -- prefilter). Aquí además admite el filtro por nombre.
-  with geocercas as materialized (
-    select
-      g.id,
-      g.nombre,
-      ((g.geometria->'bbox')->>0)::double precision            as lon_min,
-      ((g.geometria->'bbox')->>1)::double precision            as lat_min,
-      ((g.geometria->'bbox')->>2)::double precision            as lon_max,
-      ((g.geometria->'bbox')->>3)::double precision            as lat_max,
-      ST_SetSRID(ST_GeomFromGeoJSON(g.geometria::text), 4326)  as poligono
-    from public.agrotrack_geocercas_reportes g
-    where g.empresa_id = p_empresa_id
-      and g.activa is true
-      and g.incluir_reportes
-      and (p_geocerca is null
-        or lower(btrim(g.nombre)) = lower(btrim(p_geocerca)))
-      and g.geometria is not null
-      and jsonb_typeof(g.geometria) = 'object'
-      and (g.geometria->>'type') in ('Polygon', 'MultiPolygon')
-      and jsonb_typeof(g.geometria->'bbox') = 'array'
-  ),
-  puntos as (
+  -- 18/11/2026: se consulta la geometría INDEXADA directamente (GIST en
+  -- agrotrack_posiciones.geom y agrotrack_geocercas_subdiv.geom) en vez de
+  -- reconstruir ST_MakePoint y volver a convertir el GeoJSON en cada llamada.
+  -- Con ~1.100 puntos/día una placa tardaba 19 s y superaba el límite de 8 s
+  -- de Supabase. El lateral con GIST devuelve solo los fragmentos que
+  -- contienen cada punto; se agrupa por geocerca para no duplicar visitas en
+  -- las fronteras internas de ST_Subdivide.
+  with puntos as materialized (
     select p.id, p.placa, p.fecha, p.secuencia, p.latitud, p.longitud,
-           p.velocidad, p.evento
+           p.velocidad, p.evento, p.geom
     from public.agrotrack_posiciones p
     where p.empresa_id = p_empresa_id
       and (p_placa is null or p.placa = p_placa)
       and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
       and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
-      and p.latitud is not null
-      and p.longitud is not null
+      and p.geom is not null
   ),
   -- Última posición de cada placa ANTES de abrir el rango: de ahí sale si ya
   -- estaba dentro (entrada continuada) y con qué estado de motor abría.
-  -- 17/11/2026: materialized. Sin esto el planificador lo recalculaba UNA VEZ
-  -- POR GEOCERCA (178 x 88.000 filas): 5 s solo en esta parte.
   antes as materialized (
     select distinct on (p.placa)
-      p.placa, p.fecha, p.latitud, p.longitud, p.velocidad, p.evento
+      p.placa, p.fecha, p.latitud, p.longitud, p.velocidad, p.evento, p.geom
     from public.agrotrack_posiciones p
     where p.empresa_id = p_empresa_id
       and (p_placa is null or p.placa = p_placa)
       and p_desde is not null
       and p.fecha < p_desde
-      and p.latitud is not null
-      and p.longitud is not null
+      and p.geom is not null
     order by p.placa, p.fecha desc, coalesce(p.secuencia, 0) desc, p.id desc
   ),
   dentro_antes as (
     select
       a.placa,
-      g.id                                                          as geocerca_id,
-      g.nombre,
+      s.geocerca_id,
+      s.nombre,
       -- Estado del último punto DENTRO con el que se abre el rango (mismo
       -- criterio de encendido/viaje que el resto del archivo).
       (not (lower(coalesce(a.evento, '')) like '%estacionad%'
@@ -1025,29 +1005,34 @@ as $$
          or lower(coalesce(a.evento, '')) like '%apagad%'))
         and coalesce(a.velocidad, 0) > 5                            as viaje_base
     from antes a
-    join geocercas g
-      on a.latitud  between g.lat_min and g.lat_max
-     and a.longitud between g.lon_min and g.lon_max
-     and ST_Contains(g.poligono, ST_SetSRID(ST_MakePoint(a.longitud, a.latitud), 4326))
+    join lateral (
+      select s.geocerca_id, btrim(s.nombre) as nombre
+      from public.agrotrack_geocercas_subdiv s
+      where s.empresa_id = p_empresa_id
+        and s.activa is true
+        and s.incluir_reportes
+        and (p_geocerca is null
+          or lower(btrim(s.nombre)) = lower(btrim(p_geocerca)))
+        and ST_Contains(s.geom, a.geom)
+      group by s.geocerca_id, btrim(s.nombre)
+    ) s on true
   ),
-  -- Prefilter de bbox barato antes de llamar a PostGIS (mismo patrón que (2)).
-  candidatos as (
-    select
-      g.id as geocerca_id, g.nombre, g.poligono,
-      p.id as punto_id, p.placa, p.fecha, p.secuencia,
-      p.latitud, p.longitud, p.velocidad, p.evento
-    from geocercas g
-    join puntos p
-      on p.latitud  between g.lat_min and g.lat_max
-     and p.longitud between g.lon_min and g.lon_max
-  ),
-  -- 17/11/2026: materialized. Se usa en claves y en serie; sin materializar el
-  -- cálculo punto-dentro-polígono se repetía en cada referencia.
   dentro as materialized (
-    select c.geocerca_id, c.nombre, c.punto_id, c.placa, c.fecha, c.secuencia,
-           c.velocidad, c.evento
-    from candidatos c
-    where ST_Contains(c.poligono, ST_SetSRID(ST_MakePoint(c.longitud, c.latitud), 4326))
+    select
+      d.geocerca_id, d.nombre, p.id as punto_id, p.placa, p.fecha,
+      p.secuencia, p.velocidad, p.evento
+    from puntos p
+    join lateral (
+      select s.geocerca_id, btrim(s.nombre) as nombre
+      from public.agrotrack_geocercas_subdiv s
+      where s.empresa_id = p_empresa_id
+        and s.activa is true
+        and s.incluir_reportes
+        and (p_geocerca is null
+          or lower(btrim(s.nombre)) = lower(btrim(p_geocerca)))
+        and ST_Contains(s.geom, p.geom)
+      group by s.geocerca_id, btrim(s.nombre)
+    ) d on true
   ),
   -- Pares (placa, polígono) del reporte: con posiciones dentro del rango o
   -- que ya estaban dentro al abrirlo.
