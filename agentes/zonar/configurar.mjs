@@ -20,7 +20,10 @@ import { conectarAgrilux } from './src/agrilux.js';
 function preguntar(pregunta, { ocultar = false, defecto = '' } = {}) {
   return new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    process.stdout.write(`${pregunta}${defecto ? ` [${defecto}]` : ''}: `);
+    // console.log en vez de process.stdout.write: en consolas de Windows (TTY)
+    // la escritura parcial queda en buffer y la pregunta no se pinta hasta el
+    // siguiente salto, y el usuario veía el asistente "mudo".
+    console.log(`${pregunta}${defecto ? ` [${defecto}]` : ''}:`);
     if (ocultar) {
       // No ecoar las teclas; solo cerramos línea cuando se pulsa Enter.
       rl._writeToOutput = (s) => {

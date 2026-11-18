@@ -25,7 +25,8 @@ import {
   etiquetaPeriodoReporte,
   ultimoDiaLima,
 } from '../../../lib/agrotrackFlota';
-import { useRango, ControlesRango, CuerpoEstado, numero, useLimiteFilas, BotonVerMas } from './reportesComunes';
+import { useRango, ControlesRango, CuerpoEstado, numero, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, AvisoUnidadesSinTelemetria } from './reportesComunes';
+import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
 import { armarContextoReporte } from '../../../lib/reportesIa';
 import { llamarIaGestion } from '../../../lib/agrotrackIa';
 
@@ -47,8 +48,19 @@ const AGRUPACIONES = [
 ];
 
 /** Tarjeta 1: entradas y salidas de geocerca (eventos de Zonar). */
-function CardEventos({ empresaId, periodo, fuente }) {
+function CardEventos({ empresaId, periodo, fuente, vehicles = [] }) {
   const { rango, setRango, dia, setDia, mes, setMes, desdeHora, setDesdeHora, hastaHora, setHastaHora, consulta, pendienteDeFecha } = useRango(periodo);
+  const {
+    mostrar,
+    setMostrar,
+    opcionFiltro,
+    setOpcionFiltro,
+    gruposInfo,
+    opcionesGrupos,
+    unidades,
+    unidadesSinPosicion,
+    placasFiltro,
+  } = useFiltroUnidadGrupo({ vehicles, empresaId });
   const [agrupar, setAgrupar] = useState('geocerca');
   const [estado, setEstado] = useState('inactivo');
   const [filas, setFilas] = useState([]);
@@ -70,6 +82,7 @@ function CardEventos({ empresaId, periodo, fuente }) {
       desde: consulta.desde,
       hasta: consulta.hasta,
       agrupar,
+      placas: placasFiltro,
     })
       .then((resultado) => {
         if (cancelado) return;
@@ -86,7 +99,13 @@ function CardEventos({ empresaId, periodo, fuente }) {
     return () => {
       cancelado = true;
     };
-  }, [empresaId, consulta, agrupar, pendienteDeFecha, intento]);
+  }, [empresaId, consulta, agrupar, pendienteDeFecha, intento, placasFiltro]);
+
+  const unidadesSinTelemetria = useMemo(() => {
+    if (placasFiltro == null) return unidadesSinPosicion;
+    const placas = new Set(placasFiltro.map(normalizarPlaca));
+    return unidadesSinPosicion.filter((unidad) => placas.has(unidad.placa));
+  }, [placasFiltro, unidadesSinPosicion]);
 
   const totales = useMemo(() => {
     const sum = (campo) => filas.reduce((s, f) => s + Number(f[campo] || 0), 0);
@@ -133,6 +152,7 @@ function CardEventos({ empresaId, periodo, fuente }) {
                 <Database size={12} /> Datos reales: {rangoTexto}
               </span>
             ) : null}
+            <BotonActualizarAhora onClick={() => setIntento((n) => n + 1)} disabled={estado === 'cargando' || pendienteDeFecha} cargando={estado === 'cargando'} />
             <button
               type="button"
               onClick={descargarExcel}
@@ -164,6 +184,15 @@ function CardEventos({ empresaId, periodo, fuente }) {
               ))}
             </div>
           </div>
+          <ControlesFiltroUnidadGrupo
+            mostrar={mostrar}
+            setMostrar={setMostrar}
+            opcionFiltro={opcionFiltro}
+            setOpcionFiltro={setOpcionFiltro}
+            unidades={unidades}
+            opcionesGrupos={opcionesGrupos}
+            gruposInfo={gruposInfo}
+          />
         </div>
       </div>
 
@@ -174,7 +203,9 @@ function CardEventos({ empresaId, periodo, fuente }) {
         error={error}
         onReintentar={() => setIntento((n) => n + 1)}
         mensajeVacio={`No hay eventos de geocerca en ${rangoTexto || 'el rango elegido'}. Prueba con otro día/mes o con “Todo el periodo”.`}
+        childrenCuandoVacio={unidadesSinTelemetria.length > 0}
       >
+        <AvisoUnidadesSinTelemetria unidades={unidadesSinTelemetria} />
         {estado === 'ok' ? (
           <>
             <div className="overflow-x-auto">
@@ -258,7 +289,17 @@ function CardEventos({ empresaId, periodo, fuente }) {
 /** Tarjeta 2: tiempo dentro de cada lote (punto dentro del polígono, PostGIS). */
 function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
   const { rango, setRango, dia, setDia, mes, setMes, desdeHora, setDesdeHora, hastaHora, setHastaHora, consulta, pendienteDeFecha } = useRango(periodo);
-  const [placa, setPlaca] = useState('');
+  const {
+    mostrar,
+    setMostrar,
+    opcionFiltro,
+    setOpcionFiltro,
+    gruposInfo,
+    opcionesGrupos,
+    unidades,
+    unidadesSinPosicion,
+    placasFiltro,
+  } = useFiltroUnidadGrupo({ vehicles, empresaId });
   const [horaDesde, setHoraDesde] = useState('');
   const [horaHasta, setHoraHasta] = useState('');
   const [estado, setEstado] = useState('inactivo');
@@ -267,12 +308,6 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
   const [rangoTexto, setRangoTexto] = useState('');
   const [intento, setIntento] = useState(0);
   const [descargaError, setDescargaError] = useState(null);
-
-  // Unidades reales para el selector (si no hay datos, no hay qué elegir).
-  const unidades = useMemo(
-    () => vehicles.map((v) => ({ placa: v.placa, descripcion: v.descripcion || '' })),
-    [vehicles]
-  );
 
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
@@ -286,7 +321,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
     obtenerLotesFlota(empresaId, {
       desde: consulta.desde,
       hasta: consulta.hasta,
-      placa,
+      placas: placasFiltro,
       horaDesde,
       horaHasta,
     })
@@ -305,7 +340,13 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
     return () => {
       cancelado = true;
     };
-  }, [empresaId, consulta, placa, horaDesde, horaHasta, pendienteDeFecha, intento]);
+  }, [empresaId, consulta, placasFiltro, horaDesde, horaHasta, pendienteDeFecha, intento]);
+
+  const unidadesSinTelemetria = useMemo(() => {
+    if (placasFiltro == null) return unidadesSinPosicion;
+    const placas = new Set(placasFiltro.map(normalizarPlaca));
+    return unidadesSinPosicion.filter((unidad) => placas.has(unidad.placa));
+  }, [placasFiltro, unidadesSinPosicion]);
 
   const totales = useMemo(() => {
     const sum = (campo) => filas.reduce((s, f) => s + Number(f[campo] || 0), 0);
@@ -336,7 +377,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
     setDescargaError(null);
     try {
       const { exportarLotesExcel } = await import('../../../lib/exportExcel');
-      exportarLotesExcel(filas, { rangoTexto, placa, horaDesde, horaHasta });
+      exportarLotesExcel(filas, { rangoTexto, placa: '', horaDesde, horaHasta });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
     }
@@ -361,6 +402,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
                 <Database size={12} /> Datos reales: {rangoTexto}
               </span>
             ) : null}
+            <BotonActualizarAhora onClick={() => setIntento((n) => n + 1)} disabled={estado === 'cargando' || pendienteDeFecha} cargando={estado === 'cargando'} />
             <button
               type="button"
               onClick={descargarExcel}
@@ -375,21 +417,15 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
 
         <div className="flex flex-wrap items-end gap-3">
           <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} desdeHora={desdeHora} setDesdeHora={setDesdeHora} hastaHora={hastaHora} setHastaHora={setHastaHora} />
-          <label className="min-w-0">
-            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Máquina</span>
-            <select
-              value={placa}
-              onChange={(e) => setPlaca(e.target.value)}
-              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-            >
-              <option value="">Todas las unidades</option>
-              {unidades.map((u) => (
-                <option key={u.placa} value={u.placa}>
-                  {u.descripcion ? `${u.placa} · ${u.descripcion}` : u.placa}
-                </option>
-              ))}
-            </select>
-          </label>
+          <ControlesFiltroUnidadGrupo
+            mostrar={mostrar}
+            setMostrar={setMostrar}
+            opcionFiltro={opcionFiltro}
+            setOpcionFiltro={setOpcionFiltro}
+            unidades={unidades}
+            opcionesGrupos={opcionesGrupos}
+            gruposInfo={gruposInfo}
+          />
           <div>
             <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Horas del día</span>
             <div className="flex items-center gap-1.5">
@@ -429,8 +465,10 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
         estado={estado}
         error={error}
         onReintentar={() => setIntento((n) => n + 1)}
-        mensajeVacio={`Ningún lote tuvo posiciones dentro de su polígono en ${rangoTexto || 'el rango elegido'}${placa ? ` para la unidad ${placa}` : ''}${horaDesde || horaHasta ? ` entre las ${horaDesde || '00:00'} y las ${horaHasta || '23:59'}` : ''}. Prueba con otro día/mes, con “Todo el periodo” o quitando los filtros.`}
+        mensajeVacio={`Ningún lote tuvo posiciones dentro de su polígono en ${rangoTexto || 'el rango elegido'}${opcionFiltro ? ` para ${mostrar === 'grupos' ? 'el grupo' : 'la unidad'} ${opcionFiltro}` : ''}${horaDesde || horaHasta ? ` entre las ${horaDesde || '00:00'} y las ${horaHasta || '23:59'}` : ''}. Prueba con otro día/mes, con “Todo el periodo” o quitando los filtros.`}
+        childrenCuandoVacio={unidadesSinTelemetria.length > 0}
       >
+        <AvisoUnidadesSinTelemetria unidades={unidadesSinTelemetria} />
         {estado === 'ok' ? (
           <>
             <div className="overflow-x-auto">
@@ -558,7 +596,17 @@ function visitaAbierta(f) {
  */
 function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
   const { rango, setRango, dia, setDia, mes, setMes, desdeHora, setDesdeHora, hastaHora, setHastaHora, consulta, pendienteDeFecha } = useRango(periodo);
-  const [placa, setPlaca] = useState('');
+  const {
+    mostrar,
+    setMostrar,
+    opcionFiltro,
+    setOpcionFiltro,
+    gruposInfo,
+    opcionesGrupos,
+    unidades,
+    unidadesSinPosicion,
+    placasFiltro,
+  } = useFiltroUnidadGrupo({ vehicles, empresaId });
   const [geocerca, setGeocerca] = useState('');
   const [estado, setEstado] = useState('inactivo');
   const [filas, setFilas] = useState([]);
@@ -577,11 +625,6 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
   const [explicacion, setExplicacion] = useState(null);
   const [errorExplicacion, setErrorExplicacion] = useState(null);
 
-  const unidades = useMemo(
-    () => vehicles.map((v) => ({ placa: v.placa, descripcion: v.descripcion || '' })),
-    [vehicles]
-  );
-
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
       // Nunca dejar "Calculando..." colgado (ver FleetEventsSummary).
@@ -595,7 +638,6 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
     obtenerVisitasGeocerca(empresaId, {
       desde: consulta.desde,
       hasta: consulta.hasta,
-      placa,
       geocerca,
     })
       .then((resultado) => {
@@ -620,22 +662,38 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
     return () => {
       cancelado = true;
     };
-  }, [empresaId, consulta, placa, geocerca, pendienteDeFecha, intento]);
+  }, [empresaId, consulta, geocerca, pendienteDeFecha, intento]);
 
   const totales = useMemo(() => {
-    const sum = (campo) => filas.reduce((s, f) => s + Number(f[campo] || 0), 0);
+    const filtradas = filtrarFilasPorPlaca(filas, placasFiltro, (fila) => fila?.placa);
+    const sum = (campo) => filtradas.reduce((s, f) => s + Number(f[campo] || 0), 0);
     return {
       duracion: sum('duracion_segundos'),
       apagado: sum('apagado_segundos'),
       ralenti: sum('ralenti_segundos'),
       viaje: sum('viaje_segundos'),
     };
-  }, [filas]);
+  }, [filas, placasFiltro]);
 
-  const abiertas = useMemo(() => filas.filter(visitaAbierta).length, [filas]);
+  const abiertas = useMemo(
+    () => filtrarFilasPorPlaca(filas, placasFiltro, (fila) => fila?.placa).filter(visitaAbierta).length,
+    [filas, placasFiltro],
+  );
 
   // Tabla limitada a 15 filas; Excel, IA y respaldo usan la lista completa.
-  const { filasVistas, expandido, alternar, total } = useLimiteFilas(filas);
+  const filasFiltradas = useMemo(
+    () => filtrarFilasPorPlaca(filas, placasFiltro, (fila) => fila?.placa),
+    [filas, placasFiltro],
+  );
+
+  const unidadesSinTelemetria = useMemo(() => {
+    if (placasFiltro == null) return unidadesSinPosicion;
+    const placas = new Set(placasFiltro.map(normalizarPlaca));
+    return unidadesSinPosicion.filter((unidad) => placas.has(unidad.placa));
+  }, [placasFiltro, unidadesSinPosicion]);
+
+  // Tabla limitada a 15 filas; Excel, IA y respaldo usan la lista completa.
+  const { filasVistas, expandido, alternar, total } = useLimiteFilas(filasFiltradas);
 
   // Si la RPC todavía no trae el desglose, se muestran «—» con un aviso en
   // vez de un 0 engañoso (mismo criterio que la tarjeta de lotes).
@@ -678,7 +736,7 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
     setDescargaError(null);
     try {
       const { exportarVisitasGeocercaExcel } = await import('../../../lib/exportExcelReportes');
-      exportarVisitasGeocercaExcel(filas, { rangoTexto, geocerca, placa });
+      exportarVisitasGeocercaExcel(filas, { rangoTexto, geocerca, placa: '' });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
     }
@@ -690,7 +748,7 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
     try {
       const { exportarTablaDiaExcel } = await import('../../../lib/exportExcelReportes');
       const visitasDelDia = filas.filter((f) => ultimoDiaLima(f.entrada) === diaExportado);
-      exportarTablaDiaExcel(visitasDelDia, { dia: diaExportado, rangoTexto, geocerca, placa });
+      exportarTablaDiaExcel(visitasDelDia, { dia: diaExportado, rangoTexto, geocerca, placa: '' });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
     }
@@ -729,7 +787,7 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
       const enCurso = filas.filter((f) => f.abierta || !f.salida).length;
       const contexto = armarContextoReporte({
         reporte: 'Visitas a geocercas (detalle por visita: entrada, salida, duración y desglose apagado/ralentí/viajando)',
-        rango: `${rangoTexto || 'todo el periodo cargado'}${geocerca ? ` · geocerca: ${geocerca}` : ''}${placa ? ` · máquina: ${placa}` : ''}${
+        rango: `${rangoTexto || 'todo el periodo cargado'}${geocerca ? ` · geocerca: ${geocerca}` : ''}${opcionFiltro ? ` · ${mostrar === 'grupos' ? 'grupo' : 'máquina'}: ${opcionFiltro}` : ''}${
           enCurso ? ` · ${enCurso} visita(s) en curso` : ''
         }`,
         columnas: ['Placa', 'Geocerca', 'Entrada', 'Salida', 'Duración', 'Apagado', 'Ralentí', 'Viajando'],
@@ -774,6 +832,7 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
                 <Database size={12} /> Datos reales: {rangoTexto}
               </span>
             ) : null}
+            <BotonActualizarAhora onClick={() => setIntento((n) => n + 1)} disabled={estado === 'cargando' || pendienteDeFecha} cargando={estado === 'cargando'} />
             <button
               type="button"
               onClick={guardarRespaldo}
@@ -846,21 +905,15 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
 
         <div className="flex flex-wrap items-end gap-3">
           <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} desdeHora={desdeHora} setDesdeHora={setDesdeHora} hastaHora={hastaHora} setHastaHora={setHastaHora} />
-          <label className="min-w-0">
-            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Máquina</span>
-            <select
-              value={placa}
-              onChange={(e) => setPlaca(e.target.value)}
-              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-            >
-              <option value="">Todas las unidades</option>
-              {unidades.map((u) => (
-                <option key={u.placa} value={u.placa}>
-                  {u.descripcion ? `${u.placa} · ${u.descripcion}` : u.placa}
-                </option>
-              ))}
-            </select>
-          </label>
+          <ControlesFiltroUnidadGrupo
+            mostrar={mostrar}
+            setMostrar={setMostrar}
+            opcionFiltro={opcionFiltro}
+            setOpcionFiltro={setOpcionFiltro}
+            unidades={unidades}
+            opcionesGrupos={opcionesGrupos}
+            gruposInfo={gruposInfo}
+          />
           {geocercasVistas.length ? (
             <label className="min-w-0">
               <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Geocerca</span>
@@ -895,9 +948,11 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
         estado={estado}
         error={error}
         onReintentar={() => setIntento((n) => n + 1)}
-        mensajeVacio={`No hay visitas en ${rangoTexto || 'el rango elegido'}${geocerca ? ` para la geocerca ${geocerca}` : ''}${placa ? ` de la unidad ${placa}` : ''}. Prueba con otro día/mes, con “Todo el periodo” o quitando los filtros.`}
+        mensajeVacio={`No hay visitas en ${rangoTexto || 'el rango elegido'}${geocerca ? ` para la geocerca ${geocerca}` : ''}${opcionFiltro ? ` para ${mostrar === 'grupos' ? 'el grupo' : 'la unidad'} ${opcionFiltro}` : ''}. Prueba con otro día/mes, con “Todo el periodo” o quitando los filtros.`}
+        childrenCuandoVacio={unidadesSinTelemetria.length > 0}
       >
-        {estado === 'ok' ? (
+        <AvisoUnidadesSinTelemetria unidades={unidadesSinTelemetria} />
+        {estado === 'ok' || filasVistas.length ? (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-slate-700">
@@ -951,8 +1006,8 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
                 <tfoot>
                   <tr className="bg-slate-50 text-slate-700 font-bold">
                     <td className="px-3 py-2.5" colSpan={4}>
-                      Totales de {filas.length} visita{filas.length === 1 ? '' : 's'}
-                      {geocerca ? ` · geocerca ${geocerca}` : ''}{placa ? ` · ${placa}` : ''}
+                      Totales de {filasFiltradas.length} visita{filasFiltradas.length === 1 ? '' : 's'}
+                      {geocerca ? ` · geocerca ${geocerca}` : ''}{opcionFiltro ? ` · ${opcionFiltro}` : ''}
                       {abiertas ? ` · ${abiertas} en curso` : ''}
                     </td>
                     <td className="px-3 py-2.5 text-right">{formatearDuracion(totales.duracion)}</td>
@@ -1007,7 +1062,7 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
 export default function FleetGeofenceReports({ empresaId, periodo = null, fuente = 'real', vehicles = [] }) {
   return (
     <div className="space-y-4">
-      <CardEventos empresaId={empresaId} periodo={periodo} fuente={fuente} />
+      <CardEventos empresaId={empresaId} periodo={periodo} fuente={fuente} vehicles={vehicles} />
       <CardLotes empresaId={empresaId} periodo={periodo} fuente={fuente} vehicles={vehicles} />
       <CardVisitas empresaId={empresaId} periodo={periodo} fuente={fuente} vehicles={vehicles} />
     </div>

@@ -119,6 +119,33 @@ export function fechaDesdeJsonZonar(valor, modo = 'auto') {
   const excel = parseFechaZonar(texto);
   if (excel) return excel;
 
+  // "11/15/2026 11:58:27 PM" — formato real de GetUnitsHistory (mes/día/año,
+  // con o sin segundos). La hora que muestra Zonar es la de Perú.
+  const slash = texto.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp])\.?\s*[Mm]\.?$/,
+  );
+  if (slash) {
+    let [, mes, dia, anio, hora, min, seg, ampm] = slash;
+    if (+mes > 12 && +dia <= 12) [mes, dia] = [dia, mes]; // por si viene D/M/A
+    let h = +hora % 12;
+    if (ampm.toLowerCase() === 'p') h += 12;
+    return `${anio}-${pad2(+mes)}-${pad2(+dia)}T${pad2(h)}:${min}:${seg || '00'}${PERU_OFFSET}`;
+  }
+
+  // "nov. 16 2026 8:13:27 p. m." — mes abreviado en español con segundos
+  // (aparece en la sesión en español; parseFechaZonar no acepta segundos).
+  const espanol = texto.match(
+    /^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})\s+(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp])\.?\s*[Mm]\.?$/,
+  );
+  if (espanol) {
+    const month = MONTHS[espanol[1].toLowerCase()];
+    if (month) {
+      let h = +espanol[4] % 12;
+      if (espanol[7].toLowerCase() === 'p') h += 12;
+      return `${espanol[3]}-${month}-${pad2(+espanol[2])}T${pad2(h)}:${espanol[5]}:${espanol[6] || '00'}${PERU_OFFSET}`;
+    }
+  }
+
   const iso = texto.match(
     /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?\s*(Z|[+-]\d{2}:?\d{2})?$/,
   );
@@ -141,9 +168,10 @@ export function fechaDesdeJsonZonar(valor, modo = 'auto') {
  * @returns {{row: object}|{error: string}}
  */
 export function armarFilaZonar(marcador, empresaId, userId, { fechaModo = 'auto' } = {}) {
-  const unidad = String(marcador?.Unit ?? marcador?.MarkerName ?? '').trim();
+  // `||` y no `??`: si el campo viene como cadena vacía, usamos el respaldo.
+  const unidad = String(marcador?.Unit || marcador?.MarkerName || '').trim();
   const { placa, descripcion } = separarUnidad(unidad);
-  const fecha = fechaDesdeJsonZonar(marcador?.LastEventDate ?? marcador?.Date, fechaModo);
+  const fecha = fechaDesdeJsonZonar(marcador?.LastEventDate || marcador?.Date, fechaModo);
   const latitud = numberOrNull(marcador?.Latitude);
   const longitud = numberOrNull(marcador?.Longitude);
   const evento = cleanText(marcador?.Event);

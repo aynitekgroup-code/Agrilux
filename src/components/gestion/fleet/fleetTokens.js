@@ -24,6 +24,7 @@ export const STATUS_META = {
   detenido: { label: 'Detenido', color: FLEET.amber, bg: FLEET.amberSoft, dot: '#F59E0B' },
   alerta: { label: 'Alerta', color: FLEET.red, bg: FLEET.redSoft, dot: '#EF4444' },
   offline: { label: 'Sin conexión', color: FLEET.grey, bg: FLEET.greySoft, dot: '#9CA3AF' },
+  fuera_servicio: { label: 'Fuera de servicio', color: FLEET.red, bg: FLEET.redSoft, dot: '#DC2626' },
 };
 
 export const SEVERITY_META = {

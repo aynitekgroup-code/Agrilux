@@ -103,6 +103,8 @@ export async function obtenerEventosGeocerca(
 /**
  * Tiempo dentro de cada lote (punto dentro del polígono, PostGIS).
  * @param {string|null} placa   filtrar una sola unidad ("la máquina")
+ * @param {Array<string>} [placas] filtro opcional por conjunto de placas
+ *        (selector "Mostrar: Unidades / Grupos").
  * @param {string|null} horaDesde franja horaria del día en hora de Perú
  * @param {string|null} horaHasta   (ej. '06:00'..'18:00', con minutos)
  * @returns filas { geocerca_id, lote, division, anexo, area_ha, unidades, visitas,
@@ -111,7 +113,7 @@ export async function obtenerEventosGeocerca(
  */
 export async function obtenerLotesFlota(
   empresaId,
-  { desde = null, hasta = null, placa = '', horaDesde = '', horaHasta = '', limite = LIMITE_LOTES } = {}
+  { desde = null, hasta = null, placa = '', placas = null, horaDesde = '', horaHasta = '', limite = LIMITE_LOTES } = {}
 ) {
   if (!empresaId) return [];
   // Los filtros nuevos se envían SOLO cuando tienen valor: así, mientras en
@@ -120,6 +122,7 @@ export async function obtenerLotesFlota(
   // reporte no se rompe; al poner un filtro, PostgREST pide la firma nueva.
   const params = { p_empresa_id: empresaId, p_desde: desde, p_hasta: hasta, p_limite: limite };
   if (placa) params.p_placa = placa;
+  if (Array.isArray(placas) && placas.length) params.p_placas = placas;
   if (horaDesde) params.p_hora_desde = horaDesde;
   if (horaHasta) params.p_hora_hasta = horaHasta;
   return llamarRpc(

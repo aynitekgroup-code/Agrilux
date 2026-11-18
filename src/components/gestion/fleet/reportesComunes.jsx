@@ -2,6 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, AlertTriangle, RotateCw, CalendarClock, Database, ChevronDown, ChevronUp } from 'lucide-react';
 import { rangoDiaLima, rangoMesLima, rangoLibreLima, formatearRango, ultimoDiaLima } from '../../../lib/agrotrackFlota';
 
+import { cargarVehiculosMaestro } from '../../../lib/agrotrackVehiculos';
+import {
+  cargarGruposUnidades,
+  unidadesConPosicionYGrupos,
+  grupoPorPlaca,
+  resolverPlacasFiltro,
+  normalizarPlaca,
+} from '../../../lib/agrotrackGrupos';
+
 /**
  * src/components/gestion/fleet/reportesComunes.jsx
  * Piezas compartidas por las tarjetas de reportes de flota (actividad,
@@ -33,6 +42,159 @@ export function useLimiteFilas(filas = [], limite = FILAS_INICIALES_TABLA) {
     alternar: () => setExpandido((v) => !v),
     total: filas.length,
   };
+}
+
+export function filtrarFilasPorPlaca(filas = [], placasFiltro, selector = (fila) => fila?.placa ?? fila?.unidad) {
+  if (placasFiltro == null) return filas;
+  const placas = new Set(placasFiltro.map(normalizarPlaca).filter(Boolean));
+  return filas.filter((fila) => placas.has(normalizarPlaca(selector(fila))));
+}
+
+export function useFiltroUnidadGrupo({ vehicles = [], empresaId = null }) {
+  const [mostrar, setMostrar] = useState('unidades');
+  const [opcionFiltro, setOpcionFiltro] = useState('');
+  const [gruposInfo, setGruposInfo] = useState({ grupos: {}, disponible: true, aviso: null });
+  const [maestroInfo, setMaestroInfo] = useState({ unidades: [], disponible: false, aviso: null });
+
+  useEffect(() => {
+    if (!empresaId) return undefined;
+    let cancelado = false;
+    const cargarMaestro = () => cargarVehiculosMaestro(empresaId).then((info) => {
+      if (!cancelado) setMaestroInfo(info);
+    });
+    cargarMaestro();
+    cargarGruposUnidades(empresaId).then((info) => {
+      if (!cancelado) setGruposInfo(info);
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [empresaId]);
+
+  const unidades = useMemo(
+    () => unidadesConPosicionYGrupos(vehicles, gruposInfo, maestroInfo),
+    [vehicles, gruposInfo, maestroInfo],
+  );
+
+  const grupoDePlaca = useMemo(() => {
+    const mapa = {};
+    unidades.forEach((vehicle) => {
+      const placa = normalizarPlaca(vehicle?.placa);
+      if (!placa) return;
+      mapa[placa] = String(vehicle?.grupo || '').trim()
+        || grupoPorPlaca(
+          placa,
+          gruposInfo,
+          vehicle?.descripcion || vehicle?.modelo || '',
+        );
+    });
+    return mapa;
+  }, [unidades, gruposInfo]);
+
+  const opcionesGrupos = useMemo(
+    () => [...new Set(Object.values(grupoDePlaca))].sort((a, b) => a.localeCompare(b, 'es')),
+    [grupoDePlaca],
+  );
+
+  const placasFiltro = useMemo(
+    () => resolverPlacasFiltro(unidades, gruposInfo, mostrar, opcionFiltro),
+    [unidades, gruposInfo, mostrar, opcionFiltro],
+  );
+
+  const unidadesSinPosicion = useMemo(
+    () => unidades.filter((vehicle) => vehicle?.sin_telemetria),
+    [unidades],
+  );
+
+  const cambiarMostrar = (value) => {
+    setMostrar(value);
+    setOpcionFiltro('');
+  };
+
+  return {
+    mostrar,
+    setMostrar: cambiarMostrar,
+    opcionFiltro,
+    setOpcionFiltro,
+    gruposInfo,
+    grupoDePlaca,
+    opcionesGrupos,
+    unidades,
+    unidadesSinPosicion,
+    placasFiltro,
+  };
+}
+
+export function ControlesFiltroUnidadGrupo({
+  mostrar,
+  setMostrar,
+  opcionFiltro,
+  setOpcionFiltro,
+  unidades = [],
+  opcionesGrupos = [],
+  gruposInfo = { disponible: true, aviso: null },
+}) {
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Mostrar</p>
+        <div className="flex gap-1.5" role="radiogroup" aria-label="Mostrar por grupos o por unidades">
+          {[['grupos', 'Grupos'], ['unidades', 'Unidades']].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={mostrar === id}
+              onClick={() => setMostrar(id)}
+              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
+                mostrar === id ? 'bg-forest text-white' : 'bg-slate-50 text-slate-500 hover:text-forest'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <label className="min-w-0">
+        <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">
+          {mostrar === 'grupos' ? 'Grupo' : 'Unidad'}
+        </span>
+        <select
+          value={opcionFiltro}
+          onChange={(e) => setOpcionFiltro(e.target.value)}
+          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 bg-white min-w-[240px] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+        >
+          <option value="">{mostrar === 'grupos' ? 'Todos los grupos' : 'Todas las unidades'}</option>
+          {mostrar === 'grupos'
+            ? opcionesGrupos.map((grupo) => <option key={grupo} value={grupo}>{grupo}</option>)
+            : unidades.map((unidad) => (
+              <option key={unidad.placa} value={unidad.placa}>
+                {unidad.placa}{unidad.descripcion ? ` - ${unidad.descripcion}` : unidad.sin_telemetria ? ' · sin telemetría' : ''}
+              </option>
+            ))}
+        </select>
+        {mostrar === 'grupos' && !gruposInfo.disponible && gruposInfo.aviso ? (
+          <span className="block mt-1 text-[10px] text-amber-600 max-w-[280px] leading-snug">
+            Grupos no disponibles en la base: se agrupa por la descripción de la unidad. {gruposInfo.aviso}
+          </span>
+        ) : null}
+      </label>
+    </div>
+  );
+}
+
+export function BotonActualizarAhora({ onClick, disabled = false, cargando = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+    >
+      <RotateCw size={13} className={cargando ? 'animate-spin' : ''} />
+      {cargando ? 'Actualizando…' : 'Actualizar ahora'}
+    </button>
+  );
 }
 
 /** Botón "Ver más (N restantes) ▾ / Ver menos ▴" para las tablas largas. */
@@ -286,7 +448,34 @@ export function ControlesRango({
 }
 
 /** Estados compartidos (pendiente / cargando / error / vacío) de una tarjeta. */
-export function CuerpoEstado({ pendienteDeFecha, mensajePendiente, estado, error, onReintentar, mensajeVacio, children }) {
+export function AvisoUnidadesSinTelemetria({ unidades = [] }) {
+  if (!unidades.length) return null;
+  return (
+    <div className="mx-4 my-4 rounded-xl border border-amber-100 bg-amber-50/50 px-3 py-2.5">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-amber-800">
+        Unidades sin telemetría
+      </p>
+      <p className="mt-1 text-[11px] text-amber-900 leading-snug">
+        Estas unidades no tienen posiciones cargadas; no representan datos GPS.
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {unidades.map((unidad) => {
+          const area = unidad?.area || unidad?.descripcion || '';
+          return (
+            <span
+              key={unidad.placa}
+              className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-white px-2 py-1 text-[10px] font-semibold text-amber-900"
+            >
+              {unidad.placa}{area ? ` · ${area}` : ''} · —
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function CuerpoEstado({ pendienteDeFecha, mensajePendiente, estado, error, onReintentar, mensajeVacio, childrenCuandoVacio = false, children }) {
   if (pendienteDeFecha) {
     return (
       <div className="p-8 flex flex-col items-center gap-2 text-slate-400">
@@ -322,6 +511,7 @@ export function CuerpoEstado({ pendienteDeFecha, mensajePendiente, estado, error
     );
   }
   if (estado === 'vacio') {
+    if (childrenCuandoVacio) return children;
     return (
       <div className="p-8 text-center">
         <p className="text-sm font-semibold text-slate-600">Sin datos para ese rango</p>
