@@ -279,26 +279,27 @@ as $$
     where f.empresa_id = p_empresa_id
       and (select public.onboarding_es_miembro(p_empresa_id))
   ),
-  -- Última posición de cada placa en el rango, en una sola pasada.
+  -- Última posición de cada placa: una búsqueda indexada POR PLACA (44
+  -- búsquedas de ~8 buffers cada una). El DISTINCT ON anterior recorría las
+  -- ~290 000 posiciones y las ordenaba: 226 000 buffers y >8 s. Con rango
+  -- acotado el plan sigue siendo el mismo, ahora con p.placa como primer
+  -- criterio del índice (empresa_id, placa, fecha).
   ultimos as (
-    select distinct on (p.placa)
-      p.placa,
-      p.unidad,
-      p.fecha,
-      p.evento,
-      p.velocidad,
-      p.direccion,
-      p.latitud,
-      p.longitud
-    from public.agrotrack_posiciones p
-    -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
-    where (select public.onboarding_es_miembro(p_empresa_id))
-      and p.empresa_id = p_empresa_id
-      and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
-      and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
-      and p.latitud is not null
-      and p.longitud is not null
-    order by p.placa, p.fecha desc, coalesce(p.secuencia, 0) desc, p.id desc
+    select f.placa, u.unidad, u.fecha, u.evento, u.velocidad, u.direccion, u.latitud, u.longitud
+    from flota f
+    left join lateral (
+      select p.unidad, p.fecha, p.evento, p.velocidad, p.direccion, p.latitud, p.longitud
+      from public.agrotrack_posiciones p
+      where (select public.onboarding_es_miembro(p_empresa_id))
+        and p.empresa_id = p_empresa_id
+        and p.placa = f.placa
+        and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
+        and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
+        and p.latitud is not null
+        and p.longitud is not null
+      order by p.fecha desc, coalesce(p.secuencia, 0) desc, p.id desc
+      limit 1
+    ) u on true
   ),
   -- 129 filas: mismo prefilter de bbox + conversión única que agrotrack_lotes_flota.
   geocercas as materialized (

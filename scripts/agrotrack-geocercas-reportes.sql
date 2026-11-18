@@ -4,6 +4,12 @@
 -- no borra ni modifica datos, ni toca RLS, ni a agrotrack_posiciones,
 -- ni a agrotrack_geocercas (solo se LEE).
 --
+-- IMPORTANTE (18/11/2026): la sección de agrotrack_estado_unidades_flota de
+-- este archivo es la versión original (41 placas y DISTINCT ON de 290 000
+-- posiciones, >8 s). Después de ejecutar este script, EJECUTAR
+-- scripts/agrotrack-flota-unidades.sql: deja las 44 unidades de la maestra y
+-- la última posición se busca por placa con índice (~0,5 s).
+--
 -- REQUIERE POSTGIS (sección 0). Si la sección 0 falla con "permission denied
 -- to create extension", ejecutar primero y sola la línea:
 --   create extension if not exists postgis with schema public;

@@ -14,6 +14,8 @@
  * y se prueban con node (tests/visitasDia.test.mjs).
  */
 
+import { llamarRpcReporte } from './rpcReportes';
+
 const PAGINA = 1000;
 const MAX_PAGINAS = 50; // 50 000 visitas: un mes completo de toda la flota
 const AVISO_SQL = 'Falta ejecutar scripts/agrotrack-visitas-diarias.sql en Supabase (SQL Editor).';
@@ -34,15 +36,24 @@ function mensaje(error, contexto) {
   return `${contexto}: ${detalle}`;
 }
 
-async function rpc(nombre, params, contexto) {
+async function ejecutar(nombre, params) {
   const supabase = await cliente();
   const { data, error } = await supabase.rpc(nombre, params);
-  if (error) {
-    const e = new Error(mensaje(error, contexto));
-    e.faltaSql = mensaje(error, contexto) === AVISO_SQL;
+  if (error) throw error;
+  return data ?? [];
+}
+
+async function rpc(nombre, params, contexto) {
+  try {
+    // Misma cola global que eventos/lotes: si las tres tarjetas de Geocercas
+    // consultan a la vez, Supabase corta todas por statement_timeout.
+    return await llamarRpcReporte(nombre, params, contexto, ejecutar);
+  } catch (error) {
+    const texto = mensaje(error, contexto);
+    const e = new Error(texto);
+    e.faltaSql = texto === AVISO_SQL;
     throw e;
   }
-  return data ?? [];
 }
 
 /** (día, placa) que faltan calcular o tienen posiciones nuevas. */
