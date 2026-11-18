@@ -189,6 +189,9 @@ alter table if exists public.agrotrack_geocercas
 --    En ese caso se cuenta una ENTRADA CONTINUADA al inicio del rango
 --    (p_desde), de modo que entradas y salidas cuadren al cortar por días.
 -- ---------------------------------------------------------------------------
+-- 16/11/2026: se elimina la sobrecarga de 5 argumentos. Al quedar las dos
+-- firmas en la base, PostgREST no podía elegir candidata (PGRST203) y el
+-- reporte fallaba. La firma vigente es la de 6 argumentos (p_placas).
 drop function if exists public.agrotrack_eventos_geocerca_flota(uuid, timestamptz, timestamptz, text, integer);
 drop function if exists public.agrotrack_eventos_geocerca_flota(uuid, timestamptz, timestamptz, text, integer, text[]);
 
@@ -228,8 +231,8 @@ as $$
       and p.empresa_id = p_empresa_id
       -- Filtro opcional por placas (pantalla "Mostrar: Unidades / Grupos").
       and (p_placas is null or p.placa = any(p_placas))
-      and (p_desde is null or p.fecha >= p_desde)
-      and (p_hasta is null or p.fecha <= p_hasta)
+      and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
+      and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
       -- Tolera mayúsculas/minúsculas y tildes distintas (mismo criterio que
       -- el resto de las RPC: el texto real es "Entrada a Geocerca").
       and (lower(p.evento) like '%entrada%geocerca%'
@@ -253,6 +256,7 @@ as $$
     from public.agrotrack_posiciones p
     where (select public.onboarding_es_miembro(p_empresa_id))
       and p.empresa_id = p_empresa_id
+      and (p_placas is null or p.placa = any(p_placas))
       and p_desde is not null
       and (p_placas is null or p.placa = any(p_placas))
       and p.fecha < p_desde
@@ -398,8 +402,8 @@ as $$
     -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
     where (select public.onboarding_es_miembro(p_empresa_id))
       and p.empresa_id = p_empresa_id
-      and (p_desde is null or p.fecha >= p_desde)
-      and (p_hasta is null or p.fecha <= p_hasta)
+      and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
+      and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
       -- Filtros pedidos por el Ing. Carlos Perez: una máquina y/o una franja
       -- horaria del día (hora de Perú, con minutos). null = sin filtro.
       and (p_placa is null or p.placa = p_placa)
@@ -627,8 +631,9 @@ as $$
     where (select public.onboarding_es_miembro(p_empresa_id))
       and p.empresa_id = p_empresa_id
       and (p_placas is null or p.placa = any(p_placas))
-      and (p_desde is null or p.fecha >= p_desde)
-      and (p_hasta is null or p.fecha <= p_hasta)
+      -- 17/11/2026: predicados indexables (ver scripts/agrotrack-rendimiento.sql).
+      and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
+      and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
       and p.latitud is not null
       and p.longitud is not null
       and p.velocidad is not null
@@ -781,8 +786,8 @@ as $$
     -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
     where (select public.onboarding_es_miembro(p_empresa_id))
       and p.empresa_id = p_empresa_id
-      and (p_desde is null or p.fecha >= p_desde)
-      and (p_hasta is null or p.fecha <= p_hasta)
+      and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
+      and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
       and p.latitud is not null
       and p.longitud is not null
     order by p.placa, p.fecha desc, coalesce(p.secuencia, 0) desc, p.id desc
@@ -848,8 +853,8 @@ as $$
       and p2.placa = u.placa
       and p2.pt_referencia is not null
       and btrim(p2.pt_referencia) <> ''
-      and (p_desde is null or p2.fecha >= p_desde)
-      and (p_hasta is null or p2.fecha <= p_hasta)
+      and p2.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
+      and p2.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
       and p2.latitud is not null
       and p2.longitud is not null
     group by g3.nombre
@@ -975,14 +980,16 @@ as $$
     from public.agrotrack_posiciones p
     where p.empresa_id = p_empresa_id
       and (p_placa is null or p.placa = p_placa)
-      and (p_desde is null or p.fecha >= p_desde)
-      and (p_hasta is null or p.fecha <= p_hasta)
+      and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
+      and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
       and p.latitud is not null
       and p.longitud is not null
   ),
   -- Última posición de cada placa ANTES de abrir el rango: de ahí sale si ya
   -- estaba dentro (entrada continuada) y con qué estado de motor abría.
-  antes as (
+  -- 17/11/2026: materialized. Sin esto el planificador lo recalculaba UNA VEZ
+  -- POR GEOCERCA (178 x 88.000 filas): 5 s solo en esta parte.
+  antes as materialized (
     select distinct on (p.placa)
       p.placa, p.fecha, p.latitud, p.longitud, p.velocidad, p.evento
     from public.agrotrack_posiciones p
@@ -1023,7 +1030,9 @@ as $$
       on p.latitud  between g.lat_min and g.lat_max
      and p.longitud between g.lon_min and g.lon_max
   ),
-  dentro as (
+  -- 17/11/2026: materialized. Se usa en claves y en serie; sin materializar el
+  -- cálculo punto-dentro-polígono se repetía en cada referencia.
+  dentro as materialized (
     select c.geocerca_id, c.nombre, c.punto_id, c.placa, c.fecha, c.secuencia,
            c.velocidad, c.evento
     from candidatos c

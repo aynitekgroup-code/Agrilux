@@ -193,8 +193,8 @@ as $$
     -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
     where (select public.onboarding_es_miembro(p_empresa_id))
       and p.empresa_id = p_empresa_id
-      and (p_desde is null or p.fecha >= p_desde)
-      and (p_hasta is null or p.fecha <= p_hasta)
+      and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
+      and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
   ),
   -- De aquí salen los tramos consecutivos (lag), el detectador de duplicados
   -- y la última posición del periodo (lead), todo con la MISMA ventana.
@@ -319,8 +319,8 @@ as $$
   where (select public.onboarding_es_miembro(p_empresa_id))
     and p.empresa_id = p_empresa_id
     and (p_placas is null or p.placa = any(p_placas))
-    and (p_desde is null or p.fecha >= p_desde)
-    and (p_hasta is null or p.fecha <= p_hasta)
+    and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
+    and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
     and (
       -- Valores reales confirmados: "Alta velocidad" (255) y "Botón de pánico" (24).
       -- Se excluye "Fin de alta velocidad" (255), que es el cierre del mismo evento.
@@ -407,8 +407,8 @@ as $$
     where (select public.onboarding_es_miembro(p_empresa_id))
       and p.empresa_id = p_empresa_id
       and p.placa = p_placa
-      and (p_desde is null or p.fecha >= p_desde)
-      and (p_hasta is null or p.fecha <= p_hasta)
+      and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
+      and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
   ),
   sin_duplicados as (
     select d.*
