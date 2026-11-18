@@ -57,7 +57,7 @@ function mensajeDeError(error, contexto) {
 /** Tope por llamada RPC (ms): evita el "Calculando..." eterno. */
 const TIMEOUT_RPC_MS = 15000;
 
-async function llamarRpc(nombre, params, contexto) {
+async function ejecutarRpc(nombre, params, contexto) {
   // Sin este tope, si la red o la RPC no responden la tarjeta queda cargando
   // para siempre (cuelgue reportado por el Ing. Carlos Perez).
   const controller = new AbortController();
@@ -75,6 +75,59 @@ async function llamarRpc(nombre, params, contexto) {
   }
   if (error) throw new Error(mensajeDeError(error, contexto));
   return data || [];
+}
+
+/**
+ * 18/11/2026: la sección Geocercas monta tres tarjetas que piden lo mismo al
+ * mismo tiempo (resumen + reportes): 4-6 RPC PostGIS en paralelo agotaban el
+ * statement_timeout de 8 s y las tres tarjetas mostraban "No se pudo cargar el
+ * reporte". Dos medidas:
+ *   1) deduplicar llamadas idénticas que ya están en vuelo (misma RPC y
+ *      parámetros: la respuesta se comparte entre componentes);
+ *   2) como máximo DOS consultas PostGIS simultáneas; el resto espera en cola.
+ */
+const RPC_PESADAS = new Set([
+  'agrotrack_eventos_geocerca_flota',
+  'agrotrack_lotes_flota',
+  'agrotrack_estado_unidades_flota',
+  'agrotrack_visitas_geocerca_flota',
+]);
+const EN_VUELO = new Map();
+const COLA_RPC = [];
+const MAX_RPC_SIMULTANEAS = 2;
+let rpcActivas = 0;
+
+function desencolarRpc() {
+  while (rpcActivas < MAX_RPC_SIMULTANEAS && COLA_RPC.length) {
+    const { tarea, resolver, rechazar } = COLA_RPC.shift();
+    rpcActivas += 1;
+    Promise.resolve()
+      .then(tarea)
+      .then(resolver, rechazar)
+      .finally(() => {
+        rpcActivas -= 1;
+        desencolarRpc();
+      });
+  }
+}
+
+function enColaRpc(tarea) {
+  return new Promise((resolver, rechazar) => {
+    COLA_RPC.push({ tarea, resolver, rechazar });
+    desencolarRpc();
+  });
+}
+
+function llamarRpc(nombre, params, contexto) {
+  if (!RPC_PESADAS.has(nombre)) return ejecutarRpc(nombre, params, contexto);
+  const clave = `${nombre}|${JSON.stringify(params)}`;
+  const compartida = EN_VUELO.get(clave);
+  if (compartida) return compartida;
+  const promesa = enColaRpc(() => ejecutarRpc(nombre, params, contexto)).finally(() => {
+    EN_VUELO.delete(clave);
+  });
+  EN_VUELO.set(clave, promesa);
+  return promesa;
 }
 
 /**

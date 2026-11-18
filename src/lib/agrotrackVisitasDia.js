@@ -91,6 +91,28 @@ async function paginado(nombre, params, contexto) {
   return filas;
 }
 
+/**
+ * Deja solo las visitas que tocan el rango pedido. La tabla guarda visitas
+ * completas por día; con un rango "Desde / hasta" con hora hay que descartar
+ * las que quedan fuera. Una visita abierta (sin salida) entra si empezó antes
+ * del final del rango.
+ * @param {Array} filas  visitas de agrotrack_visitas_dia_flota
+ * @param {string} desde ISO del inicio del rango (o null)
+ * @param {string} hasta ISO del final del rango (o null)
+ */
+export function filtrarVisitasPorRango(filas, desde, hasta) {
+  const t0 = Date.parse(desde || '');
+  const t1 = Date.parse(hasta || '');
+  if (!Number.isFinite(t0) || !Number.isFinite(t1)) return filas || [];
+  return (filas || []).filter((f) => {
+    const ini = Date.parse(f?.entrada || '');
+    if (!Number.isFinite(ini)) return false;
+    const fin = Date.parse(f?.salida || '');
+    if (!Number.isFinite(fin)) return ini <= t1; // abierta
+    return fin >= t0 && ini <= t1;
+  });
+}
+
 /** Todas las visitas guardadas del rango (todas las unidades). */
 export async function leerVisitasDia(empresaId, { desdeDia, hastaDia, placa = '', geocerca = '' }) {
   return paginado(

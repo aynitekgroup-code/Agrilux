@@ -13,12 +13,16 @@ import {
 import {
   obtenerEventosGeocerca,
   obtenerLotesFlota,
-  obtenerVisitasGeocerca,
   guardarRespaldoVisitas,
   LIMITE_EVENTOS_GEOCERCA,
   LIMITE_LOTES,
-  LIMITE_VISITAS_GEOCERCA,
 } from '../../../lib/agrotrackReportesGeocerca';
+import {
+  asegurarVisitasCalculadas,
+  leerVisitasDia,
+  filtrarVisitasPorRango,
+  partesLima,
+} from '../../../lib/agrotrackVisitasDia';
 import {
   formatearDuracion,
   formatearFechaHora,
@@ -617,6 +621,9 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
   // Geocercas vistas en cualquier carga: el selector NO pierde las opciones
   // al filtrar (no hay RPC de listado; se arma con los datos reales).
   const [geocercasVistas, setGeocercasVistas] = useState([]);
+  // Avance del cálculo de las visitas que falten guardar (placa por placa).
+  const [progreso, setProgreso] = useState(null);
+  const [avisos, setAvisos] = useState([]);
   // Respaldo de las visitas del rango (agrotrack_guardar_respaldo_visitas).
   const [guardando, setGuardando] = useState(false);
   const [respaldo, setRespaldo] = useState(null); // { ok, n } | { ok: false, mensaje }
@@ -628,37 +635,63 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
       // Nunca dejar "Calculando..." colgado (ver FleetEventsSummary).
-      setEstado((prev) => (prev === 'cargando' ? 'inactivo' : prev));
+      setEstado((prev) => (prev === 'cargando' || prev === 'calculando' ? 'inactivo' : prev));
+      return undefined;
+    }
+    // 18/11/2026: las visitas se leen GUARDADAS por día
+    // (public.agrotrack_visitas_dia, scripts/agrotrack-visitas-diarias.sql).
+    // Recalcular el rango entero con PostGIS (agrotrack_visitas_geocerca_calc)
+    // tardaba >8 s incluso con 1 hora y hacía fallar los tres reportes de
+    // geocercas por el statement_timeout de Supabase.
+    const desdeDia = partesLima(consulta.desde).fecha;
+    const hastaDia = partesLima(consulta.hasta).fecha;
+    if (!desdeDia || !hastaDia) {
+      setEstado('inactivo');
       return undefined;
     }
     let cancelado = false;
-    setEstado('cargando');
     setError(null);
     setRespaldo(null);
-    obtenerVisitasGeocerca(empresaId, {
-      desde: consulta.desde,
-      hasta: consulta.hasta,
-      geocerca,
-    })
-      .then((resultado) => {
+    setAvisos([]);
+    setProgreso(null);
+    setEstado('calculando');
+    (async () => {
+      try {
+        // Lo que falte se calcula de a UNA placa (cada llamada < 1 s) y queda
+        // guardado; el avance se muestra en pantalla.
+        const { errores } = await asegurarVisitasCalculadas(
+          empresaId,
+          desdeDia,
+          hastaDia,
+          (hechas, total, actual) => {
+            if (!cancelado) setProgreso({ hechas, total, actual });
+          },
+        );
         if (cancelado) return;
+        if (errores.length) setAvisos(errores.slice(0, 5));
+        setEstado('cargando');
+        const guardadas = await leerVisitasDia(empresaId, { desdeDia, hastaDia, geocerca });
+        if (cancelado) return;
+        // La tabla guarda visitas completas por día: si el rango "Desde /
+        // hasta" trae hora, se descartan las que quedan fuera.
+        const resultado = filtrarVisitasPorRango(guardadas, consulta.desde, consulta.hasta);
         setFilas(resultado);
         setEstado(resultado.length ? 'ok' : 'vacio');
         setRangoTexto(consulta.texto);
         // Acumula las geocercas vistas para que el selector no se vacíe al
-        // filtrar (la RPC con p_geocerca solo devuelve esa geocerca).
+        // filtrar (la lectura con p_geocerca solo devuelve esa geocerca).
         setGeocercasVistas((prev) => {
           const conjunto = new Set(prev);
           resultado.forEach((f) => { if (f?.geocerca) conjunto.add(f.geocerca); });
           return [...conjunto].sort((a, b) => String(a).localeCompare(String(b), 'es'));
         });
-      })
-      .catch((e) => {
+      } catch (e) {
         if (cancelado) return;
         setFilas([]);
         setError(e?.message || 'No se pudo cargar el reporte.');
         setEstado('error');
-      });
+      }
+    })();
     return () => {
       cancelado = true;
     };
@@ -832,7 +865,7 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
                 <Database size={12} /> Datos reales: {rangoTexto}
               </span>
             ) : null}
-            <BotonActualizarAhora onClick={() => setIntento((n) => n + 1)} disabled={estado === 'cargando' || pendienteDeFecha} cargando={estado === 'cargando'} />
+            <BotonActualizarAhora onClick={() => setIntento((n) => n + 1)} disabled={estado === 'cargando' || estado === 'calculando' || pendienteDeFecha} cargando={estado === 'cargando' || estado === 'calculando'} />
             <button
               type="button"
               onClick={guardarRespaldo}
@@ -942,6 +975,22 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
         </div>
       </div>
 
+      {estado === 'calculando' ? (
+        <div className="p-8 flex flex-col items-center gap-2 text-slate-500">
+          <Loader2 size={18} className="animate-spin" />
+          <p className="text-xs text-center">
+            {progreso?.total
+              ? `Calculando y guardando las visitas que faltan: ${progreso.hechas} de ${progreso.total}${progreso.actual ? ` (${progreso.actual.placa} · ${progreso.actual.dia})` : ''}…`
+              : 'Revisando qué días ya están calculados…'}
+          </p>
+          {progreso?.total ? (
+            <div className="w-64 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-full bg-emerald-500" style={{ width: `${Math.round((progreso.hechas / progreso.total) * 100)}%` }} />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <CuerpoEstado
         pendienteDeFecha={pendienteDeFecha}
         mensajePendiente={mensajePendiente}
@@ -951,6 +1000,11 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
         mensajeVacio={`No hay visitas en ${rangoTexto || 'el rango elegido'}${geocerca ? ` para la geocerca ${geocerca}` : ''}${opcionFiltro ? ` para ${mostrar === 'grupos' ? 'el grupo' : 'la unidad'} ${opcionFiltro}` : ''}. Prueba con otro día/mes, con “Todo el periodo” o quitando los filtros.`}
         childrenCuandoVacio={unidadesSinTelemetria.length > 0}
       >
+        {avisos.length ? (
+          <p className="px-4 py-2 text-[11px] text-amber-700">
+            Algunas unidades no se pudieron calcular (se reintentará solo): {avisos.join(' · ')}
+          </p>
+        ) : null}
         <AvisoUnidadesSinTelemetria unidades={unidadesSinTelemetria} />
         {estado === 'ok' || filasVistas.length ? (
           <>
@@ -1027,11 +1081,6 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
 
             <BotonVerMas expandido={expandido} onAlternar={alternar} total={total} />
 
-            {filas.length >= LIMITE_VISITAS_GEOCERCA ? (
-              <p className="px-4 py-2 text-[10px] text-amber-600 border-t border-slate-50">
-                Se alcanzó el tope de {LIMITE_VISITAS_GEOCERCA} visitas (límite de PostgREST). Reduce el rango o filtra por geocerca.
-              </p>
-            ) : null}
             {!conDesglose ? (
               <p className="px-4 py-2 text-[10px] text-amber-600 border-t border-slate-50">
                 El desglose apagado / ralentí / viajando no está disponible todavía: ejecuta la versión
@@ -1045,13 +1094,14 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
       <p className="px-4 py-2.5 text-[10px] text-slate-400 border-t border-slate-50 leading-relaxed">
         {fuente === 'real' ? (
           <span className="inline-flex items-center gap-1">
-            <Database size={10} /> Cálculo en SQL sobre public.agrotrack_posiciones + public.agrotrack_geocercas (agrotrack_visitas_geocerca_flota).
+            <Database size={10} /> Visitas guardadas por día en public.agrotrack_visitas_dia (tabla precalculada): la pantalla no recalcula con PostGIS, así carga en segundos.
           </span>
         ) : (
           'Aún no hay datos reales para esta empresa.'
         )}
         <span className="block mt-0.5">
           Una fila por visita · apagado + ralentí + viajando = duración · las visitas aún abiertas se marcan “En curso” ·
+          con un rango “Desde / hasta” con hora se muestran las visitas que tocan ese tramo (la duración es la de la visita completa) ·
           “Guardar respaldo del rango” usa agrotrack_guardar_respaldo_visitas · hora de Perú.
         </span>
       </p>
