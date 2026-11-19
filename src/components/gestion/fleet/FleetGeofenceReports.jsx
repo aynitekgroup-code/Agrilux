@@ -375,7 +375,15 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
   const filasAgrupadas = useMemo(() => aplanarGrupos(gruposDivision), [gruposDivision]);
 
   // Tabla limitada a 15 filas; totales y el Excel usan la lista completa.
-  const filasTabla = vista === 'division' ? filasAgrupadas : filas;
+  // Las dos vistas comparten el MISMO render de fila: en "todos" envolvemos
+  // cada fila cruda con { tipo: 'lote', fila } para que el map de abajo no
+  // intente leer item.fila.geocerca_id de una fila plana (pantalla en blanco).
+  const filasTabla = useMemo(
+    () => (vista === 'division'
+      ? filasAgrupadas
+      : filas.map((fila) => ({ tipo: 'lote', fila }))),
+    [vista, filasAgrupadas, filas],
+  );
   const { filasVistas, expandido, alternar, total } = useLimiteFilas(filasTabla);
 
   const puedeExportar = estado === 'ok' && filas.length > 0;
@@ -564,7 +572,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
                         <td className="px-3 py-2 text-right">—</td>
                       </tr>
                     ) : (
-                      renderFilaLote(item.fila, item.fila.geocerca_id)
+                      renderFilaLote(item.fila || {}, item.fila?.geocerca_id)
                     )
                   )}
                 </tbody>

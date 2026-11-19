@@ -43,6 +43,9 @@ function sumar(filas) {
 export function agruparPorDivision(filas = []) {
   const mapa = new Map();
   for (const fila of filas || []) {
+    // Defensa: una RPC puede devolver huecos/null. Nunca metemos filas
+    // inválidas en los grupos, porque el render necesita fila.geocerca_id.
+    if (!fila || typeof fila !== 'object') continue;
     const division = nombreDivision(fila);
     if (!mapa.has(division)) mapa.set(division, []);
     mapa.get(division).push(fila);
