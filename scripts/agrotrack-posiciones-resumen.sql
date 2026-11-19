@@ -139,10 +139,8 @@ security definer
 set search_path = public, pg_temp
 as $$
   select
-    (select min(p.fecha) from public.agrotrack_posiciones p
-      where p.empresa_id = p_empresa_id) as desde,
-    (select max(p.fecha) from public.agrotrack_posiciones p
-      where p.empresa_id = p_empresa_id) as hasta,
+    a.desde,
+    a.hasta,
     -- UNIFICADO con agrotrack-flota-unidades.sql: el LEFT JOIN final de la
     -- vista tardaba 4,4 s (hasta 8 s con carga) y el UNION de las 3 fuentes
     -- da las mismas 44 placas en 5 ms.
@@ -156,8 +154,14 @@ as $$
        select placa from public.agrotrack_vehiculos
          where empresa_id = p_empresa_id and activo is true
      ) u) as unidades,
-    (select count(*) from public.agrotrack_posiciones p
-      where p.empresa_id = p_empresa_id) as registros
+    a.registros
+  from (
+    -- UNIFICADO con agrotrack-flota-unidades.sql: min/max/count en una sola
+    -- pasada (~0,45 s). Antes eran 3 escaneos de 314 k filas y daba 500.
+    select min(p.fecha) as desde, max(p.fecha) as hasta, count(*) as registros
+    from public.agrotrack_posiciones p
+    where p.empresa_id = p_empresa_id
+  ) a
   -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
   where (select public.onboarding_es_miembro(p_empresa_id));
 $$;
