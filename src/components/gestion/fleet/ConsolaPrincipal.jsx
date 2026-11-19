@@ -399,6 +399,7 @@ function ContenidoSeccion({
       <ConfiguracionPrincipal
         empresaId={configuracion?.empresaId}
         userId={configuracion?.userId}
+        puedePosiciones={configuracion?.puedePosiciones !== false}
       />
     );
   }
@@ -621,8 +622,8 @@ export default function ConsolaPrincipal({
       </button>
 
       {!colapsado ? (
-        <div className={`grid grid-cols-1 gap-3 p-3 sm:p-4 ${panelAbierto ? 'lg:grid-cols-[240px_minmax(0,1fr)]' : 'lg:grid-cols-[88px_minmax(0,1fr)]'}`}>
-          <nav className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3 transition-[width] duration-300 ease-in-out" aria-label="Secciones de la consola principal">
+        <div className={`grid grid-cols-1 gap-3 p-3 sm:p-4 ${!panelAbierto ? 'lg:grid-cols-[88px_minmax(0,1fr)]' : 'lg:grid-cols-[240px_minmax(0,1fr)]'}`}>
+          <nav className="rounded-2xl border border-slate-100 bg-slate-50/60 p-2 transition-[width] duration-300 ease-in-out" aria-label="Secciones de la consola principal">
             <div className={`mb-2 flex items-center ${panelAbierto ? 'justify-between px-2' : 'justify-center'}`}>
               {panelAbierto && (
                 <h3 className="py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Secciones</h3>

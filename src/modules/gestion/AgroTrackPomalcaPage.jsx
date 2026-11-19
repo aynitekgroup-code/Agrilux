@@ -597,9 +597,9 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
         <PreguntarAgrilux empresaId={empresa_activa_id} empresaNombre={empresaActiva?.nombre || ''} />
       ) : null}
 
-      {/* Icono de alerta operativo: SOLO aparece si hay alertas de operación
-          pendientes; va justo encima del FAB del chat. */}
-      {pendientes > 0 ? (
+      {/* Icono de alerta operativo: solo en la sección Consola principal;
+          va justo encima del FAB del chat. */}
+      {pendientes > 0 && section === 'consola' ? (
         <button
           type="button"
           onClick={irAAlertas}

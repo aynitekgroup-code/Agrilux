@@ -10,9 +10,10 @@ import {
   MapPin,
   Mic,
   MicOff,
-  RefreshCw,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
-  Upload,
+  Table,
   Volume2,
   X,
 } from 'lucide-react';
@@ -33,7 +34,7 @@ import {
   quitarVertice,
   rellenarHueco,
 } from '../../../lib/geocercasGeometria';
-import { GeocercaEditorPanel, GeocercaVertexLayer } from './GeocercaEditor';
+import { GeocercaVertexLayer } from './GeocercaEditor';
 import AsistenteMapa from './AsistenteMapa';
 import ConsolaPrincipal from './ConsolaPrincipal';
 import { cargarVehiculosMaestro } from '../../../lib/agrotrackVehiculos';
@@ -50,7 +51,6 @@ import { obtenerEstadoUnidadesFlota } from '../../../lib/agrotrackReportesGeocer
 import { cargarGruposUnidades, guardarGrupoUnidad, listaGruposConocidos } from '../../../lib/agrotrackGrupos';
 import { cargarPaginaRecorrido, planearPaginas, textoVentana } from '../../../lib/agrotrackMapaHistorico';
 import { STATUS_META } from './fleetTokens';
-import PosicionesImport from './PosicionesImport';
 
 const SpeechRecognitionCtor =
   typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
@@ -417,6 +417,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // Zonas → checkbox «Mostrar Unidades Dentro»: oculta/muestra los marcadores
   // de las unidades en el mapa (los datos del recorrido histórico no se ocultan).
   const [mostrarUnidadesEnMapa, setMostrarUnidadesEnMapa] = useState(true);
+  // Panel de unidades junto al mapa: se puede contraer a una franja de iconos
+  // para que el mapa gane todo el ancho disponible.
+  const [panelUnidadesContraido, setPanelUnidadesContraido] = useState(false);
   const [fitToken, setFitToken] = useState(0);
   // VII: recorrido histórico paginado por VENTANAS TEMPORALES (fecha + hora
   // en hora de Perú). La RPC no tiene offset, así que cada página es una
@@ -1811,93 +1814,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
 
   return (
     <section className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden min-w-0">
-      <div className="p-4 sm:p-5 flex flex-wrap items-start gap-3">
-        <div className="min-w-0">
-          <h2 className="text-base font-bold text-slate-900">Geocercas de la empresa</h2>
-          <p className="text-xs text-slate-500">
-            {loading ? 'Cargando límites reales…' : `${geoJson.features.length} polígonos reales · WGS84`}
-          </p>
-        </div>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => refreshGeofences()}
-            disabled={loading || importing || !empresaId}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-          >
-            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-            Actualizar
-          </button>
-          {canImport ? (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={importing || !empresaId}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-forest px-3 py-1.5 text-xs font-semibold text-white hover:bg-forest-dark disabled:opacity-50"
-            >
-              {importing ? <LoaderCircle size={14} className="animate-spin" /> : <Upload size={14} />}
-              {importing ? 'Importando…' : 'Importar ZIP'}
-            </button>
-          ) : null}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".zip,application/zip"
-            className="hidden"
-            onChange={handleImport}
-            aria-label="Seleccionar ZIP de geocercas"
-          />
-        </div>
-      </div>
-
-      <GeocercaEditorPanel
-        puedeEditar={canImport}
-        editando={editando}
-        onEntrar={entrarEdicion}
-        onSalir={salirEdicion}
-        modo={editModo}
-        onModo={cambiarModoEdicion}
-        seleccion={seleccionEdicion}
-        nombre={editNombre}
-        onNombre={setEditNombre}
-        sucio={sucio}
-        guardando={editGuardando}
-        mensaje={editMensaje}
-        onGuardar={guardarCambios}
-        onDescartar={descartarCambios}
-        onRellenar={rellenarHuecoSeleccion}
-        cantidadVertices={editVertices}
-        dibujo={dibujo}
-        onCrear={crearNueva}
-        onCancelarDibujo={cancelarDibujo}
-        puedeEliminar={canDelete}
-        confirmarEliminar={confirmarEliminar}
-        eliminando={editEliminando}
-        onEliminar={eliminarSeleccion}
-        onDibujar={() => cambiarModoEdicion('dibujo')}
-        geocercasIA={geocercasIA}
-        onPropuestaIA={aplicarPropuestaIA}
-      />
-
-      {canImport ? (
-        <p className="px-4 sm:px-5 pb-3 text-[11px] text-slate-500">
-          ZIP con las capas <code>linderos</code>, <code>oficinas</code> y <code>distritos</code>
-          (.shp, .shx, .dbf, .prj y .cpg): solo se usa el campo nombre. Los campos que ya
-          existen no se modifican (los 129 cargados) y la capa <code>divisiones</code> se ignora.
-          Oficinas y distritos también entran en los reportes de geocercas
-          (igual que en Zonar): un distrito que contiene varios lotes puede
-          contar el mismo tiempo en el distrito y en el lote.
-        </p>
-      ) : null}
-
-      {canImport ? (
-        <div className="px-4 sm:px-5 pb-3 flex flex-wrap items-center gap-2">
-          <PosicionesImport empresaId={empresaId} userId={userId} disabled={importing} />
-          <span className="text-[11px] text-slate-500">
-            ZIP o Excel del “Reporte por placa” de Zonar (un punto GPS cada 2 minutos por unidad).
-          </span>
-        </div>
-      ) : null}
+      {/* El panel de Geocercas vive en Consola/PRINCIPAL → Configuración. */}
 
       {error ? (
         <div className="mx-4 sm:mx-5 mb-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800" role="alert">
@@ -1960,23 +1877,25 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             ) : (
               <span className="shrink-0 text-[11px] text-slate-400">{geofences.length} geocercas</span>
             )}
-            <button
-              type="button"
-              onClick={toggleVoiceSearch}
-              className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full transition-all hover:scale-105 focus:outline-none focus:ring-4 ${
-                listening
-                  ? 'animate-pulse bg-gradient-to-br from-red-400 to-red-600 text-white shadow-[0_0_18px_rgba(239,68,68,0.6)] focus:ring-red-200'
-                  : 'bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 text-white shadow-[0_4px_16px_rgba(16,185,129,0.5)] focus:ring-emerald-200'
-              }`}
-              aria-label={listening ? 'Detener búsqueda por voz' : 'Buscar geocerca por voz'}
-              aria-pressed={listening}
-              title={SpeechRecognitionCtor ? 'Buscar por voz' : 'Tu navegador no soporta voz'}
-            >
-              {SpeechRecognitionCtor ? <Mic size={21} /> : <MicOff size={21} />}
-              {!listening && SpeechRecognitionCtor ? (
-                <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/30" aria-hidden="true" />
-              ) : null}
-            </button>
+            {!consolaVisible ? (
+              <button
+                type="button"
+                onClick={toggleVoiceSearch}
+                className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full transition-all hover:scale-105 focus:outline-none focus:ring-4 ${
+                  listening
+                    ? 'animate-pulse bg-gradient-to-br from-red-400 to-red-600 text-white shadow-[0_0_18px_rgba(239,68,68,0.6)] focus:ring-red-200'
+                    : 'bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 text-white shadow-[0_4px_16px_rgba(16,185,129,0.5)] focus:ring-emerald-200'
+                }`}
+                aria-label={listening ? 'Detener búsqueda por voz' : 'Buscar geocerca por voz'}
+                aria-pressed={listening}
+                title={SpeechRecognitionCtor ? 'Buscar por voz' : 'Tu navegador no soporta voz'}
+              >
+                {SpeechRecognitionCtor ? <Mic size={21} /> : <MicOff size={21} />}
+                {!listening && SpeechRecognitionCtor ? (
+                  <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/30" aria-hidden="true" />
+                ) : null}
+              </button>
+            ) : null}
           </div>
 
           {voiceMessage ? (
@@ -2189,12 +2108,82 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </div>
       ) : null}
 
-      <div id="mapa-flota" className="relative z-0 isolate px-3 sm:px-5 pb-2 scroll-mt-4">
+      <div
+        className={mostrarTablasAlFinal && vehicles.length
+          ? panelUnidadesContraido
+            ? 'grid grid-cols-[minmax(0,56px)_minmax(0,1fr)] gap-3 px-3 sm:px-5 pb-2'
+            : 'grid grid-cols-1 gap-3 px-3 sm:px-5 pb-2 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]'
+          : 'px-3 sm:px-5 pb-2'}
+      >
+        {!consolaVisible && mostrarTablasAlFinal && vehicles.length ? (
+          panelUnidadesContraido ? (
+            <aside
+              className="flex flex-col items-center gap-2 self-start rounded-2xl border border-slate-100 bg-white p-2 shadow-sm"
+              aria-label="Expandir panel de unidades"
+            >
+              <button
+                type="button"
+                onClick={() => setPanelUnidadesContraido(false)}
+                title="Expandir panel de unidades"
+                aria-label="Expandir panel de unidades"
+                className="grid h-9 w-9 place-items-center rounded-xl text-forest hover:bg-emerald-50"
+              >
+                <PanelLeftOpen size={18} />
+              </button>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 [writing-mode:vertical-rl]">
+                Unidades
+              </span>
+              <button
+                type="button"
+                onClick={() => setPanelUnidadesContraido(false)}
+                title="Localizador de unidades"
+                aria-label="Expandir Localizador de unidades"
+                className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 hover:bg-slate-50"
+              >
+                <Search size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPanelUnidadesContraido(false)}
+                title="Coordenadas de las unidades"
+                aria-label="Expandir Coordenadas de las unidades"
+                className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 hover:bg-slate-50"
+              >
+                <Table size={16} />
+              </button>
+            </aside>
+          ) : (
+            <aside
+              className="min-w-0 space-y-2 max-h-[660px] overflow-y-auto scroll-consola pr-1"
+              aria-label="Panel de unidades"
+            >
+              <div className="sticky top-0 z-10 flex items-center justify-between gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-2 shadow-sm">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Panel de unidades
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPanelUnidadesContraido(true)}
+                  title="Contraer panel de unidades"
+                  aria-label="Contraer panel de unidades"
+                  aria-expanded={!panelUnidadesContraido}
+                  className="grid h-9 w-9 place-items-center rounded-xl text-forest hover:bg-emerald-50"
+                >
+                  <PanelLeftClose size={17} />
+                </button>
+              </div>
+              {estadoAvisoNodo ? <div>{estadoAvisoNodo}</div> : null}
+              {localizadorNodo}
+              {coordenadasNodo}
+            </aside>
+          )
+        ) : null}
+        <div id="mapa-flota" className={mostrarTablasAlFinal && vehicles.length ? 'relative z-0 isolate scroll-mt-4 min-w-0' : 'relative z-0 isolate scroll-mt-4'}>
         <MapContainer
           center={[-6.78, -79.83]}
           zoom={12}
           scrollWheelZoom
-          style={{ width: '100%', height: 540, borderRadius: 14, background: '#E7EDE1' }}
+          style={{ width: '100%', height: mostrarTablasAlFinal && vehicles.length ? 660 : 540, borderRadius: 14, background: '#E7EDE1' }}
         >
           <TileLayer
             key={vistaSatelite ? 'satelite' : 'calle'}
@@ -2493,6 +2482,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             unidades={vehiclesConPosicion}
           />
         </MapContainer>
+        </div>
       </div>
 
       {/* 18/11/2026 (observación X): antes, si la lista de unidades no
@@ -2518,23 +2508,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </div>
       ) : null}
 
-      {/* VI: localizador de unidades con grupos + tabla de coordenadas
-          (una fila por marcador visible, exportable a Excel). */}
-      {mostrarTablasAlFinal && vehicles.length ? (
-        <>
-          {estadoAvisoNodo ? (
-            <div className="mx-4 sm:mx-5 mb-3">{estadoAvisoNodo}</div>
-          ) : null}
-          {localizadorNodo ? (
-            <div className="grid grid-cols-1 gap-3 px-4 sm:px-5 pb-3 xl:grid-cols-2">
-              {localizadorNodo}
-              {coordenadasNodo}
-            </div>
-          ) : null}
-        </>
-      ) : null}
-
-      {/* VI: consola Principal dentro de Mapas, con las mismas tablas al inicio. */}
+      {/* VI: consola Principal dentro de Mapas. */}
       {consolaVisible ? (
         <div className="px-4 sm:px-5 pb-3">
           <ConsolaPrincipal
@@ -2548,7 +2522,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             onRutaDesde={setRutaDesde}
             onRutaHasta={setRutaHasta}
             recorrido={nodoRecorrido}
-            configuracion={{ empresaId, userId }}
+            configuracion={{ empresaId, userId, puedePosiciones: canImport }}
             zonas={{
               geofences,
               selectedId: selectedGeofenceId,
@@ -2575,9 +2549,6 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </div>
       ) : null}
 
-      {/* VII: tabla de la página (ventana) del recorrido cargada.
-          En Mapas vive dentro de la consola PRINCIPAL, al final de
-          «Ubicaciones Históricas»; en la Consola principal se queda aquí. */}
       {!consolaVisible && nodoRecorrido ? (
         <div className="px-4 sm:px-5 pb-3">{nodoRecorrido}</div>
       ) : null}

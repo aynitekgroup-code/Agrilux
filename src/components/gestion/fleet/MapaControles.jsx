@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import {
   AlertCircle,
   Check,
@@ -10,8 +11,11 @@ import {
   Layers,
   LoaderCircle,
   MapPinned,
+  Mic,
+  MicOff,
   Search,
   Satellite,
+  Table,
   X,
 } from 'lucide-react';
 import { COLORES_GRUPO, ETIQUETAS_GRUPO } from '../../../lib/asistenteMapa';
@@ -191,6 +195,30 @@ export function ControlVistaSatelite({ satelite, onToggle }) {
 /* VI · Localizador de unidades con grupos (va fuera del mapa)        */
 /* ================================================================== */
 
+const SpeechRecognitionCtor =
+  typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
+
+let nativeSpeechRecognition = null;
+const loadNativeSpeech = async () => {
+  if (!Capacitor.isNativePlatform()) return null;
+  if (nativeSpeechRecognition) return nativeSpeechRecognition;
+  try {
+    const mod = await import('@capacitor-community/speech-recognition');
+    nativeSpeechRecognition = mod.SpeechRecognition;
+    return nativeSpeechRecognition;
+  } catch {
+    return null;
+  }
+};
+
+function soloAlnum(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
 function normalizarTexto(value) {
   return String(value ?? '')
     .normalize('NFD')
@@ -297,6 +325,9 @@ export function PanelGruposUnidades({
 }) {
   const [busqueda, setBusqueda] = useState('');
   const [colapsados, setColapsados] = useState({});
+  const [escuchandoVoz, setEscuchandoVoz] = useState(false);
+  const [vozAviso, setVozAviso] = useState('');
+  const vozRecognitionRef = React.useRef(null);
 
   const grupos = useMemo(
     () => agruparUnidades(unidades, gruposPorPlaca, modoDescripcion),
@@ -305,12 +336,16 @@ export function PanelGruposUnidades({
 
   const visibles = useMemo(() => {
     const consulta = normalizarTexto(busqueda);
-    if (!consulta) return grupos;
+    const consultaAlnum = soloAlnum(busqueda);
+    if (!consulta && !consultaAlnum) return grupos;
     return grupos
       .map((grupo) => ({
         ...grupo,
-        unidades: grupo.unidades.filter((unidad) =>
-          normalizarTexto(`${unidad?.placa || unidad?.id || ''} ${unidad?.descripcion || ''}`).includes(consulta)),
+        unidades: grupo.unidades.filter((unidad) => {
+          const texto = `${unidad?.placa || unidad?.id || ''} ${unidad?.descripcion || ''}`;
+          if (consulta && normalizarTexto(texto).includes(consulta)) return true;
+          return consultaAlnum.length >= 3 && soloAlnum(texto).includes(consultaAlnum);
+        }),
       }))
       .filter((grupo) => grupo.unidades.length);
   }, [grupos, busqueda]);
@@ -329,17 +364,124 @@ export function PanelGruposUnidades({
     [unidades, gruposPorPlaca, editable],
   );
 
+  const aplicarVoz = (transcript) => {
+    if (!transcript) return;
+    setBusqueda(transcript);
+    setVozAviso('');
+  };
+
+  const toggleVoz = async () => {
+    if (Capacitor.isNativePlatform()) {
+      if (escuchandoVoz) {
+        setEscuchandoVoz(false);
+        return;
+      }
+      const plugin = await loadNativeSpeech();
+      if (!plugin) {
+        setVozAviso('Reconocimiento de voz no disponible en este dispositivo.');
+        return;
+      }
+      try {
+        const { available } = await plugin.available();
+        if (!available) {
+          setVozAviso('Activa “Speech Services by Google” e intenta de nuevo.');
+          return;
+        }
+        const perm = await plugin.requestPermissions().catch(() => null);
+        if (perm?.speechRecognition === 'denied') {
+          setVozAviso('Permiso de micrófono denegado. Actívalo en Ajustes → Agrilux → Permisos.');
+          return;
+        }
+        setEscuchandoVoz(true);
+        setVozAviso('Escuchando… di la placa.');
+        const result = await plugin.start({
+          language: 'es-PE',
+          maxResults: 5,
+          prompt: 'Di la placa de la máquina',
+          popup: true,
+          partialResults: false,
+        });
+        setEscuchandoVoz(false);
+        const match = (result?.matches || []).find((m) => m && m.trim())?.trim() || '';
+        if (match) aplicarVoz(match);
+        else setVozAviso('No te escuché. Intenta de nuevo cerca del micrófono.');
+      } catch (error) {
+        setEscuchandoVoz(false);
+        setVozAviso('No te escuché bien. Revisa internet y los permisos de micrófono.');
+        console.warn('[Localizador] dictado unidad falló:', error);
+      }
+      return;
+    }
+    if (!SpeechRecognitionCtor) {
+      setVozAviso('Tu navegador no soporta búsqueda por voz. Usa Chrome o Edge.');
+      return;
+    }
+    if (escuchandoVoz) {
+      vozRecognitionRef.current?.stop();
+      return;
+    }
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = 'es-PE';
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => {
+      setEscuchandoVoz(true);
+      setVozAviso('Escuchando… di la placa.');
+    };
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0]?.transcript || '')
+        .join(' ')
+        .trim();
+      if (!transcript) return;
+      const isFinal = event.results[event.results.length - 1]?.isFinal;
+      if (isFinal) aplicarVoz(transcript);
+      else setBusqueda(transcript);
+    };
+    recognition.onerror = (event) => {
+      const messages = {
+        'not-allowed': 'Permite el acceso al micrófono en el navegador para usar la voz.',
+        'service-not-allowed': 'Permite el acceso al micrófono en el navegador para usar la voz.',
+        'no-speech': 'No te escuché. Toca el micrófono e inténtalo de nuevo.',
+        'audio-capture': 'No se detectó ningún micrófono.',
+        network: 'La búsqueda por voz necesita conexión a internet.',
+      };
+      setVozAviso(messages[event.error] || 'No se pudo reconocer la voz. Inténtalo de nuevo.');
+      setEscuchandoVoz(false);
+      vozRecognitionRef.current = null;
+    };
+    recognition.onend = () => {
+      setEscuchandoVoz(false);
+      vozRecognitionRef.current = null;
+    };
+    vozRecognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch {
+      setEscuchandoVoz(false);
+      vozRecognitionRef.current = null;
+    }
+  };
+
+  useEffect(() => () => vozRecognitionRef.current?.abort?.(), []);
+
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
       <div className="p-4 sm:p-5 border-b border-slate-50 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="min-w-0">
-            <h3 className="text-base font-bold text-slate-900">Localizador de unidades</h3>
-            <p className="text-xs text-slate-500">
-              {cargando
-                ? 'Cargando grupos…'
-                : `${unidades.length} unidades en el mapa · ${grupos.length} grupo(s)${modoDescripcion ? ' (por descripción)' : ''}${sinAsignar ? ` · ${sinAsignar} sin grupo asignado (por descripción)` : ''}`}
-            </p>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-600">
+              <Search size={15} aria-hidden="true" />
+            </span>
+            <span className="min-w-0">
+              <h3 className="text-base font-bold text-slate-900">Localizador de unidades</h3>
+              <p className="text-xs text-slate-500">
+                {cargando
+                  ? 'Cargando grupos…'
+                  : `${unidades.length} unidades en el mapa · ${grupos.length} grupo(s)${modoDescripcion ? ' (por descripción)' : ''}${sinAsignar ? ` · ${sinAsignar} sin grupo asignado (por descripción)` : ''}`}
+              </p>
+            </span>
           </div>
           <label className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-1.5 focus-within:border-emerald-500">
             <Search size={14} className="shrink-0 text-slate-400" />
@@ -353,7 +495,25 @@ export function PanelGruposUnidades({
               autoComplete="off"
             />
           </label>
+          <button
+            type="button"
+            onClick={toggleVoz}
+            className={`relative grid h-8 w-8 shrink-0 place-items-center rounded-full transition-all focus:outline-none focus:ring-2 ${
+              escuchandoVoz
+                ? 'animate-pulse bg-red-500 text-white shadow-[0_0_10px_rgba(239,68,68,0.6)] focus:ring-red-200'
+                : 'bg-emerald-500 text-white hover:bg-emerald-600 focus:ring-emerald-200'
+            }`}
+            aria-label={escuchandoVoz ? 'Detener búsqueda por voz' : 'Buscar unidad por voz'}
+            aria-pressed={escuchandoVoz}
+            title={Capacitor.isNativePlatform() || SpeechRecognitionCtor ? 'Buscar máquina por voz' : 'Tu navegador no soporta voz'}
+          >
+            {Capacitor.isNativePlatform() || SpeechRecognitionCtor ? <Mic size={15} /> : <MicOff size={15} />}
+          </button>
         </div>
+
+        {vozAviso ? (
+          <p className="text-[10px] leading-snug text-slate-500" role="status" aria-live="polite">{vozAviso}</p>
+        ) : null}
 
         {aviso ? (
           <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800" role="status">
@@ -472,11 +632,16 @@ export function TablaCoordenadas({
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
       <div className="p-4 sm:p-5 border-b border-slate-50 flex flex-wrap items-center gap-2">
-        <div className="min-w-0">
-          <h3 className="text-base font-bold text-slate-900">Coordenadas de las unidades</h3>
-          <p className="text-xs text-slate-500">
-            {filas.length} posición(es) visible(s) en el mapa{rangoTexto ? ` · ${rangoTexto}` : ''}
-          </p>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-600">
+            <Table size={15} aria-hidden="true" />
+          </span>
+          <span className="min-w-0">
+            <h3 className="text-base font-bold text-slate-900">Coordenadas de las unidades</h3>
+            <p className="text-xs text-slate-500">
+              {filas.length} posición(es) visible(s) en el mapa{rangoTexto ? ` · ${rangoTexto}` : ''}
+            </p>
+          </span>
         </div>
         <button
           type="button"
@@ -487,7 +652,8 @@ export function TablaCoordenadas({
           {exportando ? <LoaderCircle size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />}
           Descargar Excel
         </button>
-      </div>
+        </div>
+
       {errorExportar ? (
         <p className="px-4 pt-2 text-[10px] text-red-600" role="alert">{errorExportar}</p>
       ) : null}

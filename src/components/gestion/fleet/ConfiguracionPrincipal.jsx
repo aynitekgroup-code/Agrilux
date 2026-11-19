@@ -13,6 +13,8 @@ import {
   X,
 } from 'lucide-react';
 
+import PosicionesImport from './PosicionesImport';
+
 import { supabase } from '../../../lib/supabase';
 import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
 import { cargarGruposUnidades, guardarGrupoUnidad } from '../../../lib/agrotrackGrupos';
@@ -118,7 +120,7 @@ function Estado({ ok, textoOk = 'Listo', textoNo = 'Pendiente' }) {
  * Máquinas y choferes: tablas con RLS. Geocercas: librería existente.
  * Grupos: RPC security definer `agrotrack_guardar_grupo_unidad`.
  */
-export default function ConfiguracionPrincipal({ empresaId, userId }) {
+export default function ConfiguracionPrincipal({ empresaId, userId, puedePosiciones = true }) {
   const [tab, setTab] = useState('maquinas');
   const [cargando, setCargando] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -654,6 +656,20 @@ export default function ConfiguracionPrincipal({ empresaId, userId }) {
             ))}
           </div>
         ) : null}
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+        <h4 className="mb-2 text-xs font-bold text-slate-800">Cargar reporte de unidades (ZIP / Excel)</h4>
+        <p className="mb-3 text-[11px] leading-snug text-slate-500">
+          ZIP o Excel del “Reporte por placa” de Zonar (un punto GPS cada 2 minutos por unidad).
+        </p>
+        {puedePosiciones ? (
+          <PosicionesImport empresaId={empresaId} userId={userId} />
+        ) : (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+            Solo administrador o ingeniero puede cargar el reporte de unidades.
+          </p>
+        )}
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-3">
