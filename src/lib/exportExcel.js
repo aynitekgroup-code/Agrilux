@@ -386,7 +386,7 @@ export function exportarEstadoUnidadesExcel(filas, { rangoTexto = '', periodo = 
     { Concepto: 'Reporte', Detalle: 'Estado de unidades + geocerca (Agrilux · réplica de Zonar, reporte 34)' },
     { Concepto: 'Rango', Detalle: rangoTexto || 'Todo el periodo cargado' },
     { Concepto: 'Filtros', Detalle: filtro || 'Sin filtros: todas las unidades y geocercas' },
-    { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones + public.agrotrack_geocercas (agrotrack_estado_unidades_flota)' },
+    { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones + public.agrotrack_geocercas_reportes (agrotrack_estado_unidades_flota)' },
     { Concepto: 'Motor', Detalle: 'PostGIS: polígono que contiene la última posición (ST_Contains, EPSG:4326) con prefilter de bbox' },
     { Concepto: 'Geocerca', Detalle: 'Nombre del polígono que contiene la última posición; si está fuera, "Últ. geocerca" trae la última geocerca de campo en la que estuvo la unidad (evento pt_referencia); "Fuera de geocercas" solo si no hay ninguna' },
     { Concepto: 'Estado', Detalle: 'En ruta / Detenido / Sin conexión contra max(fecha) del periodo cargado (umbral 30 min), nunca contra la fecha de hoy' },

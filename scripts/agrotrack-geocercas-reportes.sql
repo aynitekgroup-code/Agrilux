@@ -965,12 +965,14 @@ returns table (
   viaje_segundos    integer,
   abierta           boolean
 )
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public, extensions, pg_catalog, pg_temp
 as $$
-  -- 18/11/2026: se consulta la geometría INDEXADA directamente (GIST en
+begin
+  return query execute format($q$
+-- 18/11/2026: se consulta la geometría INDEXADA directamente (GIST en
   -- agrotrack_posiciones.geom y agrotrack_geocercas_subdiv.geom) en vez de
   -- reconstruir ST_MakePoint y volver a convertir el GeoJSON en cada llamada.
   -- Con ~1.100 puntos/día una placa tardaba 19 s y superaba el límite de 8 s
@@ -981,10 +983,10 @@ as $$
     select p.id, p.placa, p.fecha, p.secuencia, p.latitud, p.longitud,
            p.velocidad, p.evento, p.geom
     from public.agrotrack_posiciones p
-    where p.empresa_id = p_empresa_id
-      and (p_placa is null or p.placa = p_placa)
-      and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
-      and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
+    where p.empresa_id = %L
+      and (%L is null or p.placa = %L)
+      and p.fecha >= coalesce(%L, '-infinity'::timestamptz)
+      and p.fecha <= coalesce(%L, 'infinity'::timestamptz)
       and p.geom is not null
   ),
   -- Última posición de cada placa ANTES de abrir el rango: de ahí sale si ya
@@ -993,10 +995,10 @@ as $$
     select distinct on (p.placa)
       p.placa, p.fecha, p.latitud, p.longitud, p.velocidad, p.evento, p.geom
     from public.agrotrack_posiciones p
-    where p.empresa_id = p_empresa_id
-      and (p_placa is null or p.placa = p_placa)
-      and p_desde is not null
-      and p.fecha < p_desde
+    where p.empresa_id = %L
+      and (%L is null or p.placa = %L)
+      and %L is not null
+      and p.fecha < %L
       and p.geom is not null
     order by p.placa, p.fecha desc, coalesce(p.secuencia, 0) desc, p.id desc
   ),
@@ -1007,20 +1009,20 @@ as $$
       s.nombre,
       -- Estado del último punto DENTRO con el que se abre el rango (mismo
       -- criterio de encendido/viaje que el resto del archivo).
-      (not (lower(coalesce(a.evento, '')) like '%estacionad%'
-         or lower(coalesce(a.evento, '')) like '%apagad%'))          as encendido_base,
-      (not (lower(coalesce(a.evento, '')) like '%estacionad%'
-         or lower(coalesce(a.evento, '')) like '%apagad%'))
+      (not (lower(coalesce(a.evento, '')) like '%%estacionad%%'
+         or lower(coalesce(a.evento, '')) like '%%apagad%%'))          as encendido_base,
+      (not (lower(coalesce(a.evento, '')) like '%%estacionad%%'
+         or lower(coalesce(a.evento, '')) like '%%apagad%%'))
         and coalesce(a.velocidad, 0) > 5                            as viaje_base
     from antes a
     join lateral (
       select s.geocerca_id, btrim(s.nombre) as nombre
       from public.agrotrack_geocercas_subdiv s
-      where s.empresa_id = p_empresa_id
+      where s.empresa_id = %L
         and s.activa is true
         and s.incluir_reportes
-        and (p_geocerca is null
-          or lower(btrim(s.nombre)) = lower(btrim(p_geocerca)))
+        and (%L is null
+          or lower(btrim(s.nombre)) = lower(btrim(%L)))
         and ST_Contains(s.geom, a.geom)
       group by s.geocerca_id, btrim(s.nombre)
     ) s on true
@@ -1033,11 +1035,11 @@ as $$
     join lateral (
       select s.geocerca_id, btrim(s.nombre) as nombre
       from public.agrotrack_geocercas_subdiv s
-      where s.empresa_id = p_empresa_id
+      where s.empresa_id = %L
         and s.activa is true
         and s.incluir_reportes
-        and (p_geocerca is null
-          or lower(btrim(s.nombre)) = lower(btrim(p_geocerca)))
+        and (%L is null
+          or lower(btrim(s.nombre)) = lower(btrim(%L)))
         and ST_Contains(s.geom, p.geom)
       group by s.geocerca_id, btrim(s.nombre)
     ) d on true
@@ -1058,9 +1060,9 @@ as $$
       da.encendido_base,
       da.viaje_base,
       -- Arranque de la serie de estados: en la entrada real o, si la unidad
-      -- ya estaba dentro, en el propio p_desde.
+      -- ya estaba dentro, en el propio %L.
       case
-        when da.placa is not null then p_desde
+        when da.placa is not null then %L
         else dmin.primera_dentro
       end                                             as inicio_serie
     from claves c
@@ -1082,10 +1084,10 @@ as $$
       pu.id as punto_id, pu.fecha, coalesce(pu.secuencia, 0) as secuencia,
       pu.velocidad, pu.evento,
       (dn.punto_id is not null)                       as dentro,
-      (not (lower(coalesce(pu.evento, '')) like '%estacionad%'
-         or lower(coalesce(pu.evento, '')) like '%apagad%')) as encendido,
-      (not (lower(coalesce(pu.evento, '')) like '%estacionad%'
-         or lower(coalesce(pu.evento, '')) like '%apagad%'))
+      (not (lower(coalesce(pu.evento, '')) like '%%estacionad%%'
+         or lower(coalesce(pu.evento, '')) like '%%apagad%%')) as encendido,
+      (not (lower(coalesce(pu.evento, '')) like '%%estacionad%%'
+         or lower(coalesce(pu.evento, '')) like '%%apagad%%'))
         and coalesce(pu.velocidad, 0) > 5             as es_viaje
     from pares p
     join puntos pu
@@ -1143,7 +1145,7 @@ as $$
       case
         when m.prev_fecha is null then
           -- Primera fila de la serie: solo cuenta si la visita ya estaba
-          -- abierta al entrar al rango (entrada continuada desde p_desde).
+          -- abierta al entrar al rango (entrada continuada desde %L).
           case when m.dentro_inicio
                then extract(epoch from (m.fecha - m.inicio_serie))
                else 0::double precision end
@@ -1151,11 +1153,11 @@ as $$
         when coalesce(m.dt_crudo, 0) > 600 then 0::double precision
         else m.dt_crudo
       end as seg,
-      -- Cierre "en curso": el último punto dentro lleva el tiempo hasta p_hasta.
+      -- Cierre "en curso": el último punto dentro lleva el tiempo hasta %L.
       case
         when m.sig_fecha is null and m.dentro and m.visita_n > 0
-         and p_hasta is not null
-        then greatest(extract(epoch from (p_hasta - m.fecha)), 0)
+         and %L is not null
+        then greatest(extract(epoch from (%L - m.fecha)), 0)
         else 0::double precision
       end as seg_abierto,
       -- ¿Este tramo pertenece a la visita?
@@ -1176,7 +1178,7 @@ as $$
       -- si no hay puntos dentro en el rango, el estado con el que abría).
       -- 14/11/2026: el tramo toma el estado del punto donde EMPIEZA (como
       -- Zonar y como agrotrack_actividad_flota); la cola "en curso" hasta
-      -- p_hasta usa el estado del último punto (ver seg_abierto abajo).
+      -- %L usa el estado del último punto (ver seg_abierto abajo).
       case
         when m.prev_fecha is null then coalesce(m.encendido_base, m.encendido)
         when m.prev_dentro then coalesce(m.prev_encendido, m.encendido)
@@ -1195,21 +1197,21 @@ as $$
       f.geocerca,
       f.placa,
       f.visita_n,
-      -- ENTRADA: primera posición dentro, o p_desde si ya estaba dentro.
+      -- ENTRADA: primera posición dentro, o %L si ya estaba dentro.
       case
         when bool_or(f.prev_fecha is null and f.dentro_inicio)
           then min(f.inicio_serie)
         else min(f.fecha) filter (where f.dentro)
       end as entrada,
       -- SALIDA: primer punto fuera con continuidad; si no, el último punto
-      -- dentro cuando hubo un hueco; si no, sigue "en curso" hasta p_hasta.
+      -- dentro cuando hubo un hueco; si no, sigue "en curso" hasta %L.
       case
         when min(f.visita_n) = 0 then max(f.fecha)
         else coalesce(
           min(f.fecha) filter (
             where not f.dentro and f.prev_dentro and coalesce(f.dt_crudo, 0) <= 600),
           max(f.fecha) filter (where f.cierra_hueco),
-          p_hasta
+          %L
         )
       end as salida,
       (min(f.visita_n) > 0
@@ -1248,11 +1250,11 @@ as $$
       v.abierta
     from visitas v
     -- Aquí NO se emite nada más: una unidad que ya estaba dentro al abrir
-    -- p_desde pero no reportó NADA en el rango no genera visita. Sin
+    -- %L pero no reportó NADA en el rango no genera visita. Sin
     -- posiciones en el rango no hay evidencia de que siguió en el polígono
     -- (un rastreador apagado dentro de un lote la inventaría todos los
     -- días); sí la genera en cuanto reporta aunque sea una vez, y ahí la
-    -- entrada se recorta en p_desde (continuación) como en el resto.
+    -- entrada se recorta en %L (continuación) como en el resto.
   )
   select
     e.placa                as placa,
@@ -1267,6 +1269,8 @@ as $$
   from emitidas e
   -- Pedido: orden de salida por la fecha/hora de entrada.
   order by e.entrada asc nulls last, e.geocerca, e.placa;
+$q$, p_empresa_id, p_placa, p_placa, p_desde, p_hasta, p_empresa_id, p_placa, p_placa, p_desde, p_desde, p_empresa_id, p_geocerca, p_geocerca, p_empresa_id, p_geocerca, p_geocerca, p_desde, p_desde, p_desde, p_hasta, p_hasta, p_hasta, p_hasta, p_desde, p_hasta, p_hasta, p_desde, p_desde);
+end;
 $$;
 
 

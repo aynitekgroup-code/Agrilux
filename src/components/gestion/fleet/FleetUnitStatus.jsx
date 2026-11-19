@@ -518,7 +518,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
       <p className="px-4 py-2.5 text-[10px] text-slate-400 border-t border-slate-50 leading-relaxed">
         {fuente === 'real' ? (
           <span className="inline-flex items-center gap-1">
-            <Database size={10} /> Cálculo en SQL con PostGIS sobre public.agrotrack_posiciones + public.agrotrack_geocercas (agrotrack_estado_unidades_flota).
+            <Database size={10} /> Cálculo en SQL con PostGIS sobre public.agrotrack_posiciones + public.agrotrack_geocercas_reportes (agrotrack_estado_unidades_flota).
           </span>
         ) : (
           'Aún no hay datos reales para esta empresa.'
