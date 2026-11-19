@@ -565,7 +565,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
                     ) : (
                       renderFilaLote(item.fila, item.fila.geocerca_id)
                     )
-                  ))}                  ))}
+                  ))}
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-50 text-slate-700 font-bold">
