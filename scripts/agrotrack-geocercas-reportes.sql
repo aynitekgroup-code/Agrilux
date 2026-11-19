@@ -381,82 +381,55 @@ returns table (
   primera_visita      timestamptz,
   ultima_visita       timestamptz
 )
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public, extensions, pg_catalog, pg_temp
 as $$
-  -- 129 filas: se materializa para convertir el GeoJSON a geometría UNA sola
-  -- vez (no una vez por posición) y para calcular el bbox de prefilter.
-  with geocercas as materialized (
-    select
-      g.id,
-      g.nombre,
-      g.division,
-      g.anexo,
-      g.area_declarada,
-      g.geometria                                              as geojson,
-      ((g.geometria->'bbox')->>0)::double precision            as lon_min,
-      ((g.geometria->'bbox')->>1)::double precision            as lat_min,
-      ((g.geometria->'bbox')->>2)::double precision            as lon_max,
-      ((g.geometria->'bbox')->>3)::double precision            as lat_max,
-      ST_SetSRID(ST_GeomFromGeoJSON(g.geometria::text), 4326)  as poligono
-    from public.agrotrack_geocercas_reportes g
-    where g.empresa_id = p_empresa_id
-      and g.activa is true
-      -- Filtra por incluir_reportes (todas activas tras el UPDATE de la
-      -- sección 0.5: oficinas y distritos también entran, decisión 13/11/2026).
-      and g.incluir_reportes
-      and g.geometria is not null
-      and jsonb_typeof(g.geometria) = 'object'
-      and (g.geometria->>'type') in ('Polygon', 'MultiPolygon')
-      and jsonb_typeof(g.geometria->'bbox') = 'array'
-  ),
-  puntos as (
-    select p.id, p.placa, p.fecha, p.secuencia, p.latitud, p.longitud, p.velocidad, p.evento
+begin
+  return query execute format($q$
+-- 18/11/2026: se consulta la geometría INDEXADA (GIST en
+  -- agrotrack_posiciones.geom y agrotrack_geocercas_subdiv.geom) en vez de
+  -- reconstruir ST_MakePoint y convertir el GeoJSON por cada posición. Con el
+  -- rango completo (314 k filas) el prefilter por bbox tardaba >60 s y la RPC
+  -- daba 500 por el límite de 8 s. El lateral devuelve solo los fragmentos que
+  -- contienen cada punto; se agrupa por geocerca para no duplicar visitas en
+  -- los bordes internos de ST_Subdivide.
+  with puntos as materialized (
+    select p.id, p.placa, p.fecha, p.secuencia, p.latitud, p.longitud,
+           p.velocidad, p.evento, p.geom
     from public.agrotrack_posiciones p
     -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
-    where (select public.onboarding_es_miembro(p_empresa_id))
-      and p.empresa_id = p_empresa_id
-      and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
-      and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
-      -- Filtros pedidos por el Ing. Carlos Perez: una o varias máquinas y/o
-      -- una franja horaria del día (hora de Perú, con minutos). null = sin
-      -- filtro. `p_placas` es el arreglo que envía el selector Mostrar de
-      -- Agrilux para filtrar por grupos de unidades.
-      and (p_placa is null or p.placa = p_placa)
-      and (p_placas is null or p.placa = any(p_placas))
-      and (p_hora_desde is null
-        or (p.fecha at time zone 'America/Lima')::time >= p_hora_desde)
-      and (p_hora_hasta is null
-        or (p.fecha at time zone 'America/Lima')::time <= p_hora_hasta)
-      and p.latitud is not null
-      and p.longitud is not null
+    where (select public.onboarding_es_miembro(%L::uuid))
+      and p.empresa_id = %L::uuid
+      and p.fecha >= coalesce(%L::timestamptz, '-infinity'::timestamptz)
+      and p.fecha <= coalesce(%L::timestamptz, 'infinity'::timestamptz)
+      and (%L::text is null or p.placa = %L::text)
+      and (%L::text[] is null or p.placa = any(%L::text[]))
+      and (%L::time is null
+        or (p.fecha at time zone 'America/Lima')::time >= %L::time)
+      and (%L::time is null
+        or (p.fecha at time zone 'America/Lima')::time <= %L::time)
+      and p.geom is not null
   ),
-  -- Prefilter barato (solo comparaciones de punto flotante) contra el bbox de
-  -- cada lote: sin esto PostGIS se evaluaría en los 129 x N pares posibles.
-  candidatos as (
+  dentro as materialized (
     select
-      g.id as geocerca_id, g.nombre, g.division, g.anexo, g.area_declarada,
-      g.geojson, g.poligono,
+      d.geocerca_id, d.nombre, d.division, d.anexo, d.area_declarada,
       p.id as punto_id, p.placa, p.fecha, p.secuencia,
       p.latitud, p.longitud, p.velocidad, p.evento
-    from geocercas g
-    join puntos p
-      on p.latitud  between g.lat_min and g.lat_max
-     and p.longitud between g.lon_min and g.lon_max
-  ),
-  -- Aquí sí PostGIS: punto dentro del polígono (borde incluido por el bbox
-  -- previo; ST_Contains descarta rápido con el bbox del polígono).
-  dentro as (
-    -- Solo las columnas que siguen: la geometría ya cumplió su función y no
-    -- debe arrastrarse por el sort de la ventana de más abajo.
-    select
-      c.geocerca_id, c.nombre, c.division, c.anexo, c.area_declarada,
-      c.punto_id, c.placa, c.fecha, c.secuencia,
-      c.latitud, c.longitud, c.velocidad, c.evento
-    from candidatos c
-    where ST_Contains(c.poligono, ST_SetSRID(ST_MakePoint(c.longitud, c.latitud), 4326))
+    from puntos p
+    join lateral (
+      select s.geocerca_id, btrim(g.nombre) as nombre,
+             g.division, g.anexo, g.area_declarada
+      from public.agrotrack_geocercas_subdiv s
+      join public.agrotrack_geocercas g on g.id = s.geocerca_id
+      where s.empresa_id = %L::uuid
+        and s.activa is true
+        and s.incluir_reportes
+        and ST_Contains(s.geom, p.geom)
+      group by s.geocerca_id, btrim(g.nombre),
+               g.division, g.anexo, g.area_declarada
+    ) d on true
   ),
   -- UNA sola ventana por (lote, placa): tramo anterior + detector de
   -- duplicados, igual que agrotrack_resumen_flota / agrotrack_actividad_flota.
@@ -505,10 +478,10 @@ as $$
       end                                                        as dist_km,
       -- Estado del tramo = estado del punto final (mismo criterio único que
       -- agrotrack_actividad_flota): apagado / ralentí / viajando.
-      (not (lower(coalesce(c.evento, '')) like '%estacionad%'
-         or lower(coalesce(c.evento, '')) like '%apagad%'))       as encendido,
-      (not (lower(coalesce(c.evento, '')) like '%estacionad%'
-         or lower(coalesce(c.evento, '')) like '%apagad%'))
+      (not (lower(coalesce(c.evento, '')) like '%%estacionad%%'
+         or lower(coalesce(c.evento, '')) like '%%apagad%%'))       as encendido,
+      (not (lower(coalesce(c.evento, '')) like '%%estacionad%%'
+         or lower(coalesce(c.evento, '')) like '%%apagad%%'))
         and coalesce(c.velocidad, 0) > 5                          as es_viaje
     from con_prev c
   )
@@ -551,7 +524,9 @@ as $$
   -- Los que más tiempo pasaron primero (los sin actividad quedan fuera).
   having count(*) filter (where not t.es_duplicado) > 0
   order by permanencia_segundos desc, km_recorridos desc, lote
-  limit greatest(coalesce(p_limite, 200), 1);
+  limit greatest(coalesce(%L::integer, 200), 1);
+$q$, p_empresa_id, p_desde, p_hasta, p_placa, p_placas, p_hora_desde, p_hora_hasta, p_limite);
+end;
 $$;
 
 grant execute on function public.agrotrack_lotes_flota(uuid, timestamptz, timestamptz, text, text[], time, time, integer)
