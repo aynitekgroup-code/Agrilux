@@ -2548,6 +2548,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             onRutaDesde={setRutaDesde}
             onRutaHasta={setRutaHasta}
             recorrido={nodoRecorrido}
+            configuracion={{ empresaId, userId }}
             zonas={{
               geofences,
               selectedId: selectedGeofenceId,

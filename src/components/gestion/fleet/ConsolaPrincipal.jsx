@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { COLORES_GRUPO, ETIQUETAS_GRUPO } from '../../../lib/asistenteMapa';
 import { PanelUnidadesGeocerca } from './MapaControles';
+import ConfiguracionPrincipal from './ConfiguracionPrincipal';
 import {
   ChevronDown,
   ChevronLeft,
@@ -26,9 +27,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
-  Truck,
-  Users,
-  Building2,
 } from 'lucide-react';
 
 const SpeechRecognitionCtor =
@@ -95,52 +93,8 @@ function Placeholder({ texto }) {
   );
 }
 
-function ContenidoConfiguracion() {
-  const tarjetas = [
-    {
-      Icon: Truck,
-      titulo: 'Máquinas / Unidades',
-      descripcion: 'Cargar y editar el padrón de la flota: placa, área, estado operativo, movimiento y activa/inactiva.',
-    },
-    {
-      Icon: Shapes,
-      titulo: 'Geocercas',
-      descripcion: 'Importar geocercas (ZIP/Shapefile), crear, editar y eliminar polígonos desde la aplicación.',
-    },
-    {
-      Icon: Users,
-      titulo: 'Choferes',
-      descripcion: 'Registrar conductores, licencias y asignación a máquinas (tabla agrotrack_conductores pendiente).',
-    },
-    {
-      Icon: Building2,
-      titulo: 'Grupos',
-      descripcion: 'Crear y reasignar grupos de unidades en bloque: seguridad, maquinaria, visitas, etc.',
-    },
-  ];
-  return (
-    <div className="grid gap-3">
-      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] leading-snug text-amber-800">
-        <p className="font-semibold">Configuración pendiente de implementar</p>
-        <p className="mt-1">Este apartado centralizará la administración de los datos maestros de la flota. Ninguno de los cuatro módulos tiene fuente real todavía en la base, por lo que no se habilitan acciones de edición aún.</p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {tarjetas.map(({ Icon, titulo, descripcion }) => (
-          <div key={titulo} className="flex flex-col rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-            <span className="grid h-10 w-10 place-items-center rounded-lg bg-white text-forest shadow-sm">
-              <Icon size={18} aria-hidden="true" />
-            </span>
-            <h4 className="mt-3 text-sm font-bold text-slate-900">{titulo}</h4>
-            <p className="mt-1 flex-1 text-[11px] leading-snug text-slate-500">{descripcion}</p>
-            <span className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-              Pendiente
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+// La sección Configuración usa ConfiguracionPrincipal: CRUD real sobre las
+// tablas y RPC existentes en Supabase (máquinas, geocercas, choferes y grupos).
 
 function normTexto(valor) {
   return String(valor ?? '')
@@ -282,7 +236,7 @@ function ZonasPanel({ geofences = [], selectedId, onSeleccionar, unidadesEnGeoce
 }
 
 function ContenidoSeccion({
-  id, localizador, coordenadas, recorrido, zonas,
+  id, localizador, coordenadas, recorrido, zonas, configuracion,
   unidad, setUnidad, aplicarBusqueda,
   ruta, setRuta,
   desde, setDesde, hasta, setHasta,
@@ -441,7 +395,12 @@ function ContenidoSeccion({
     );
   }
   if (id === 'configuracion') {
-    return <ContenidoConfiguracion />;
+    return (
+      <ConfiguracionPrincipal
+        empresaId={configuracion?.empresaId}
+        userId={configuracion?.userId}
+      />
+    );
   }
   return (
     <Placeholder texto="Se ampliará en la siguiente iteración con las funciones de esta sección, manteniendo el mismo estilo de consola Agrilux." />
@@ -453,6 +412,7 @@ export default function ConsolaPrincipal({
   unidadExterna, rutaDesde, rutaHasta, onRutaDesde, onRutaHasta,
   recorrido,
   zonas,
+  configuracion,
 }) {
   const inicial = rangoDefault();
   const desdeControlado = rutaDesde !== undefined;
@@ -744,7 +704,7 @@ export default function ConsolaPrincipal({
               </div>
               <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
                 <IconoSeccion size={12} className="mr-1.5" />
-                {seccion.id === 'localizador' || seccion.id === 'coordenadas' || seccion.id === 'zonas' ? 'Listo' : 'En preparación'}
+                {seccion.id === 'localizador' || seccion.id === 'coordenadas' || seccion.id === 'zonas' || seccion.id === 'configuracion' ? 'Listo' : 'En preparación'}
               </span>
             </header>
             <div className="space-y-3">
@@ -754,6 +714,7 @@ export default function ConsolaPrincipal({
                 coordenadas={coordenadas}
                 recorrido={recorrido}
                 zonas={zonas}
+                configuracion={configuracion}
                 unidad={unidad}
                 setUnidad={setUnidad}
                 aplicarBusqueda={aplicarBusqueda}
