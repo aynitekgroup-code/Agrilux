@@ -2109,13 +2109,13 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       ) : null}
 
       <div
-        className={mostrarTablasAlFinal && vehicles.length
+        className={vehicles.length
           ? panelUnidadesContraido
             ? 'grid grid-cols-[minmax(0,56px)_minmax(0,1fr)] gap-3 px-3 sm:px-5 pb-2'
             : 'grid grid-cols-1 gap-3 px-3 sm:px-5 pb-2 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]'
           : 'px-3 sm:px-5 pb-2'}
       >
-        {!consolaVisible && mostrarTablasAlFinal && vehicles.length ? (
+        {vehicles.length ? (
           panelUnidadesContraido ? (
             <aside
               className="flex flex-col items-center gap-2 self-start rounded-2xl border border-slate-100 bg-white p-2 shadow-sm"
@@ -2178,12 +2178,12 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             </aside>
           )
         ) : null}
-        <div id="mapa-flota" className={mostrarTablasAlFinal && vehicles.length ? 'relative z-0 isolate scroll-mt-4 min-w-0' : 'relative z-0 isolate scroll-mt-4'}>
+        <div id="mapa-flota" className={vehicles.length ? 'relative z-0 isolate scroll-mt-4 min-w-0' : 'relative z-0 isolate scroll-mt-4'}>
         <MapContainer
           center={[-6.78, -79.83]}
           zoom={12}
           scrollWheelZoom
-          style={{ width: '100%', height: mostrarTablasAlFinal && vehicles.length ? 660 : 540, borderRadius: 14, background: '#E7EDE1' }}
+          style={{ width: '100%', height: vehicles.length ? 660 : 540, borderRadius: 14, background: '#E7EDE1' }}
         >
           <TileLayer
             key={vistaSatelite ? 'satelite' : 'calle'}
