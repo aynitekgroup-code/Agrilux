@@ -143,8 +143,19 @@ as $$
       where p.empresa_id = p_empresa_id) as desde,
     (select max(p.fecha) from public.agrotrack_posiciones p
       where p.empresa_id = p_empresa_id) as hasta,
-    (select count(*) from public.agrotrack_flota_unidades f
-      where f.empresa_id = p_empresa_id) as unidades,
+    -- UNIFICADO con agrotrack-flota-unidades.sql: el LEFT JOIN final de la
+    -- vista tardaba 4,4 s (hasta 8 s con carga) y el UNION de las 3 fuentes
+    -- da las mismas 44 placas en 5 ms.
+    (select count(*) from (
+       select placa from public.agrotrack_grupos_unidades
+         where empresa_id = p_empresa_id
+       union
+       select placa from public.agrotrack_estado_vivo
+         where empresa_id = p_empresa_id
+       union
+       select placa from public.agrotrack_vehiculos
+         where empresa_id = p_empresa_id and activo is true
+     ) u) as unidades,
     (select count(*) from public.agrotrack_posiciones p
       where p.empresa_id = p_empresa_id) as registros
   -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
