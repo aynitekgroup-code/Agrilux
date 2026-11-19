@@ -525,7 +525,14 @@ begin
   having count(*) filter (where not t.es_duplicado) > 0
   order by permanencia_segundos desc, km_recorridos desc, lote
   limit greatest(coalesce(%L::integer, 200), 1);
-$q$, p_empresa_id, p_desde, p_hasta, p_placa, p_placas, p_hora_desde, p_hora_hasta, p_limite);
+-- Un argumento por %L (14 en total). 18/11/2026: antes había solo 8 y
+-- PostgREST devolvía 400 / 22023 "too few arguments for format()". El orden
+-- es el de aparición en el cuerpo: empresa, empresa, desde, hasta,
+-- placa x2, placas x2, hora_desde x2, hora_hasta x2, empresa, limite.
+$q$, p_empresa_id, p_empresa_id, p_desde, p_hasta,
+    p_placa, p_placa, p_placas, p_placas,
+    p_hora_desde, p_hora_desde, p_hora_hasta, p_hora_hasta,
+    p_empresa_id, p_limite);
 end;
 $$;
 
