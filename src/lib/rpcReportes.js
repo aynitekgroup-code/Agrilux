@@ -54,6 +54,31 @@ function desencolar() {
   }
 }
 
+// 18/11/2026: el primer render de Geocercas/RReportes dispara varias lecturas
+// de usuario, vehículos y grupos al mismo tiempo. Aunque estas RPC ya van en
+// cola, el pool de Supabase puede estar ocupado y PostgREST cortar una con
+// 57014 / statement_timeout cuando tarda 8 s (medido: la misma función responde
+// en 0,6-1,6 s cuando no hay esa competencia). Reintentar UNA vez, ya dentro de
+// la cola y con la carga bajando, elimina el 500 intermitente sin subir timeouts.
+const REINTENTOS_POR_TIMEOUT = 1;
+const ESPERA_REINTENTO_MS = 600;
+
+function esTimeoutDeStatement(error) {
+  const texto = String(error?.message || error || '');
+  return /57014|statement[_ ]timeout|tardó más de 8 s|canceling statement/i.test(texto);
+}
+
+async function ejecutarConReintento(nombre, params, contexto, ejecutar) {
+  for (let intento = 0; ; intento += 1) {
+    try {
+      return await ejecutar(nombre, params, contexto);
+    } catch (error) {
+      if (intento >= REINTENTOS_POR_TIMEOUT || !esTimeoutDeStatement(error)) throw error;
+      await new Promise((resolver) => setTimeout(resolver, ESPERA_REINTENTO_MS * (intento + 1)));
+    }
+  }
+}
+
 /**
  * @param {string} nombre nombre de la RPC
  * @param {object} params parámetros PostgREST
@@ -69,7 +94,11 @@ export function llamarRpcReporte(nombre, params, contexto, ejecutar) {
   if (compartida) return compartida;
 
   const promesa = new Promise((resolver, rechazar) => {
-    COLA.push({ tarea: () => ejecutar(nombre, params, contexto), resolver, rechazar });
+    COLA.push({
+      tarea: () => ejecutarConReintento(nombre, params, contexto, ejecutar),
+      resolver,
+      rechazar,
+    });
     desencolar();
   }).finally(() => {
     EN_VUELO.delete(clave);
