@@ -128,37 +128,7 @@ function CardEventos({ empresaId, periodo, fuente, vehicles = [] }) {
 
   // El XLSX se importa bajo demanda: la librería pesa ~430 kB y solo se
   // necesita cuando el usuario pide el archivo.
-  // Una sola definición de fila de lote para las dos vistas (todos / división).
-  const renderFilaLote = (fila, key) => (
-    <tr key={key} className="border-b border-slate-50 hover:bg-slate-50/60">
-      <td className="px-3 py-2">
-        <span className="font-bold text-slate-800">{fila.lote}</span>
-        {fila.anexo ? (
-          <span className="block text-[10px] text-slate-400">Anexo {fila.anexo}</span>
-        ) : null}
-      </td>
-      <td className="px-3 py-2 text-slate-500">{fila.division || '—'}</td>
-      <td className="px-3 py-2 text-right">{numero(fila.unidades, 0)}</td>
-      <td className="px-3 py-2 text-right font-semibold">{numero(fila.visitas, 0)}</td>
-      <td className="px-3 py-2 text-right text-slate-500">
-        {conDesglose ? formatearDuracion(fila.apagado_segundos) : '—'}
-      </td>
-      <td className="px-3 py-2 text-right text-amber-700">
-        {conDesglose ? formatearDuracion(fila.ralenti_segundos) : '—'}
-      </td>
-      <td className="px-3 py-2 text-right text-emerald-700">
-        {conDesglose ? formatearDuracion(fila.viaje_segundos) : '—'}
-      </td>
-      <td className="px-3 py-2 text-right font-bold text-slate-800">
-        {formatearDuracion(fila.permanencia_segundos)}
-      </td>
-      <td className="px-3 py-2 text-right">{numero(fila.km_recorridos, 1)}</td>
-      <td className="px-3 py-2 text-right text-slate-500">{numero(fila.puntos, 0)}</td>
-      <td className="px-3 py-2 text-right">
-        {fila.vel_max_kmh == null ? '—' : `${numero(fila.vel_max_kmh, 0)} km/h`}
-      </td>
-    </tr>
-  );
+
 
   const descargarExcel = async () => {
     setDescargaError(null);
@@ -417,6 +387,37 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
       ? 'Esta empresa todavía no tiene periodo cargado en agrotrack_posiciones, así que no hay cifras que mostrar.'
       : 'Esperando el periodo cargado para precargar el selector…';
 
+  // Una sola definición de fila de lote para las dos vistas (todos / división).
+  const renderFilaLote = (fila, key) => (
+    <tr key={key} className="border-b border-slate-50 hover:bg-slate-50/60">
+      <td className="px-3 py-2">
+        <span className="font-bold text-slate-800">{fila.lote}</span>
+        {fila.anexo ? (
+          <span className="block text-[10px] text-slate-400">Anexo {fila.anexo}</span>
+        ) : null}
+      </td>
+      <td className="px-3 py-2 text-slate-500">{fila.division || '—'}</td>
+      <td className="px-3 py-2 text-right">{numero(fila.unidades, 0)}</td>
+      <td className="px-3 py-2 text-right font-semibold">{numero(fila.visitas, 0)}</td>
+      <td className="px-3 py-2 text-right text-slate-500">
+        {conDesglose ? formatearDuracion(fila.apagado_segundos) : '—'}
+      </td>
+      <td className="px-3 py-2 text-right text-amber-700">
+        {conDesglose ? formatearDuracion(fila.ralenti_segundos) : '—'}
+      </td>
+      <td className="px-3 py-2 text-right text-emerald-700">
+        {conDesglose ? formatearDuracion(fila.viaje_segundos) : '—'}
+      </td>
+      <td className="px-3 py-2 text-right font-bold text-slate-800">
+        {formatearDuracion(fila.permanencia_segundos)}
+      </td>
+      <td className="px-3 py-2 text-right">{numero(fila.km_recorridos, 1)}</td>
+      <td className="px-3 py-2 text-right text-slate-500">{numero(fila.puntos, 0)}</td>
+      <td className="px-3 py-2 text-right">
+        {fila.vel_max_kmh == null ? '—' : `${numero(fila.vel_max_kmh, 0)} km/h`}
+      </td>
+    </tr>
+  );
   const descargarExcel = async () => {
     setDescargaError(null);
     try {
@@ -565,7 +566,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
                     ) : (
                       renderFilaLote(item.fila, item.fila.geocerca_id)
                     )
-                  ))}
+                  )}
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-50 text-slate-700 font-bold">
