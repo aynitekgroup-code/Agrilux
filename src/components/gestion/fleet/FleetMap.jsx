@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CircleMarker, GeoJSON, MapContainer, Popup, Polyline, TileLayer, Tooltip, useMap } from 'react-leaflet';
+import { CircleMarker, GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import {
   AlertCircle,
@@ -51,6 +51,29 @@ import { obtenerEstadoUnidadesFlota } from '../../../lib/agrotrackReportesGeocer
 import { cargarGruposUnidades, guardarGrupoUnidad, listaGruposConocidos } from '../../../lib/agrotrackGrupos';
 import { cargarPaginaRecorrido, planearPaginas, textoVentana } from '../../../lib/agrotrackMapaHistorico';
 import { STATUS_META } from './fleetTokens';
+
+/* ---------- Z-order de geocercas ---------- */
+
+// Orden de dibujo de abajo hacia arriba: el campo ("autorizada") queda
+// siempre por encima de oficinas, geocercas manuales y distritos. Cada grupo
+// se pinta en su propio <GeoJSON> para que el orden no dependa del orden en
+// que llegaron las filas.
+const ORDEN_DIBUJO = ['distrito', 'poligono', 'oficina', 'autorizada'];
+
+// Opacidad por grupo: los rellenos son translúcidos, así que un borde de
+// distrito debajo del campo se sigue viendo. El campo usa más relleno y el
+// distrito apenas se insinúa para que la prioridad se note en pantalla.
+const ESTILO_POR_GRUPO = {
+  autorizada: { fillOpacity: 0.35, weight: 2, opacity: 1 },
+  oficina: { fillOpacity: 0.18, weight: 2, opacity: 0.95 },
+  poligono: { fillOpacity: 0.22, weight: 2, opacity: 0.95 },
+  distrito: { fillOpacity: 0.05, weight: 1.5, opacity: 0.8 },
+};
+
+function tipoDeGeocerca(feature) {
+  const tipo = feature?.properties?.tipo;
+  return tipo && COLORES_GRUPO[tipo] ? tipo : 'poligono';
+}
 
 const SpeechRecognitionCtor =
   typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
@@ -293,7 +316,7 @@ function FitMapToGeofences({ geoJson, vehicles = [], focusRequest, fitToken = 0 
 // coloreado; queda pegado al cursor para que sea fácil de leer.
 function featureTooltip(feature, layer) {
   const properties = feature.properties || {};
-  const tipo = properties.tipo && COLORES_GRUPO[properties.tipo] ? properties.tipo : 'poligono';
+  const tipo = tipoDeGeocerca(feature);
   const grupo = ETIQUETAS_GRUPO[tipo];
   const color = COLORES_GRUPO[tipo].borde;
   const extras = [properties.division, properties.anexo, properties.distrito]
@@ -435,6 +458,29 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // Radio de los puntos GPS del recorrido: crece con el zoom (a zoom 12 son
   // ~4.5 px, a zoom 16 ya son picos visibles sobre el satélite).
   const radioPuntoRuta = Math.min(10, Math.max(3, (zoomRuta - 9) * 1.5));
+  // Tamaño (px) de los marcadores de unidades: se dibujan como iconos DOM en
+  // el markerPane (z-index 600), por encima de TODAS las geocercas, y crecen
+  // con el zoom para poder tocarlos sin seleccionar el polígono de abajo.
+  const diametroUnidad = Math.min(32, Math.max(20, (zoomRuta - 9) * 3.2));
+  // Un divIcon por color/estado (y su variante seleccionada) para que el
+  // marcador no se recree en cada render; solo cambia al hacer zoom.
+  const iconosUnidad = useMemo(() => {
+    const crear = (dot, activo) => L.divIcon({
+      className: `fleet-unidad-icon${activo ? ' fleet-unidad-icon--activa' : ''}`,
+      html: `<span class="fleet-unidad-punto" style="background:${dot}"></span>`,
+      iconSize: [diametroUnidad, diametroUnidad],
+      iconAnchor: [diametroUnidad / 2, diametroUnidad / 2],
+      popupAnchor: [0, -diametroUnidad / 2 - 4],
+      tooltipAnchor: [0, -diametroUnidad / 2 - 4],
+    });
+    const base = {};
+    const activo = {};
+    Object.values(STATUS_META).forEach(({ dot }) => {
+      base[dot] = crear(dot, false);
+      activo[dot] = crear(dot, true);
+    });
+    return { base, activo };
+  }, [diametroUnidad]);
   const [rutaCargando, setRutaCargando] = useState(false);
   // Progreso de carga completa del recorrido (todas las ventanas).
   const [rutaProgreso, setRutaProgreso] = useState(null);
@@ -510,26 +556,21 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   }, [editando, editGeo, geoJsonBase, selectedGeofenceId]);
 
   // FASE 3.8: lo visible = pintado menos el filtro de grupo (si lo hay).
-  // Z-order de dibujo: distrito → poligono → oficina → autorizada ("Campo").
-  // El campo queda siempre por encima de las demás geocercas.
-  const Z_ORDEN = { distrito: 0, poligono: 1, oficina: 2, autorizada: 3 };
-  const ordenarPorZ = (features) => (features || [])
-    .map((feature, index) => ({ feature, index }))
-    .sort((a, b) => (
-      (Z_ORDEN[a.feature.properties?.tipo] ?? 1) - (Z_ORDEN[b.feature.properties?.tipo] ?? 1)
-      || a.index - b.index
-    ))
-    .map((item) => item.feature);
-
-  const geoJsonVisible = useMemo(() => {
-    if (!filtroGrupo) return { ...geoJson, features: ordenarPorZ(geoJson.features) };
-    return {
-      ...geoJson,
-      features: ordenarPorZ(geoJson.features.filter((feature) => {
-        const tipo = feature.properties?.tipo;
-        return (tipo && COLORES_GRUPO[tipo] ? tipo : 'poligono') === filtroGrupo;
-      })),
-    };
+  // Se separa por grupo para pintar cada uno en su propia capa, de abajo
+  // hacia arriba según ORDEN_DIBUJO: distrito → manual → oficina → campo.
+  const geoJsonPorGrupo = useMemo(() => {
+    const features = geoJson.features.filter(
+      (feature) => !filtroGrupo || tipoDeGeocerca(feature) === filtroGrupo,
+    );
+    return ORDEN_DIBUJO
+      .map((grupo) => ({
+        grupo,
+        data: {
+          type: 'FeatureCollection',
+          features: features.filter((feature) => tipoDeGeocerca(feature) === grupo),
+        },
+      }))
+      .filter(({ data }) => data.features.length > 0);
   }, [geoJson, filtroGrupo]);
 
   // Resumen compacto (id/nombre/centro) para la IA que propone geocercas
@@ -2203,41 +2244,44 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
 
           <FocusUnidad unidadFocus={focusUnidadRequest} marcadores={markerRefs.current} />
 
-          <GeoJSON
-            key={`${empresaId || 'none'}-${mapRevision}-${editRevision}-${filtroGrupo || 'todos'}`}
-            data={geoJsonVisible}
-            style={(feature) => {
-              const properties = feature?.properties || {};
-              const selected = properties.id === selectedGeofenceId;
-              const tipo = properties.tipo && COLORES_GRUPO[properties.tipo] ? properties.tipo : 'poligono';
-              const paleta = selected ? COLORES_GRUPO.seleccion : COLORES_GRUPO[tipo];
-              return {
-                color: paleta.borde,
-                weight: selected ? 4 : 2,
-                opacity: 0.95,
-                fillColor: paleta.relleno,
-                fillOpacity: selected ? 0.4 : 0.22,
-              };
-            }}
-            onEachFeature={(feature, layer) => {
-              featureTooltip(feature, layer);
-              layer.on('click', () => {
-                // En modo "insertar" o "dibujar" el clic lo maneja el mapa
-                // (agrega el punto): la selección no cambia.
-                if (editModo === 'insertar' || editModo === 'dibujo') return;
-                // VIII: al elegir la geocerca (clic en el polígono) el mapa
-                // se ajusta a ella, igual que desde el buscador.
-                focusGeofence(feature.properties || {});
-              });
-              layer.on('dblclick', (event) => {
-                if (editModo === 'insertar' || editModo === 'dibujo') return;
-                // Evita que el doble-clic haga zoom: debe abrir la ficha.
-                L.DomEvent.stopPropagation(event);
-                L.DomEvent.preventDefault(event);
-                focusGeofence(feature.properties || {});
-              });
-            }}
-          />
+          {geoJsonPorGrupo.map(({ grupo, data }) => (
+            <GeoJSON
+              key={`${grupo}-${empresaId || 'none'}-${mapRevision}-${editRevision}-${filtroGrupo || 'todos'}`}
+              data={data}
+              style={(feature) => {
+                const properties = feature?.properties || {};
+                const selected = properties.id === selectedGeofenceId;
+                const tipo = tipoDeGeocerca(feature);
+                const paleta = selected ? COLORES_GRUPO.seleccion : COLORES_GRUPO[tipo];
+                const base = ESTILO_POR_GRUPO[tipo] || ESTILO_POR_GRUPO.poligono;
+                return {
+                  color: paleta.borde,
+                  weight: selected ? 4 : base.weight,
+                  opacity: selected ? 1 : base.opacity,
+                  fillColor: paleta.relleno,
+                  fillOpacity: selected ? 0.45 : base.fillOpacity,
+                };
+              }}
+              onEachFeature={(feature, layer) => {
+                featureTooltip(feature, layer);
+                layer.on('click', () => {
+                  // En modo "insertar" o "dibujar" el clic lo maneja el mapa
+                  // (agrega el punto): la selección no cambia.
+                  if (editModo === 'insertar' || editModo === 'dibujo') return;
+                  // VIII: al elegir la geocerca (clic en el polígono) el mapa
+                  // se ajusta a ella, igual que desde el buscador.
+                  focusGeofence(feature.properties || {});
+                });
+                layer.on('dblclick', (event) => {
+                  if (editModo === 'insertar' || editModo === 'dibujo') return;
+                  // Evita que el doble-clic haga zoom: debe abrir la ficha.
+                  L.DomEvent.stopPropagation(event);
+                  L.DomEvent.preventDefault(event);
+                  focusGeofence(feature.properties || {});
+                });
+              }}
+            />
+          ))}
           {editando ? (
             <GeocercaVertexLayer
               modo={editModo}
@@ -2362,18 +2406,18 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               || (estadoPlaca?.geocerca_ultima ? `${estadoPlaca.geocerca_ultima} (últ. vez)` : '')
               || '—';
             return (
-              <CircleMarker
+              <Marker
                 key={vehicle.id}
                 ref={(ref) => {
                   if (ref) markerRefs.current.set(vehicle.placa, ref);
                   else markerRefs.current.delete(vehicle.placa);
                 }}
-                center={[latitud, longitud]}
-                radius={selectedId === vehicle.id ? 7 : 5}
-                pathOptions={{ color: '#FFFFFF', weight: 2, fillColor: meta.dot, fillOpacity: 1 }}
+                position={[latitud, longitud]}
+                icon={(selectedId === vehicle.id ? iconosUnidad.activo : iconosUnidad.base)[meta.dot]}
+                zIndexOffset={selectedId === vehicle.id ? 1000 : 0}
                 eventHandlers={onSelect ? { click: () => onSelect(vehicle.id) } : undefined}
               >
-                <Tooltip direction="top" offset={[0, -6]} opacity={1} className="fleet-unit-tooltip">
+                <Tooltip direction="top" opacity={1} className="fleet-unit-tooltip">
                   <div className="text-[11px] leading-snug space-y-0.5">
                     <p className="font-bold text-slate-900">{vehicle.placa}</p>
                     <p className="text-slate-600">{vehicle.descripcion || vehicle.modelo || '—'}</p>
@@ -2453,7 +2497,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                     </button>
                   </div>
                 </Popup>
-              </CircleMarker>
+              </Marker>
             );
           })}
           {/* FASE 3.8: controles flotantes del mapa (leyenda, ficha, satélite, JARVIS). */}
