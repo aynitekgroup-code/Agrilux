@@ -309,6 +309,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
   const [filas, setFilas] = useState([]);
   const [error, setError] = useState(null);
   const [rangoTexto, setRangoTexto] = useState('');
+  const [avisoLotes, setAvisoLotes] = useState('');
   const [intento, setIntento] = useState(0);
 
   useEffect(() => {
@@ -328,6 +329,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
       .then((resultado) => {
         if (cancelado) return;
         setFilas(resultado);
+        setAvisoLotes(resultado?.aviso || '');
         setEstado(resultado.length ? 'ok' : 'vacio');
         setRangoTexto(consulta.texto);
       })
@@ -429,6 +431,11 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
         </div>
       </div>
 
+      {avisoLotes && estado === 'ok' ? (
+        <p className="mx-4 sm:mx-5 mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800" role="status">
+          {avisoLotes}
+        </p>
+      ) : null}
       <CuerpoEstado
         pendienteDeFecha={pendienteDeFecha}
         mensajePendiente={mensajePendiente}

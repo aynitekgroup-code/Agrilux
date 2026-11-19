@@ -126,3 +126,35 @@ export async function calcularVisitasPendientes(agrilux, desdeDia, hastaDia, log
   }
   return hechas;
 }
+
+/**
+ * Días SIN datos (o con muy pocos) en Agrilux dentro de [desdeDia, hastaDia].
+ * Sirve para recuperar solos los huecos, por ejemplo cuando la PC estuvo
+ * apagada (18/11/2026: llegó del 1 al 11/11 y luego desde el 16/11; faltaban
+ * del 12 al 15). Un día cuenta como incompleto si tiene menos del 30 % de la
+ * mediana de posiciones de los días con datos.
+ * @returns {Promise<{dia:string, posiciones:number}[]>}
+ */
+export async function diasIncompletos(agrilux, desdeDia, hastaDia) {
+  const dias = [];
+  for (let d = desdeDia; d <= hastaDia; d = sumarUnDia(d)) dias.push(d);
+  const conteos = [];
+  for (const dia of dias) {
+    const { count, error } = await agrilux.supabase
+      .from('agrotrack_posiciones')
+      .select('id', { count: 'exact', head: true })
+      .eq('empresa_id', agrilux.empresaId)
+      .gte('fecha', `${dia}T00:00:00-05:00`)
+      .lt('fecha', `${sumarUnDia(dia)}T00:00:00-05:00`);
+    if (error) throw traducirError(error);
+    conteos.push({ dia, posiciones: count ?? 0 });
+  }
+  const conDatos = conteos.map((c) => c.posiciones).filter((n) => n > 0).sort((a, b) => a - b);
+  const mediana = conDatos.length ? conDatos[Math.floor(conDatos.length / 2)] : 0;
+  return conteos.filter((c) => c.posiciones === 0 || c.posiciones < mediana * 0.3);
+}
+
+function sumarUnDia(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+}

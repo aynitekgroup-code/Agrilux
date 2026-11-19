@@ -131,11 +131,58 @@ export async function obtenerLotesFlota(
   if (Array.isArray(placas) && placas.length) params.p_placas = placas;
   if (horaDesde) params.p_hora_desde = horaDesde;
   if (horaHasta) params.p_hora_hasta = horaHasta;
-  return llamarRpc(
-    'agrotrack_lotes_flota',
-    params,
-    'No se pudo cargar el tiempo en cada lote'
+
+  // 18/11/2026 (observación IV: "tiempo en cada lote no carga"): el cálculo en
+  // vivo cruza todas las posiciones con los polígonos y pasa de los 8 s con
+  // todas las unidades o varios días. Con días COMPLETOS se lee lo ya
+  // guardado en agrotrack_visitas_dia (instantáneo y exacto). Con horas
+  // parciales se intenta en vivo y, si se corta, se usan las visitas
+  // guardadas recortadas a la hora (reparto proporcional, con aviso).
+  const desdeVisitas = () => llamarRpc(
+    'agrotrack_lotes_desde_visitas',
+    {
+      p_empresa_id: empresaId,
+      p_desde: desde,
+      p_hasta: hasta,
+      p_placa: placa || null,
+      p_placas: Array.isArray(placas) && placas.length ? placas : null,
+      p_limite: limite,
+    },
+    'No se pudo leer el tiempo en cada lote guardado',
   );
+  const enVivo = () => llamarRpc('agrotrack_lotes_flota', params, 'No se pudo cargar el tiempo en cada lote');
+  const sinFranja = !horaDesde && !horaHasta;
+
+  if (desde && hasta && sinFranja && rangoDeDiasCompletos(desde, hasta)) {
+    try {
+      const filas = await desdeVisitas();
+      if (filas.length) return filas;
+    } catch (e) {
+      if (!/agrotrack-visitas-diarias|Falta ejecutar|could not find/i.test(String(e?.message))) throw e;
+    }
+    return enVivo();
+  }
+  try {
+    return await enVivo();
+  } catch (e) {
+    if (!desde || !hasta || !/8 s|timeout|tard|cancel/i.test(String(e?.message))) throw e;
+    const filas = await desdeVisitas();
+    filas.aviso = 'El cálculo exacto por hora tardó más de 8 s: se muestran las visitas guardadas recortadas a ese horario (apagado/ralentí/viajando repartidos en proporción). Para cifras exactas usa días completos.';
+    return filas;
+  }
+}
+
+/** ¿El rango va de 00:00 a 23:59 (hora de Perú) en días completos? */
+export function rangoDeDiasCompletos(desde, hasta) {
+  const hora = (iso) => {
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return null;
+    const d = new Date(t - 5 * 3600 * 1000);
+    return d.getUTCHours() * 60 + d.getUTCMinutes();
+  };
+  const h1 = hora(desde);
+  const h2 = hora(hasta);
+  return h1 === 0 && h2 !== null && h2 >= 23 * 60 + 59;
 }
 
 /**

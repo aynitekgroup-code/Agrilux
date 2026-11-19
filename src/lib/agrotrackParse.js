@@ -29,16 +29,68 @@ export function normalizeHeader(value) {
 
 // "Nov 01 2026 12:01 AM" -> "2026-11-01T00:01:00-05:00"
 export function parseFechaZonar(value) {
-  const match = String(value ?? '')
-    .trim()
-    .match(/^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})\s+(\d{4})\s+(\d{1,2}):(\d{2})\s*([AaPp])\.?\s*[Mm]\.?$/);
-  if (!match) return null;
-  const month = MONTHS[match[1].toLowerCase()];
-  if (!month) return null;
-  let hour = Number(match[4]) % 12;
-  if (match[6].toLowerCase() === 'p') hour += 12;
-  const day = String(match[2]).padStart(2, '0');
-  return `${match[3]}-${month}-${day}T${String(hour).padStart(2, '0')}:${match[5]}:00${PERU_OFFSET}`;
+  // 18/11/2026: además del texto en inglés de Zonar se aceptan los formatos
+  // que aparecen cuando el reporte sale con la interfaz en español o cuando
+  // el archivo se abrió y guardó en Excel (antes esas filas se descartaban
+  // como "faltan unidad, fecha o evento"):
+  //   "12/11/2026 04:00 p. m." · "12/11/2026 16:00:05" · "2026-11-12 16:00"
+  //   "12 nov 2026 04:00 PM"  · número de serie de Excel (46338.6666)
+  if (value instanceof Date) return fechaDesdePartes(value.getFullYear(), value.getMonth() + 1, value.getDate(), value.getHours(), value.getMinutes(), value.getSeconds());
+  if (typeof value === 'number') return fechaDesdeSerialExcel(value);
+  const text = String(value ?? '').trim().replace(/\s+/g, ' ');
+  if (!text) return null;
+  if (/^\d{5}(\.\d+)?$/.test(text)) return fechaDesdeSerialExcel(Number(text));
+
+  const ampm = '(?:\\s*([AaPp])\\.?\\s*[Mm]\\.?)?';
+  const hora = `(\\d{1,2}):(\\d{2})(?::(\\d{2}))?${ampm}`;
+
+  // "Nov 01 2026 12:01 AM" (inglés, el de siempre)
+  let m = text.match(new RegExp(`^([A-Za-z]{3})[a-z]*\\.?\\s+(\\d{1,2}),?\\s+(\\d{4})\\s+${hora}$`));
+  if (m && MONTHS[m[1].toLowerCase()]) {
+    return fechaDesdePartes(m[3], MONTHS[m[1].toLowerCase()], m[2], ajustarHora(m[4], m[7]), m[5], m[6]);
+  }
+  // "12 nov 2026 04:00 PM" / "12-nov-2026 16:00"
+  m = text.match(new RegExp(`^(\\d{1,2})[\\s-]([A-Za-z]{3})[a-z]*\\.?[\\s-](\\d{4})\\s+${hora}$`));
+  if (m && MONTHS[m[2].toLowerCase()]) {
+    return fechaDesdePartes(m[3], MONTHS[m[2].toLowerCase()], m[1], ajustarHora(m[4], m[7]), m[5], m[6]);
+  }
+  // "2026-11-12 16:00[:05]" (con espacio; el ISO con "T" lo resuelve el
+  // agente según su modo de fecha)
+  m = text.match(new RegExp(`^(\\d{4})-(\\d{1,2})-(\\d{1,2}) ${hora}$`));
+  if (m) return fechaDesdePartes(m[1], m[2], m[3], ajustarHora(m[4], m[7]), m[5], m[6]);
+  // "12/11/2026 04:00 p. m." -> en Perú siempre DÍA/MES/AÑO
+  m = text.match(new RegExp(`^(\\d{1,2})[/.-](\\d{1,2})[/.-](\\d{4}),?\\s+${hora}$`));
+  if (m) return fechaDesdePartes(m[3], m[2], m[1], ajustarHora(m[4], m[7]), m[5], m[6]);
+  return null;
+}
+
+function ajustarHora(h, ap) {
+  let hour = Number(h);
+  if (ap) {
+    hour %= 12;
+    if (ap.toLowerCase() === 'p') hour += 12;
+  }
+  return hour;
+}
+
+function fechaDesdePartes(y, mo, d, h, mi, s) {
+  const n = (x) => String(Number(x || 0)).padStart(2, '0');
+  const anio = Number(y);
+  const mes = Number(mo);
+  const dia = Number(d);
+  if (!(anio >= 2000 && anio <= 2100) || !(mes >= 1 && mes <= 12) || !(dia >= 1 && dia <= 31)) return null;
+  if (!(Number(h) >= 0 && Number(h) <= 23) || !(Number(mi) >= 0 && Number(mi) <= 59) || !(Number(s || 0) >= 0 && Number(s || 0) <= 59)) return null;
+  // Zonar exporta con minutos; si no hay segundos el resultado es idéntico al
+  // de siempre ("...:00-05:00") y el source_key no cambia.
+  return `${anio}-${n(mes)}-${n(dia)}T${n(h)}:${n(mi)}:${n(s)}${PERU_OFFSET}`;
+}
+
+// Número de serie de Excel (días desde 1899-12-30), leído como hora de Perú.
+function fechaDesdeSerialExcel(serial) {
+  if (!Number.isFinite(serial) || serial < 36526 || serial > 73050) return null; // 2000..2099
+  const ms = Math.round((serial - 25569) * 86400 * 1000);
+  const t = new Date(ms);
+  return fechaDesdePartes(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate(), t.getUTCHours(), t.getUTCMinutes(), t.getUTCSeconds());
 }
 
 // "BPH-767/SEGURIDAD" -> { placa: "BPH-767", descripcion: "SEGURIDAD" }

@@ -12,7 +12,7 @@ export const AVISO_SQL_TIEMPO_REAL =
   'Falta ejecutar scripts/agrotrack-tiempo-real.sql en Supabase para ver los datos en tiempo real.';
 
 /** Minutos sin latido del agente a partir de los cuales se avisa. */
-export const MINUTOS_LATIDO_VIEJO = 10;
+export const MINUTOS_LATIDO_VIEJO = 25; // el agente lee Zonar cada 10 min
 
 function faltaFuncion(error) {
   const t = String(error?.message || '');
@@ -124,4 +124,56 @@ export function describirLatido(latido, ahora = new Date()) {
     texto: `Zonar leído ${hace}${latido.ok === false ? ' · último intento con error' : ''}`,
     viejo: min >= MINUTOS_LATIDO_VIEJO || latido.ok === false,
   };
+}
+
+/**
+ * 18/11/2026 (observación X): RESPALDO sin SQL nuevo ni agente. Última
+ * posición de cada placa leída directo de agrotrack_posiciones, una consulta
+ * pequeña por placa (usa el índice empresa_id + placa + fecha), de a 8 en
+ * paralelo. Las placas salen del padrón (agrotrack_vehiculos) y, si no hay
+ * padrón, de las posiciones más recientes. Misma forma que obtenerEstadoVivo.
+ */
+export async function obtenerUltimasPosicionesDirecto(empresaId, placasPadron = []) {
+  if (!empresaId) return [];
+  const columnas = 'placa, unidad, descripcion, fecha, evento, velocidad, direccion, latitud, longitud';
+  let placas = [...new Set((placasPadron || []).filter(Boolean))];
+  if (!placas.length) {
+    const { data, error } = await supabase
+      .from('agrotrack_posiciones')
+      .select('placa')
+      .eq('empresa_id', empresaId)
+      .order('fecha', { ascending: false })
+      .limit(5000);
+    if (error) throw new Error(`No se pudieron leer las unidades: ${error.message}`);
+    placas = [...new Set((data || []).map((r) => r.placa).filter(Boolean))];
+  }
+  const filas = [];
+  for (let i = 0; i < placas.length; i += 8) {
+    const lote = await Promise.all(placas.slice(i, i + 8).map(async (placa) => {
+      const { data, error } = await supabase
+        .from('agrotrack_posiciones')
+        .select(columnas)
+        .eq('empresa_id', empresaId)
+        .eq('placa', placa)
+        .order('fecha', { ascending: false })
+        .limit(1);
+      return error ? null : (data || [])[0] || null;
+    }));
+    lote.forEach((f) => { if (f) filas.push(f); });
+  }
+  return filas.map((f) => ({
+    placa: f.placa,
+    unidad: f.unidad,
+    descripcion: f.descripcion,
+    ultima_fecha: f.fecha,
+    ultimo_evento: f.evento,
+    ultima_velocidad: f.velocidad,
+    direccion: f.direccion,
+    latitud: f.latitud,
+    longitud: f.longitud,
+    geocerca: null,
+    geocerca_division: null,
+    geocerca_ultima: null,
+    geocerca_ultima_fecha: null,
+  }));
 }

@@ -1,5 +1,5 @@
 @echo off
-rem Modo EN VIVO del agente (Zonar -> Agrilux cada 2 minutos).
+rem Modo EN VIVO del agente (Zonar -> Agrilux cada 10 minutos).
 rem Lo arranca la tarea "AgroTrack Zonar en vivo" al iniciar sesion en Windows.
 rem Si el proceso se cae, vuelve a arrancar a los 60 segundos.
 chcp 65001 >nul 2>&1

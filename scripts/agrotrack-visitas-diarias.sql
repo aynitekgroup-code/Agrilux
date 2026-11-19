@@ -480,3 +480,106 @@ end $$;
 --     where empresa_id = '<empresa_id>' and dia = current_date - 1
 --     order by placa, geocerca;
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 8) TIEMPO EN CADA LOTE desde las visitas GUARDADAS (18/11/2026, obs. IV:
+--    "la parte de tiempo en cada lote no carga").
+--    agrotrack_lotes_flota recalcula en vivo posiciones x polígonos y, con
+--    todas las unidades o varios días, pasa de los 8 s. Esta versión suma lo
+--    ya guardado en agrotrack_visitas_dia: es instantánea para cualquier rango.
+--    Rango con hora: cada visita se recorta a [p_desde, p_hasta] y su
+--    apagado / ralentí / viajando se reparte en la misma proporción.
+--    Mismas columnas que agrotrack_lotes_flota (km, puntos y velocidad máxima
+--    no se guardan por visita: vienen en null).
+-- ---------------------------------------------------------------------------
+drop function if exists public.agrotrack_lotes_desde_visitas(uuid, timestamptz, timestamptz, text, text[], integer);
+
+create function public.agrotrack_lotes_desde_visitas(
+  p_empresa_id uuid,
+  p_desde      timestamptz,
+  p_hasta      timestamptz,
+  p_placa      text    default null,
+  p_placas     text[]  default null,
+  p_limite     integer default 200
+)
+returns table (
+  geocerca_id          uuid,
+  lote                 text,
+  division             text,
+  anexo                text,
+  area_ha              numeric,
+  unidades             bigint,
+  visitas              bigint,
+  permanencia_segundos bigint,
+  apagado_segundos     bigint,
+  ralenti_segundos     bigint,
+  viaje_segundos       bigint,
+  km_recorridos        numeric,
+  puntos               bigint,
+  vel_max_kmh          numeric,
+  primera_visita       timestamptz,
+  ultima_visita        timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public, pg_catalog, pg_temp
+as $$
+  with v as (
+    select
+      x.placa, x.geocerca, x.continua_dia_anterior, x.entrada,
+      greatest(x.entrada, p_desde)                         as ini,
+      least(coalesce(x.salida, x.entrada), p_hasta)        as fin,
+      greatest(coalesce(x.duracion_segundos, 0), 1)        as dur,
+      x.apagado_segundos, x.ralenti_segundos, x.viaje_segundos
+    from public.agrotrack_visitas_dia x
+    where (select public.onboarding_es_miembro(p_empresa_id))
+      and x.empresa_id = p_empresa_id
+      and x.dia between (p_desde at time zone 'America/Lima')::date
+                    and (p_hasta at time zone 'America/Lima')::date
+      and x.entrada <= p_hasta
+      and coalesce(x.salida, x.entrada) >= p_desde
+      and (p_placa  is null or x.placa = p_placa)
+      and (p_placas is null or x.placa = any (p_placas))
+  ),
+  r as (
+    select v.*,
+           greatest(0, extract(epoch from (v.fin - v.ini)))::double precision as seg,
+           least(1.0, greatest(0, extract(epoch from (v.fin - v.ini))) / v.dur) as f
+    from v
+  ),
+  agg as (
+    select
+      r.geocerca,
+      count(distinct r.placa)                                   as unidades,
+      -- la parte "venía del día anterior" no es una visita nueva, salvo
+      -- que sea la primera del rango pedido
+      count(*) filter (where not r.continua_dia_anterior or r.entrada <= p_desde) as visitas,
+      round(sum(r.seg))::bigint                                 as permanencia,
+      round(sum(r.apagado_segundos * r.f))::bigint              as apagado,
+      round(sum(r.ralenti_segundos * r.f))::bigint              as ralenti,
+      round(sum(r.viaje_segundos   * r.f))::bigint              as viaje,
+      min(r.ini)                                                as primera,
+      max(r.fin)                                                as ultima
+    from r
+    where r.seg > 0
+    group by r.geocerca
+  )
+  select
+    g.id, a.geocerca, g.division, g.anexo, g.area_declarada,
+    a.unidades, a.visitas, a.permanencia, a.apagado, a.ralenti, a.viaje,
+    null::numeric, null::bigint, null::numeric, a.primera, a.ultima
+  from agg a
+  left join lateral (
+    select g.id, g.division, g.anexo, g.area_declarada
+    from public.agrotrack_geocercas g
+    where g.empresa_id = p_empresa_id and btrim(g.nombre) = btrim(a.geocerca)
+    order by g.activa desc
+    limit 1
+  ) g on true
+  order by a.permanencia desc, a.geocerca
+  limit greatest(coalesce(p_limite, 200), 1);
+$$;
+
+grant execute on function public.agrotrack_lotes_desde_visitas(uuid, timestamptz, timestamptz, text, text[], integer)
+  to authenticated, service_role;

@@ -42,8 +42,8 @@ Además de la descarga diaria, el agente puede quedarse **conectado**:
 
 | Cada | Qué hace |
 | --- | --- |
-| 2 min | Lee la posición actual de **todas** las unidades (una sola llamada a `GetUnitsLocator`) y la sube a Agrilux. La web (Status de maquinaria, mapa, localizador) se actualiza sola por Supabase Realtime. |
-| 15 min | Baja el historial de **hoy** de cada unidad (los puntos cada 2 min) y recalcula las visitas a geocercas pendientes de hoy y ayer. |
+| 10 min | Lee la posición actual de **todas** las unidades (una sola llamada a `GetUnitsLocator`) y la sube a Agrilux. La web (Status de maquinaria, mapa, localizador) se actualiza sola por Supabase Realtime. |
+| 10 min | Baja el historial de **hoy** de cada unidad (los puntos cada 2 min) y recalcula las visitas a geocercas pendientes de hoy y ayer. |
 
 Instalación (una vez, después de los pasos de arriba):
 
@@ -61,7 +61,7 @@ instalar-envivo.bat
 
 | Comando | Qué hace |
 | --- | --- |
-| `node agente.mjs envivo` | Conectado: lee Zonar cada 2 min (Ctrl+C para salir) |
+| `node agente.mjs envivo` | Conectado: lee Zonar cada 10 min (Ctrl+C para salir) |
 | `node agente.mjs envivo --una-vez` | Una sola vuelta (prueba) |
 | `node agente.mjs envivo --intervalo=60 --historial=10` | Cambia los tiempos (segundos / minutos) |
 | `instalar-envivo.bat` / `quitar-envivo.bat` | Activa / quita el arranque automático |
@@ -70,11 +70,25 @@ La web muestra “Zonar leído hace N min” (el **latido** del agente). Si pasa
 10 minutos, se pone en ámbar: revisa que la PC esté encendida y mira
 `logs\envivo.log`.
 
-> Conviene confirmar con Zonar/TSO Mobile que una lectura cada 2 minutos con
+> Conviene confirmar con Zonar/TSO Mobile que una lectura cada 10 minutos con
 > el usuario de la empresa está dentro de su política de uso. Si Zonar ofrece
 > su API oficial o un envío por *webhook*, el agente se reemplaza por esa
 > integración sin cambiar nada en Supabase: basta con escribir en
 > `agrotrack_posiciones` (el trigger y la web funcionan igual).
+
+### Recuperación automática de días faltantes (18/11/2026)
+
+`node agente.mjs correr` (la tarea de las 05:30) ya no baja solo **ayer**:
+revisa los últimos 31 días en Agrilux y baja **día por día** los que falten o
+estén incompletos (menos del 30 % de las posiciones de un día normal). Así un
+apagón de la PC no deja huecos como el del 12 al 15/11. Se cambia con
+`"corrida": { "dias_recuperar": 31 }` en la configuración (0 = solo ayer).
+
+Para recuperar un rango a mano:
+
+```bat
+node agente.mjs correr --desde=2026-11-12 --hasta=2026-11-15
+```
 
 ## Uso diario
 

@@ -9,7 +9,8 @@ import {
   cutRequests,
 } from '../../mocks/agrotrackData';
 import { cargarPanelFlota, textoPeriodoCargado, formatearRango, LIMITE_ALERTAS_PANEL, clasificarEstado } from '../../lib/agrotrackFlota';
-import { obtenerEstadoVivo, suscribirEstadoVivo } from '../../lib/agrotrackTiempoReal';
+import { obtenerEstadoVivo, suscribirEstadoVivo, obtenerUltimasPosicionesDirecto } from '../../lib/agrotrackTiempoReal';
+import { cargarVehiculosMaestro } from '../../lib/agrotrackVehiculos';
 import FleetHeader from '../../components/gestion/fleet/FleetHeader';
 import FleetKpis from '../../components/gestion/fleet/FleetKpis';
 import FleetMap from '../../components/gestion/fleet/FleetMap';
@@ -99,9 +100,29 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
   useEffect(() => {
     if (!empresa_activa_id) return undefined;
     let cancelado = false;
+    // 18/11/2026: si la tabla en vivo no existe o está vacía (agente sin
+    // correr), se lee la última posición de cada placa directo de
+    // agrotrack_posiciones, para que el mapa nunca se quede sin unidades.
+    let ultimoRespaldo = 0;
+    let filasRespaldo = [];
+    const respaldo = async () => {
+      // como mucho cada 5 minutos (son ~44 consultas pequeñas)
+      if (Date.now() - ultimoRespaldo < 5 * 60 * 1000 && filasRespaldo.length) return filasRespaldo;
+      ultimoRespaldo = Date.now();
+      let padron = [];
+      try {
+        padron = ((await cargarVehiculosMaestro(empresa_activa_id)).unidades || []).map((u) => u.placa);
+      } catch {
+        padron = [];
+      }
+      filasRespaldo = await obtenerUltimasPosicionesDirecto(empresa_activa_id, padron);
+      return filasRespaldo;
+    };
     const leer = () => obtenerEstadoVivo(empresa_activa_id)
-      .then((filas) => { if (!cancelado) setVivo(filas); })
-      .catch(() => { if (!cancelado) setVivo([]); }); // sin SQL de tiempo real: sigue como antes
+      .then((filas) => (filas.length ? filas : respaldo()))
+      .catch(() => respaldo())
+      .then((filas) => { if (!cancelado) setVivo(filas || []); })
+      .catch(() => { if (!cancelado) setVivo([]); });
     leer();
     let pendiente = null;
     const cancelar = suscribirEstadoVivo(empresa_activa_id, () => {
@@ -145,11 +166,29 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
     return mezcladas;
   }, [conDatosReales, vivo, panel.unidades]);
 
+  // 18/11/2026 (observación X): si el panel no carga (timeout o SQL
+  // pendiente), el mapa YA NO se queda sin localizador, grupos ni
+  // coordenadas: usa la última posición de cada unidad de la tabla en vivo.
+  const unidadesSoloVivo = useMemo(() => {
+    const ahora = new Date().toISOString();
+    return vivo
+      .filter((v) => Number.isFinite(Number(v.latitud)) && Number.isFinite(Number(v.longitud)))
+      .map((v) => ({
+        id: v.placa, placa: v.placa, descripcion: v.descripcion || v.unidad || '', modelo: v.descripcion || v.unidad || '',
+        estado: clasificarEstado(v, ahora), lat: Number(v.latitud), lng: Number(v.longitud),
+        velocidad_kmh: Number(v.ultima_velocidad || 0), ultima_fecha: v.ultima_fecha, ultimo_evento: v.ultimo_evento || '',
+        km_recorridos: 0, eventos_alta_velocidad: 0, fuente: 'real', geocerca_actual: v.geocerca || null, en_vivo: true,
+      }));
+  }, [vivo]);
+  const usaRespaldoVivo = (hayErrorPanel || sinDatosReales) && unidadesSoloVivo.length > 0;
+
   // Fuente compartida por tarjetas, alertas y marcadores del mapa.
-  const vehiclesFuente = conDatosReales ? unidadesConVivo : sinDatosReales ? vehicles : [];
+  const vehiclesFuente = conDatosReales
+    ? unidadesConVivo
+    : usaRespaldoVivo ? unidadesSoloVivo : sinDatosReales ? vehicles : [];
   const alertasBase = conDatosReales ? panel.alertas : sinDatosReales ? mockAlerts : [];
   const alertList = alertasBase.map((alerta) => (ackIds.includes(alerta.id) ? { ...alerta, atendida: true } : alerta));
-  const fuentePosiciones = conDatosReales ? 'real' : enCarga ? 'cargando' : hayErrorPanel ? 'ninguna' : 'demo';
+  const fuentePosiciones = conDatosReales || usaRespaldoVivo ? 'real' : enCarga ? 'cargando' : hayErrorPanel ? 'ninguna' : 'demo';
 
   const recargarPanel = useCallback(async () => {
     if (!empresa_activa_id) {
@@ -334,6 +373,8 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
                 onSelect={setSelectedVehicleId}
                 fuentePosiciones={fuentePosiciones}
                 periodo={conDatosReales ? panel.periodo : null}
+                errorUnidades={hayErrorPanel ? panel.error : null}
+                onReintentarUnidades={recargarPanel}
               />
             </div>
             <div className="xl:col-span-12 min-w-0" id="alertas-operacion">
@@ -409,6 +450,8 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             periodo={conDatosReales ? panel.periodo : null}
             consolaVisible
             mostrarTablasAlFinal={false}
+            errorUnidades={hayErrorPanel ? panel.error : null}
+            onReintentarUnidades={recargarPanel}
           />
         </div>
       ) : null}

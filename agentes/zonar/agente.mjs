@@ -7,6 +7,7 @@
  *   node agente.mjs correr                 descarga lo de AYER y lo ingresa
  *   node agente.mjs correr --probar        solo 1 unidad (prueba de humo)
  *   node agente.mjs correr --desde=2026-11-10 --hasta=2026-11-12
+ *   node agente.mjs correr                 ayer + los días que falten de los últimos 31 (recupera huecos)
  *   node agente.mjs correr --sin-ingerir   solo descarga los JSON (nada a Agrilux)
  *   node agente.mjs correr --unidades=1414-1K,T-01
  *   node agente.mjs envivo                 tiempo real: lee Zonar cada 2 min (Ctrl+C para salir)
@@ -23,6 +24,7 @@ import { parseArgs } from 'node:util';
 import { RUTAS, cargarConfig, asegurarCarpetas } from './src/config.js';
 import { crearLog, ejecutarCorrida } from './src/pipeline.js';
 import { ejecutarEnVivo } from './src/envivo.js';
+import { conectarAgrilux, diasIncompletos } from './src/agrilux.js';
 import {
   loginZonar, crudoUnidades, crudoArbolUnidades, crudoHistorial, hoyPeru, restarDias,
 } from './src/zonar.js';
@@ -184,6 +186,33 @@ async function main() {
       ? values.unidades.split(',').map((s) => s.trim()).filter(Boolean)
       : null,
   };
+
+  // 18/11/2026: sin --desde, además de ayer revisa los últimos
+  // corrida.dias_recuperar días y baja DÍA POR DÍA los que falten o estén
+  // incompletos (así un apagón de la PC no deja huecos como el del 12 al 15/11).
+  if (!opts.desde && !opts.probar && !opts.sinIngerir && cfg.corrida.dias_recuperar > 0) {
+    const ayer = restarDias(hoyPeru(), 1);
+    const inicio = restarDias(ayer, cfg.corrida.dias_recuperar);
+    let dias = [ayer];
+    try {
+      const agrilux = await conectarAgrilux(cfg.agrilux);
+      const faltan = await diasIncompletos(agrilux, inicio, ayer);
+      dias = [...new Set([...faltan.map((f) => f.dia), ayer])].sort();
+      const huecos = faltan.filter((f) => f.dia !== ayer);
+      if (huecos.length) {
+        log.aviso(`Días incompletos en Agrilux que se recuperan ahora: ${huecos.map((f) => `${f.dia} (${f.posiciones})`).join(', ')}`);
+      }
+    } catch (e) {
+      log.aviso(`No se pudo revisar los días faltantes (${e.message}); se baja solo ayer.`);
+    }
+    let algunoOk = false;
+    for (const dia of dias) {
+      const r = await ejecutarCorrida(cfg, { ...opts, desde: dia, hasta: dia }, log);
+      algunoOk = algunoOk || r.ok || r.unidades_ok > 0;
+    }
+    if (!algunoOk) process.exitCode = 1;
+    return;
+  }
 
   const resumen = await ejecutarCorrida(cfg, opts, log);
   if (!resumen.ok && resumen.unidades_ok === 0) process.exitCode = 1;

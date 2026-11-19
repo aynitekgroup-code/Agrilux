@@ -30,7 +30,9 @@ function buildRow(raw, columns, empresaId, userId) {
   const longitud = numberOrNull(get('longitud'));
   const evento = cleanText(get('eventos'));
 
-  if (!placa || !fecha || !evento) return { error: 'faltan unidad, fecha o evento' };
+  if (!placa) return { error: 'falta la unidad' };
+  if (!fecha) return { error: `fecha no reconocida: "${String(get('fecha') ?? '').slice(0, 40)}"` };
+  if (!evento) return { error: 'falta el evento' };
   if (latitud === null || longitud === null || Math.abs(latitud) > 90 || Math.abs(longitud) > 180) {
     return { error: 'coordenadas inválidas' };
   }

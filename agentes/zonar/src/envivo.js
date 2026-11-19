@@ -2,10 +2,10 @@
  * agentes/zonar/src/envivo.js
  * Modo EN VIVO (14/11/2026): Agrilux conectado a Zonar casi en tiempo real.
  *
- *   cada 2 min  → GetUnitsLocator (posición actual de TODAS las unidades,
+ *   cada 10 min → GetUnitsLocator (posición actual de TODAS las unidades,
  *                 una sola llamada) → agrotrack_posiciones → el trigger
  *                 actualiza agrotrack_estado_vivo → Realtime avisa a la web.
- *   cada 15 min → GetUnitsHistory de HOY por unidad (los puntos de cada
+ *   cada 10 min → GetUnitsHistory de HOY por unidad (los puntos de cada
  *                 2 minutos entre lectura y lectura, igual que la descarga
  *                 diaria; lo repetido se descarta por source_key) y luego
  *                 se calculan las visitas a geocercas pendientes de hoy.

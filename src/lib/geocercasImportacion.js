@@ -188,6 +188,41 @@ export function inferirGrupo(collection) {
   return null;
 }
 
+const CONECTORES = new Set(['de', 'del', 'la', 'las', 'los', 'el', 'y']);
+
+/**
+ * 18/11/2026 (observación III): nombre de geocerca de un DISTRITO.
+ * Todos empiezan con "Distrito"; si el nombre tiene 3 palabras o más
+ * (sin contar de/la/los…) se abrevia con sus iniciales:
+ *   "POMALCA"                      -> "Distrito Pomalca"
+ *   "SANTA ROSA"                   -> "Distrito Santa Rosa"
+ *   "MANUEL ANTONIO MESONES MURO"  -> "Distrito MAMM"
+ *   "Distrito de La Victoria"      -> "Distrito La Victoria"
+ * La misma regla está en scripts/agrotrack-nombres-distritos.sql.
+ */
+export function nombreDistrito(nombre) {
+  const limpio = String(nombre || '').trim().replace(/\s+/g, ' ');
+  // Ya abreviado ("Distrito MAMM"): se deja igual.
+  if (/^Distrito [A-ZÁÉÍÓÚÑ]{2,6}$/.test(limpio)) return limpio;
+  const base = String(nombre || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/^(distrito|dist\.?)\s+(de\s+)?/i, '')
+    .trim();
+  if (!base) return 'Distrito';
+  const palabras = base.split(' ');
+  const significativas = palabras.filter((w) => !CONECTORES.has(w.toLowerCase()));
+  if (significativas.length >= 3) {
+    return `Distrito ${significativas.map((w) => w.charAt(0).toLocaleUpperCase('es')).join('')}`;
+  }
+  const titulo = palabras.map((w, i) => {
+    const min = w.toLocaleLowerCase('es');
+    if (i > 0 && CONECTORES.has(min)) return min;
+    return min.charAt(0).toLocaleUpperCase('es') + min.slice(1);
+  }).join(' ');
+  return `Distrito ${titulo}`;
+}
+
 /**
  * Fila para guardar. Solo usa el campo nombre del shapefile; el resto de
  * atributos_fuente queda mínimo ({ grupo, capa }) para no arrastrar los ~80
@@ -196,7 +231,8 @@ export function inferirGrupo(collection) {
 export function toRow(feature, empresaId, grupo, nombreCapa) {
   const geometry = feature?.geometry;
   const properties = feature?.properties || {};
-  const nombre = nombreDePropiedades(properties);
+  const nombreOriginal = nombreDePropiedades(properties);
+  const nombre = nombreOriginal && grupo.tipo === 'distrito' ? nombreDistrito(nombreOriginal) : nombreOriginal;
 
   if (!nombre) {
     throw new Error(
@@ -222,7 +258,7 @@ export function toRow(feature, empresaId, grupo, nombreCapa) {
 
   const sourceKey = esLindero
     ? [division, anexo, nombre].map(normalizedKey).filter(Boolean).join('|')
-    : `${grupo.id}|${normalizedKey(nombre)}`;
+    : `${grupo.id}|${normalizedKey(nombreOriginal)}`;
   if (!sourceKey) throw new Error(`No se pudo identificar el polígono "${nombre}".`);
   if (areaDeclarada !== null && !Number.isFinite(areaDeclarada)) {
     throw new Error(`El área declarada del polígono "${nombre}" no es válida.`);

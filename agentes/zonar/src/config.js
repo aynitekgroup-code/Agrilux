@@ -64,11 +64,15 @@ function validar(cfg) {
       guardar_json: cfg.corrida?.guardar_json !== false,
       reten_dias: Number(cfg.corrida?.reten_dias ?? 30),
       max_unidades: Number(cfg.corrida?.max_unidades ?? 0),
+      // 18/11/2026: días hacia atrás que la corrida diaria revisa y rellena
+      // si faltan (PC apagada, corte de internet). 0 = solo ayer.
+      dias_recuperar: Number(cfg.corrida?.dias_recuperar ?? 31),
     },
-    // Modo en vivo (14/11/2026): cada cuánto leer Zonar.
+    // Modo en vivo: cada cuánto leer Zonar. 18/11/2026: cada 10 minutos
+    // (posición de todas las unidades + historial de hoy cada 2 min).
     envivo: {
-      intervalo_seg: Number(cfg.envivo?.intervalo_seg ?? 120),
-      historial_min: Number(cfg.envivo?.historial_min ?? 15),
+      intervalo_seg: Number(cfg.envivo?.intervalo_seg ?? 600),
+      historial_min: Number(cfg.envivo?.historial_min ?? 10),
     },
   };
 }

@@ -36,6 +36,7 @@ import {
 import { GeocercaEditorPanel, GeocercaVertexLayer } from './GeocercaEditor';
 import AsistenteMapa from './AsistenteMapa';
 import ConsolaPrincipal from './ConsolaPrincipal';
+import { cargarVehiculosMaestro } from '../../../lib/agrotrackVehiculos';
 import { ControlVistaSatelite, FichaGeocerca, LeyendaGrupos, PanelGruposUnidades, TablaCoordenadas, TablaRecorrido } from './MapaControles';
 import { COLORES_GRUPO, ETIQUETAS_GRUPO, resumenGeocercasParaIA } from '../../../lib/asistenteMapa';
 import {
@@ -380,7 +381,7 @@ function ZoomRutaTracker({ onZoom }) {
 
 /* ---------- Componente ---------- */
 
-export default function FleetMap({ empresaId, userId, canImport = false, canDelete = false, vehicles = [], selectedId, onSelect, fuentePosiciones = 'demo', periodo = null, consolaVisible = false, mostrarTablasAlFinal = true, actualizarMapaCada = 30 * 1000, onActualizarMapaCada = null }) {
+export default function FleetMap({ empresaId, userId, canImport = false, canDelete = false, vehicles = [], selectedId, onSelect, fuentePosiciones = 'demo', periodo = null, consolaVisible = false, mostrarTablasAlFinal = true, actualizarMapaCada = 30 * 1000, onActualizarMapaCada = null, errorUnidades = null, onReintentarUnidades = null }) {
   const [rawGeofences, setRawGeofences] = useState([]);
   const [loading, setLoading] = useState(Boolean(empresaId));
   const [importing, setImporting] = useState(false);
@@ -559,6 +560,17 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     )),
     [vehicles],
   );
+
+  // Padrón maestro de unidades (agrotrack_vehiculos) para el recorrido.
+  const [unidadesMaestro, setUnidadesMaestro] = useState([]);
+  useEffect(() => {
+    if (!empresaId) return undefined;
+    let cancelado = false;
+    cargarVehiculosMaestro(empresaId)
+      .then((r) => { if (!cancelado) setUnidadesMaestro(r.unidades || []); })
+      .catch(() => { if (!cancelado) setUnidadesMaestro([]); });
+    return () => { cancelado = true; };
+  }, [empresaId]);
 
   // Última posición de cada placa con dirección y geocerca actual (RPC).
   const estadoPorPlaca = useMemo(() => {
@@ -1039,12 +1051,20 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const resultadosRuta = useMemo(() => {
     const term = busquedaRuta.trim().toLowerCase();
     if (!term) return [];
-    return vehiclesConPosicion
+    // 18/11/2026 (obs. VII/X): además de las unidades con posición del panel,
+    // las del padrón maestro (44): el recorrido histórico se puede pedir
+    // aunque la unidad no tenga posición en las últimas 24 h.
+    const conocidas = new Set(vehiclesConPosicion.map((v) => v.placa));
+    const candidatas = [
+      ...vehiclesConPosicion,
+      ...unidadesMaestro.filter((u) => !conocidas.has(u.placa)),
+    ];
+    return candidatas
       .filter((v) => [v.placa, v.descripcion, v.modelo, v.conductor_nombre, v.ultimo_evento]
         .filter(Boolean)
         .some((campo) => String(campo).toLowerCase().includes(term)))
       .slice(0, 8);
-  }, [busquedaRuta, vehiclesConPosicion]);
+  }, [busquedaRuta, vehiclesConPosicion, unidadesMaestro]);
 
   const selectUnidadRuta = (placa) => {
     if (onSelect) onSelect(placa);
@@ -2010,7 +2030,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </div>
       ) : null}
 
-      {fuentePosiciones === 'real' && vehicles.length ? (
+      {empresaId && fuentePosiciones !== 'demo' && (vehicles.length || unidadesMaestro.length) ? (
         <div className="px-4 sm:px-5 pb-3">
           <div className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div className="min-w-0">
@@ -2475,7 +2495,32 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </MapContainer>
       </div>
 
-      {mostrarTablasAlFinal ? (
+      {/* 18/11/2026 (observación X): antes, si la lista de unidades no
+          cargaba, el localizador, los grupos y las coordenadas desaparecían
+          sin aviso. Ahora se explica el motivo y se puede reintentar. */}
+      {!vehicles.length && fuentePosiciones !== 'demo' ? (
+        <div className="mx-4 sm:mx-5 mb-3 flex flex-wrap items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] text-amber-800" role="status">
+          <AlertCircle size={13} className="mt-0.5 shrink-0" />
+          <span className="min-w-0 flex-1">
+            {fuentePosiciones === 'cargando'
+              ? 'Cargando las unidades: el localizador, los grupos y las coordenadas aparecen aquí en unos segundos.'
+              : `No se pudo cargar la lista de unidades, por eso no aparecen el localizador, los grupos ni las coordenadas.${errorUnidades ? ` Motivo: ${errorUnidades}` : ''}`}
+          </span>
+          {fuentePosiciones !== 'cargando' && onReintentarUnidades ? (
+            <button
+              type="button"
+              onClick={onReintentarUnidades}
+              className="rounded-md border border-amber-300 bg-white px-2 py-1 font-semibold text-amber-800 hover:bg-amber-100"
+            >
+              Reintentar
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* VI: localizador de unidades con grupos + tabla de coordenadas
+          (una fila por marcador visible, exportable a Excel). */}
+      {mostrarTablasAlFinal && vehicles.length ? (
         <>
           {estadoAvisoNodo ? (
             <div className="mx-4 sm:mx-5 mb-3">{estadoAvisoNodo}</div>
