@@ -119,6 +119,10 @@ grant execute on function public.agrotrack_haversine_km(double precision, double
 -- ---------------------------------------------------------------------------
 -- 2) Periodo cargado de la empresa: usado para saber si hay datos reales y
 --    contra qué fecha se compara el estado de cada unidad (nunca "hoy").
+--    18/11/2026: definición UNIFICADA con agrotrack-flota-unidades.sql.
+--    count(distinct p.placa) barría las 314.423 posiciones y daba 500 por el
+--    límite de 8 s. min/max usan índice y el conteo de unidades sale de la
+--    vista maestra. NO reintroducir el count(distinct) aquí.
 -- ---------------------------------------------------------------------------
 drop function if exists public.agrotrack_periodo_flota(uuid);
 
@@ -135,14 +139,16 @@ security definer
 set search_path = public, pg_temp
 as $$
   select
-    min(p.fecha)          as desde,
-    max(p.fecha)          as hasta,
-    count(distinct p.placa) as unidades,
-    count(*)              as registros
-  from public.agrotrack_posiciones p
+    (select min(p.fecha) from public.agrotrack_posiciones p
+      where p.empresa_id = p_empresa_id) as desde,
+    (select max(p.fecha) from public.agrotrack_posiciones p
+      where p.empresa_id = p_empresa_id) as hasta,
+    (select count(*) from public.agrotrack_flota_unidades f
+      where f.empresa_id = p_empresa_id) as unidades,
+    (select count(*) from public.agrotrack_posiciones p
+      where p.empresa_id = p_empresa_id) as registros
   -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
-  where (select public.onboarding_es_miembro(p_empresa_id))
-    and p.empresa_id = p_empresa_id;
+  where (select public.onboarding_es_miembro(p_empresa_id));
 $$;
 
 grant execute on function public.agrotrack_periodo_flota(uuid)

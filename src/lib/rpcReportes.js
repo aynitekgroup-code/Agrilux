@@ -21,6 +21,15 @@ const RPC_PESADAS = new Set([
   'agrotrack_tabla_geocercas_dia',
   'agrotrack_visitas_dia_pendientes',
   'agrotrack_calcular_visitas_dia',
+  // 18/11/2026: el resumen de flota también barre agrotrack_posiciones (314 k
+  // filas). Sin cola, 3 tarjetas de "Reportes" lo disparaban en paralelo y
+  // agrotrack_periodo_flota caía con 500 por statement_timeout de 8 s.
+  'agrotrack_periodo_flota',
+  'agrotrack_resumen_flota',
+  'agrotrack_alertas_flota',
+  'agrotrack_conteo_eventos',
+  'agrotrack_recorrido_flota',
+  'agrotrack_actividad_flota',
 ]);
 
 const EN_VUELO = new Map();

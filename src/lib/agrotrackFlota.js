@@ -7,6 +7,7 @@
  * Requiere: ejecutar scripts/agrotrack-posiciones-resumen.sql en Supabase.
  */
 import { supabase } from './supabase';
+import { llamarRpcReporte } from './rpcReportes.js';
 
 /**
  * ÚNICO LUGAR donde se define cuándo una unidad se considera "sin conexión".
@@ -186,7 +187,7 @@ function mensajeDeError(error, contexto) {
 /** Tope por llamada RPC (ms): evita el "Calculando..." eterno. */
 const TIMEOUT_RPC_MS = 15000;
 
-async function llamarRpc(nombre, params, contexto) {
+async function ejecutarRpc(nombre, params, contexto) {
   // Tope por llamada: sin él, si la red o la RPC no responden la tarjeta se
   // queda en "Calculando..." para siempre (el Ing. Carlos Perez reportó ese
   // cuelgue en Eventos resumidos). A los 15 s abortamos y mostramos error.
@@ -205,6 +206,11 @@ async function llamarRpc(nombre, params, contexto) {
   }
   if (error) throw new Error(mensajeDeError(error, contexto));
   return data || [];
+}
+
+/** Todas las RPC de flota comparten la cola global de reportes. */
+function llamarRpc(nombre, params, contexto) {
+  return llamarRpcReporte(nombre, params, contexto, ejecutarRpc);
 }
 
 /** Min/max(fecha), unidades y registros de la empresa activa. */
