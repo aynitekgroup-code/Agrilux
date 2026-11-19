@@ -36,7 +36,7 @@ import {
 import { GeocercaEditorPanel, GeocercaVertexLayer } from './GeocercaEditor';
 import AsistenteMapa from './AsistenteMapa';
 import ConsolaPrincipal from './ConsolaPrincipal';
-import { ControlVistaSatelite, FichaGeocerca, LeyendaGrupos, PanelGruposUnidades, PanelUnidadesGeocerca, TablaCoordenadas, TablaRecorrido } from './MapaControles';
+import { ControlVistaSatelite, FichaGeocerca, LeyendaGrupos, PanelGruposUnidades, TablaCoordenadas, TablaRecorrido } from './MapaControles';
 import { COLORES_GRUPO, ETIQUETAS_GRUPO, resumenGeocercasParaIA } from '../../../lib/asistenteMapa';
 import {
   formatearFechaHora,
@@ -380,7 +380,7 @@ function ZoomRutaTracker({ onZoom }) {
 
 /* ---------- Componente ---------- */
 
-export default function FleetMap({ empresaId, userId, canImport = false, canDelete = false, vehicles = [], selectedId, onSelect, fuentePosiciones = 'demo', periodo = null, consolaVisible = false, mostrarTablasAlFinal = true }) {
+export default function FleetMap({ empresaId, userId, canImport = false, canDelete = false, vehicles = [], selectedId, onSelect, fuentePosiciones = 'demo', periodo = null, consolaVisible = false, mostrarTablasAlFinal = true, actualizarMapaCada = 30 * 1000, onActualizarMapaCada = null }) {
   const [rawGeofences, setRawGeofences] = useState([]);
   const [loading, setLoading] = useState(Boolean(empresaId));
   const [importing, setImporting] = useState(false);
@@ -413,6 +413,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // FASE 3.8: mapa llamativo — filtro por grupo (leyenda / JARVIS) y vista satélite.
   const [filtroGrupo, setFiltroGrupo] = useState('');
   const [vistaSatelite, setVistaSatelite] = useState(false);
+  // Zonas → checkbox «Mostrar Unidades Dentro»: oculta/muestra los marcadores
+  // de las unidades en el mapa (los datos del recorrido histórico no se ocultan).
+  const [mostrarUnidadesEnMapa, setMostrarUnidadesEnMapa] = useState(true);
   const [fitToken, setFitToken] = useState(0);
   // VII: recorrido histórico paginado por VENTANAS TEMPORALES (fecha + hora
   // en hora de Perú). La RPC no tiene offset, así que cada página es una
@@ -503,14 +506,25 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   }, [editando, editGeo, geoJsonBase, selectedGeofenceId]);
 
   // FASE 3.8: lo visible = pintado menos el filtro de grupo (si lo hay).
+  // Z-order de dibujo: distrito → poligono → oficina → autorizada ("Campo").
+  // El campo queda siempre por encima de las demás geocercas.
+  const Z_ORDEN = { distrito: 0, poligono: 1, oficina: 2, autorizada: 3 };
+  const ordenarPorZ = (features) => (features || [])
+    .map((feature, index) => ({ feature, index }))
+    .sort((a, b) => (
+      (Z_ORDEN[a.feature.properties?.tipo] ?? 1) - (Z_ORDEN[b.feature.properties?.tipo] ?? 1)
+      || a.index - b.index
+    ))
+    .map((item) => item.feature);
+
   const geoJsonVisible = useMemo(() => {
-    if (!filtroGrupo) return geoJson;
+    if (!filtroGrupo) return { ...geoJson, features: ordenarPorZ(geoJson.features) };
     return {
       ...geoJson,
-      features: geoJson.features.filter((feature) => {
+      features: ordenarPorZ(geoJson.features.filter((feature) => {
         const tipo = feature.properties?.tipo;
         return (tipo && COLORES_GRUPO[tipo] ? tipo : 'poligono') === filtroGrupo;
-      }),
+      })),
     };
   }, [geoJson, filtroGrupo]);
 
@@ -2314,7 +2328,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               />
             </>
           ) : null}
-          {vehiclesConPosicion.map((vehicle) => {
+          {mostrarUnidadesEnMapa && vehiclesConPosicion.map((vehicle) => {
             const meta = STATUS_META[vehicle.estado] || STATUS_META.offline;
             const latitud = Number(vehicle.lat);
             const longitud = Number(vehicle.lng);
@@ -2489,6 +2503,28 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             onRutaDesde={setRutaDesde}
             onRutaHasta={setRutaHasta}
             recorrido={nodoRecorrido}
+            zonas={{
+              geofences,
+              selectedId: selectedGeofenceId,
+              onSeleccionar: (id) => {
+                if (!id) {
+                  clearSelection();
+                  return;
+                }
+                const g = geofences.find((f) => f.id === id);
+                if (!g) return;
+                if (typeof document !== 'undefined') {
+                  document.getElementById('mapa-flota')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+                focusGeofence(g);
+                setGeofenceSearch(g.nombre || '');
+              },
+              unidadesEnGeocerca,
+              mostrarUnidades: mostrarUnidadesEnMapa,
+              onToggleMostrarUnidades: setMostrarUnidadesEnMapa,
+              actualizarMapaCada,
+              onActualizarMapaCada,
+            }}
           />
         </div>
       ) : null}
@@ -2498,18 +2534,6 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           «Ubicaciones Históricas»; en la Consola principal se queda aquí. */}
       {!consolaVisible && nodoRecorrido ? (
         <div className="px-4 sm:px-5 pb-3">{nodoRecorrido}</div>
-      ) : null}
-
-      {/* VIII: unidades dentro de la geocerca seleccionada. */}
-      {selectedGeofence?.geometria ? (
-        <div className="px-4 sm:px-5 pb-3">
-          <PanelUnidadesGeocerca
-            geocerca={selectedGeofence}
-            estado={unidadesEnGeocerca.estado}
-            unidades={unidadesEnGeocerca.filas}
-            error={unidadesEnGeocerca.error || ''}
-          />
-        </div>
       ) : null}
 
       {geofences.length > 0 ? (

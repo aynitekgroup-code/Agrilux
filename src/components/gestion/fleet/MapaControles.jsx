@@ -626,21 +626,39 @@ export function TablaRecorrido({
   // Paginación interna de filas: 20 puntos por vista, como siempre.
   const POR_PAGINA = 20;
   const [filaPagina, setFilaPagina] = useState(1);
-  useEffect(() => setFilaPagina(1), [puntos]);
-  const totalFilaPaginas = Math.max(1, Math.ceil((puntos || []).length / POR_PAGINA));
+  const [busqueda, setBusqueda] = useState('');
+  useEffect(() => { setFilaPagina(1); setBusqueda(''); }, [puntos]);
+  const puntosFiltrados = useMemo(() => {
+    const q = String(busqueda || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    if (!q) return puntos;
+    return puntos.filter((p) => [
+      formatearFechaLarga(p.fecha),
+      p.evento,
+      p.direccion,
+      p.geocerca,
+    ].filter(Boolean).some((campo) => String(campo).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(q)));
+  }, [puntos, busqueda]);
+  const totalFilaPaginas = Math.max(1, Math.ceil(puntosFiltrados.length / POR_PAGINA));
   const paginaActual = Math.min(filaPagina, totalFilaPaginas);
   const inicio = (paginaActual - 1) * POR_PAGINA;
-  const fin = Math.min(inicio + POR_PAGINA, puntos.length);
-  const puntosPagina = puntos.slice(inicio, fin);
+  const fin = Math.min(inicio + POR_PAGINA, puntosFiltrados.length);
+  const puntosPagina = puntosFiltrados.slice(inicio, fin);
   const irAPagina = (n) => setFilaPagina(Math.min(Math.max(1, n), totalFilaPaginas));
+  const filtrando = busqueda.trim().length > 0;
   return (
     <div className={integrado ? 'min-w-0' : 'bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0'}>
       <div className={integrado ? 'flex flex-wrap items-center gap-2 pb-3' : 'p-4 sm:p-5 border-b border-slate-50 flex flex-wrap items-center gap-2'}>
         <div className="min-w-0">
-          <h3 className="text-base font-bold text-slate-900">Coordenadas del recorrido</h3>
+          <h3 className="flex items-center gap-2 text-base font-bold text-slate-900">
+            {cargando ? <LoaderCircle size={15} className="animate-spin text-forest" aria-hidden="true" /> : null}
+            Coordenadas del recorrido
+            {cargando ? <span className="sr-only">Cargando recorrido…</span> : null}
+          </h3>
           <p className="text-xs text-slate-500">
             {placa ? `${placa} · ` : ''}
             {puntos.length} punto(s) en total{ventanaTexto ? ` · ${ventanaTexto}` : ''}
+            {filtrando ? ` · ${puntosFiltrados.length} coinciden` : ''}
+            {cargando ? ' · cargando…' : ''}
           </p>
         </div>
         <button
@@ -656,6 +674,31 @@ export function TablaRecorrido({
       {errorExportar ? (
         <p className="px-4 pt-2 text-[10px] text-red-600" role="alert">{errorExportar}</p>
       ) : null}
+
+      <div className={integrado ? 'border-b border-slate-100 bg-slate-50/60 px-3 py-2' : 'border-b border-slate-100 bg-slate-50 px-4 py-2.5'}>
+        <label className="relative flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 focus-within:border-forest">
+          <Search size={13} className="shrink-0 text-slate-400" aria-hidden="true" />
+          <input
+            type="search"
+            value={busqueda}
+            onChange={(event) => { setBusqueda(event.target.value); setFilaPagina(1); }}
+            placeholder="Buscar fecha, evento, dirección o geocerca…"
+            autoComplete="off"
+            aria-label="Buscar en los puntos del recorrido"
+            className="w-full bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400"
+          />
+          {busqueda ? (
+            <button
+              type="button"
+              onClick={() => { setBusqueda(''); setFilaPagina(1); }}
+              aria-label="Limpiar búsqueda"
+              className="shrink-0 text-slate-400 hover:text-slate-600"
+            >
+              <X size={13} />
+            </button>
+          ) : null}
+        </label>
+      </div>
 
       <div className={integrado ? 'flex flex-wrap items-center gap-2 border-y border-slate-100 bg-slate-50/60 px-3 py-2' : 'flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2'}>
         <button
@@ -683,11 +726,11 @@ export function TablaRecorrido({
           </span>
         ) : null}
         <span className="ml-auto text-[10px] text-slate-400">
-          {puntos.length ? `${inicio + 1}–${fin} de ${puntos.length} · máx. 20 puntos por página` : 'máx. 20 puntos por página'}
+          {puntos.length ? `${inicio + 1}–${fin} de ${puntosFiltrados.length} · máx. 20 puntos por página` : 'máx. 20 puntos por página'}
         </span>
       </div>
 
-      {puntos.length ? (
+      {puntosFiltrados.length ? (
         <div className="max-h-80 overflow-auto scroll-consola">
           <table className="w-full text-xs text-slate-700">
             <thead className="sticky top-0 z-10 bg-white">
@@ -732,7 +775,11 @@ export function TablaRecorrido({
         </div>
       ) : (
         <p className="p-6 text-center text-xs text-slate-500">
-          {cargando ? 'Cargando los puntos de esta página…' : 'No hay puntos GPS en esta página del recorrido.'}
+          {cargando
+            ? 'Cargando los puntos de este rango…'
+            : filtrando
+              ? `Ningún punto coincide con «${busqueda.trim()}».`
+              : 'No hay puntos GPS en este rango.'}
         </p>
       )}
 

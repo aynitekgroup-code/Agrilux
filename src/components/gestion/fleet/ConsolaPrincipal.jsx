@@ -1,5 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { COLORES_GRUPO, ETIQUETAS_GRUPO } from '../../../lib/asistenteMapa';
+import { PanelUnidadesGeocerca } from './MapaControles';
 import {
   ChevronDown,
   ChevronLeft,
@@ -7,9 +9,11 @@ import {
   ChevronUp,
   History,
   MapPin,
+  MapPinned,
   Mic,
   MicOff,
   X,
+  Check,
   Mail,
   Hash,
   ClipboardList,
@@ -62,6 +66,7 @@ const SECCIONES = [
   { id: 'cercano', label: 'Encuentre el más cercano', group: 'Operaciones', Icon: Navigation },
   { id: 'control-remoto', label: 'Control Remoto', group: 'Operaciones', Icon: Power },
   { id: 'ordenes', label: 'Órdenes de Trabajo', group: 'Operaciones', Icon: ClipboardList },
+  { id: 'zonas', label: 'Zonas', group: 'Geocercas', Icon: MapPinned },
   { id: 'geocercas', label: 'Geocercas', group: 'Geocercas', Icon: Shapes },
   { id: 'configuracion', label: 'Configuración', group: 'Sistema', Icon: Settings },
 ];
@@ -137,8 +142,147 @@ function ContenidoConfiguracion() {
   );
 }
 
+function normTexto(valor) {
+  return String(valor ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+/** Zonas: lista de geocercas (multiselección estilo Zonar) + unidades dentro. */
+function ZonasPanel({ geofences = [], selectedId, onSeleccionar, unidadesEnGeocerca, mostrarUnidades = true, onToggleMostrarUnidades, actualizarMapaCada = 30 * 1000, onActualizarMapaCada }) {
+  const [busqueda, setBusqueda] = useState('');
+
+  const grupos = useMemo(() => {
+    const q = normTexto(busqueda);
+    const filtradas = geofences.filter((g) => !q || normTexto([g.nombre, g.division, g.anexo, g.distrito, g.provincia].filter(Boolean).join(' · ')).includes(q));
+    const porGrupo = new Map();
+    filtradas.forEach((g) => {
+      const tipo = g.tipo && COLORES_GRUPO[g.tipo] ? g.tipo : 'poligono';
+      if (!porGrupo.has(tipo)) porGrupo.set(tipo, { tipo, items: [] });
+      porGrupo.get(tipo).items.push(g);
+    });
+    const orden = ['autorizada', 'oficina', 'distrito', 'poligono'];
+    return [...porGrupo.values()]
+      .map((grupo) => ({
+        ...grupo,
+        etiqueta: ETIQUETAS_GRUPO[grupo.tipo] || 'Otras',
+        items: [...grupo.items].sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es')),
+      }))
+      .sort((a, b) => (orden.indexOf(a.tipo) - orden.indexOf(b.tipo)) || a.etiqueta.localeCompare(b.etiqueta, 'es'));
+  }, [geofences, busqueda]);
+
+  const seleccionada = geofences.find((g) => g.id === selectedId) || null;
+  const toggle = (id) => {
+    if (typeof onSeleccionar === 'function') onSeleccionar(id === selectedId ? '' : id);
+  };
+
+  return (
+    <div className="grid gap-3 xl:grid-cols-[minmax(0,240px)_minmax(0,1fr)]">
+      <div className="min-w-0">
+        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">Zonas · {geofences.length}</p>
+        <label className="relative mb-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 focus-within:border-forest">
+          <Search size={13} className="shrink-0 text-slate-400" aria-hidden="true" />
+          <input
+            type="search"
+            value={busqueda}
+            onChange={(event) => setBusqueda(event.target.value)}
+            placeholder="Buscar zona, división, distrito…"
+            autoComplete="off"
+            aria-label="Buscar zona"
+            className="w-full bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400"
+          />
+          {busqueda ? (
+            <button type="button" onClick={() => setBusqueda('')} aria-label="Limpiar búsqueda" className="shrink-0 text-slate-400 hover:text-slate-600">
+              <X size={13} />
+            </button>
+          ) : null}
+        </label>
+        <div className="max-h-72 divide-y divide-slate-100 overflow-auto scroll-consola rounded-xl border border-slate-100">
+          {grupos.length ? grupos.map((grupo) => (
+            <div key={grupo.tipo}>
+              <p className="sticky top-0 z-10 bg-slate-50 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                <span className="mr-1.5 inline-block h-2 w-2 rounded-sm align-middle" style={{ background: COLORES_GRUPO[grupo.tipo]?.borde || '#0F766E' }} aria-hidden="true" />
+                {grupo.etiqueta} · {grupo.items.length}
+              </p>
+              {grupo.items.map((g) => {
+                const activa = g.id === selectedId;
+                return (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => toggle(g.id)}
+                    aria-pressed={activa}
+                    className={`flex w-full items-center gap-2 border-t border-slate-50 px-2.5 py-1.5 text-left text-[11px] transition-colors ${activa ? 'bg-emerald-50 font-semibold text-forest' : 'text-slate-700 hover:bg-slate-50'}`}
+                  >
+                    <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${activa ? 'border-forest bg-forest text-white' : 'border-slate-300 bg-white text-transparent'}`} aria-hidden="true">
+                      <Check size={11} strokeWidth={3} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{g.nombre}</span>
+                      {(g.division || g.anexo || g.distrito) ? (
+                        <span className="block truncate text-[9px] font-normal text-slate-400">
+                          {[g.division, g.anexo, g.distrito].filter(Boolean).join(' · ')}
+                        </span>
+                      ) : null}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )) : (
+            <p className="p-4 text-center text-[11px] text-slate-500">Ninguna zona coincide con “{busqueda.trim()}”.</p>
+          )}
+        </div>
+        <p className="mt-1.5 text-[10px] text-slate-400">
+          {seleccionada ? `Seleccionada: ${seleccionada.nombre}` : 'Toca una zona para verla entera en el mapa y sus unidades dentro.'}
+        </p>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2">
+          <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              checked={mostrarUnidades}
+              onChange={(event) => onToggleMostrarUnidades?.(event.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-forest focus:ring-forest"
+            />
+            Mostrar Unidades Dentro
+          </label>
+          <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
+            Actualizar el mapa cada
+            <select
+              value={String(actualizarMapaCada)}
+              onChange={(event) => onActualizarMapaCada?.(Number(event.target.value))}
+              className="rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] font-semibold text-slate-700 outline-none focus:border-forest"
+              aria-label="Actualizar el mapa cada"
+            >
+              <option value="5000">5 S</option>
+              <option value="15000">15 S</option>
+              <option value="30000">30 S</option>
+              <option value="60000">1 min</option>
+              <option value="300000">5 min</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div className="min-w-0">
+        {seleccionada ? (
+          <PanelUnidadesGeocerca
+            geocerca={seleccionada}
+            estado={unidadesEnGeocerca?.estado || 'vacio'}
+            unidades={unidadesEnGeocerca?.filas || []}
+            error={unidadesEnGeocerca?.error || ''}
+          />
+        ) : (
+          <Placeholder texto="Selecciona una geocerca arriba: el mapa te la pinta, la muestra completa en pantalla y aquí ves cuántas y cuáles unidades están dentro." />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ContenidoSeccion({
-  id, localizador, coordenadas, recorrido,
+  id, localizador, coordenadas, recorrido, zonas,
   unidad, setUnidad, aplicarBusqueda,
   ruta, setRuta,
   desde, setDesde, hasta, setHasta,
@@ -282,6 +426,20 @@ function ContenidoSeccion({
       <Placeholder texto="No se recibió información de coordenadas de unidades." />
     );
   }
+  if (id === 'zonas') {
+    return (
+      <ZonasPanel
+        geofences={zonas?.geofences || []}
+        selectedId={zonas?.selectedId || ''}
+        onSeleccionar={zonas?.onSeleccionar}
+        unidadesEnGeocerca={zonas?.unidadesEnGeocerca}
+        mostrarUnidades={zonas?.mostrarUnidades !== false}
+        onToggleMostrarUnidades={zonas?.onToggleMostrarUnidades}
+        actualizarMapaCada={zonas?.actualizarMapaCada}
+        onActualizarMapaCada={zonas?.onActualizarMapaCada}
+      />
+    );
+  }
   if (id === 'configuracion') {
     return <ContenidoConfiguracion />;
   }
@@ -294,6 +452,7 @@ export default function ConsolaPrincipal({
   localizador, coordenadas, buscarUnidades, elegirUnidad,
   unidadExterna, rutaDesde, rutaHasta, onRutaDesde, onRutaHasta,
   recorrido,
+  zonas,
 }) {
   const inicial = rangoDefault();
   const desdeControlado = rutaDesde !== undefined;
@@ -585,7 +744,7 @@ export default function ConsolaPrincipal({
               </div>
               <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
                 <IconoSeccion size={12} className="mr-1.5" />
-                {seccion.id === 'localizador' || seccion.id === 'coordenadas' ? 'Listo' : 'En preparación'}
+                {seccion.id === 'localizador' || seccion.id === 'coordenadas' || seccion.id === 'zonas' ? 'Listo' : 'En preparación'}
               </span>
             </header>
             <div className="space-y-3">
@@ -594,6 +753,7 @@ export default function ConsolaPrincipal({
                 localizador={localizador}
                 coordenadas={coordenadas}
                 recorrido={recorrido}
+                zonas={zonas}
                 unidad={unidad}
                 setUnidad={setUnidad}
                 aplicarBusqueda={aplicarBusqueda}

@@ -94,6 +94,8 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
   // se sobreponen a la última posición del periodo cargado: el mapa y el
   // localizador se mueven solos sin recargar la página.
   const [vivo, setVivo] = useState([]);
+  // Intervalo de actualización del mapa en vivo (Zonas → "Actualizar el mapa cada…").
+  const [actualizarMapaCada, setActualizarMapaCada] = useState(30 * 1000);
   useEffect(() => {
     if (!empresa_activa_id) return undefined;
     let cancelado = false;
@@ -106,9 +108,9 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
       clearTimeout(pendiente);
       pendiente = setTimeout(leer, 1500);
     });
-    const reloj = setInterval(leer, 60 * 1000);
+    const reloj = setInterval(leer, actualizarMapaCada);
     return () => { cancelado = true; clearTimeout(pendiente); clearInterval(reloj); cancelar(); };
-  }, [empresa_activa_id]);
+  }, [empresa_activa_id, actualizarMapaCada]);
 
   const unidadesConVivo = useMemo(() => {
     if (!conDatosReales || !vivo.length) return panel.unidades;
@@ -322,6 +324,8 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
             <div className="xl:col-span-12 min-w-0">
               <FleetMap
                 empresaId={empresa_activa_id}
+                actualizarMapaCada={actualizarMapaCada}
+                onActualizarMapaCada={setActualizarMapaCada}
                 userId={user?.id}
                 canImport={puedeImportarGeocercas}
                 canDelete={puedeEliminarGeocercas}
@@ -393,6 +397,8 @@ export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
           </SectionHeading>
           <FleetMap
             empresaId={empresa_activa_id}
+            actualizarMapaCada={actualizarMapaCada}
+            onActualizarMapaCada={setActualizarMapaCada}
             userId={user?.id}
             canImport={puedeImportarGeocercas}
             canDelete={puedeEliminarGeocercas}

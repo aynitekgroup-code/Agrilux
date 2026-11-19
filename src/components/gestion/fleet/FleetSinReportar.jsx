@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Clock, Database, FileSpreadsheet, Loader2, RotateCw, Sparkles } from 'lucide-react';
+import { Clock, Database, FileSpreadsheet, Loader2, RotateCw, Sparkles, Check } from 'lucide-react';
 import { obtenerEstadoUnidadesFlota, LIMITE_ESTADO_UNIDADES } from '../../../lib/agrotrackReportesGeocerca';
 import { obtenerEstadoVivo } from '../../../lib/agrotrackTiempoReal';
 import { formatearFechaHora } from '../../../lib/agrotrackFlota';
@@ -23,7 +23,7 @@ import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
  * conocida de cada placa en todo el histórico, sin descargar posiciones al
  * navegador (PostgREST corta en 1000 filas).
  */
-const VENTANAS_RAPIDO = [8, 16, 24, 48];
+const VENTANAS_RAPIDO = [4, 8, 16, 24, 48];
 
 const COLUMNAS = [
   { label: 'Unidad', clase: 'text-left' },
@@ -46,6 +46,7 @@ function geocercaAsignada(f) {
 
 export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
   const [ventana, setVentana] = useState(24);
+  const [ventanaDraft, setVentanaDraft] = useState('24');
   const [estado, setEstado] = useState('inactivo');
   const [intento, setIntento] = useState(0);
   const [filas, setFilas] = useState([]);
@@ -163,6 +164,20 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
     sinReportar: filasVistas.filter((f) => f.sinReportar).length,
     reportando: filasVistas.filter((f) => !f.sinReportar).length,
   }), [filasVistas]);
+
+  // Aplica la ventana escrita por el usuario (solo al pulsar "Aplicar" o Enter).
+  const aplicarVentana = () => {
+    const n = Number(ventanaDraft);
+    if (!Number.isFinite(n) || n < 1) {
+      setVentanaDraft(String(ventana));
+      return;
+    }
+    const horas = Math.min(720, Math.max(1, Math.round(n)));
+    setVentana(horas);
+    setVentanaDraft(String(horas));
+    setExplicacion(null);
+    setErrorExplicacion(null);
+  };
 
   const pendienteDeFecha = !empresaId;
   const mensajePendiente = 'Selecciona una empresa activa para consultar las unidades sin reportar.';
@@ -305,17 +320,27 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
                 min="1"
                 max="720"
                 step="1"
-                value={ventana}
+                value={ventanaDraft}
                 onChange={(e) => {
-                  const n = Number(e.target.value);
-                  if (Number.isFinite(n) && n >= 1) setVentana(Math.min(720, Math.round(n)));
+                  setVentanaDraft(e.target.value);
                   setExplicacion(null);
                   setErrorExplicacion(null);
                 }}
+                onKeyDown={(e) => { if (e.key === 'Enter') aplicarVentana(); }}
                 className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 w-[86px] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                 aria-label="Unidades sin reportar en las últimas horas"
               />
               <span className="text-xs font-semibold text-slate-500">horas</span>
+              <button
+                type="button"
+                onClick={aplicarVentana}
+                title="Aplicar el número de horas escrito"
+                aria-label="Aplicar filtro de horas"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-forest px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-forest-light focus:outline-none focus:ring-2 focus:ring-forest/30 transition-colors"
+              >
+                <Check size={13} aria-hidden="true" />
+                Aplicar
+              </button>
             </div>
           </label>
         </div>
@@ -327,7 +352,7 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
               <button
                 key={h}
                 type="button"
-                onClick={() => { setVentana(h); setExplicacion(null); setErrorExplicacion(null); }}
+                onClick={() => { setVentana(h); setVentanaDraft(String(h)); setExplicacion(null); setErrorExplicacion(null); }}
                 className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
                   ventana === h ? 'bg-forest text-white' : 'bg-slate-50 text-slate-500 hover:text-forest'
                 }`}
