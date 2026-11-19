@@ -325,6 +325,7 @@ export function PanelGruposUnidades({
 }) {
   const [busqueda, setBusqueda] = useState('');
   const [colapsados, setColapsados] = useState({});
+  const [desgloseAbierto, setDesgloseAbierto] = useState(true);
   const [escuchandoVoz, setEscuchandoVoz] = useState(false);
   const [vozAviso, setVozAviso] = useState('');
   const vozRecognitionRef = React.useRef(null);
@@ -363,6 +364,19 @@ export function PanelGruposUnidades({
       : 0),
     [unidades, gruposPorPlaca, editable],
   );
+
+  const desgloseGrupos = useMemo(
+    () => [...grupos].filter((g) => g.unidades.length).sort((a, b) => b.unidades.length - a.unidades.length),
+    [grupos],
+  );
+  const desgloseEstados = useMemo(() => {
+    const map = new Map();
+    unidades.forEach((u) => {
+      const key = String(u?.estado || 'sin_estado');
+      map.set(key, (map.get(key) || 0) + 1);
+    });
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+  }, [unidades]);
 
   const aplicarVoz = (transcript) => {
     if (!transcript) return;
@@ -509,6 +523,16 @@ export function PanelGruposUnidades({
           >
             {Capacitor.isNativePlatform() || SpeechRecognitionCtor ? <Mic size={15} /> : <MicOff size={15} />}
           </button>
+          <button
+            type="button"
+            onClick={() => setDesgloseAbierto((abierto) => !abierto)}
+            aria-expanded={desgloseAbierto}
+            title={desgloseAbierto ? 'Ocultar desglose' : 'Ver desglose'}
+            aria-label={desgloseAbierto ? 'Ocultar desglose' : 'Ver desglose'}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-forest focus:outline-none focus:ring-2 focus:ring-emerald-100"
+          >
+            <ChevronDown size={18} className={`transition-transform ${desgloseAbierto ? '' : '-rotate-90'}`} />
+          </button>
         </div>
 
         {vozAviso ? (
@@ -529,6 +553,31 @@ export function PanelGruposUnidades({
         ) : null}
       </div>
 
+      {desgloseAbierto ? (
+        <>
+      <div className="flex flex-wrap gap-1.5 border-b border-slate-100 px-4 py-2">
+        <span className="inline-flex items-center gap-1 rounded-full border border-forest/30 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-forest">
+          Total: {unidades.length}
+        </span>
+        {desgloseGrupos.map((g) => (
+          <span
+            key={g.clave}
+            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600"
+            title={`${g.unidades.length} unidad(es) en el grupo ${g.etiqueta}`}
+          >
+            {g.etiqueta}: <b className="text-forest">{g.unidades.length}</b>
+          </span>
+        ))}
+        {desgloseEstados.map(([estado, total]) => (
+          <span
+            key={estado}
+            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-500"
+            title={`${total} unidad(es) en estado ${estado}`}
+          >
+            {estado.replace(/_/g, ' ')}: <b className="text-slate-700">{total}</b>
+          </span>
+        ))}
+      </div>
       <datalist id="grupos-unidades-datalist">
         {gruposConocidos.map((grupo) => (
           <option key={grupo} value={grupo} />
@@ -598,6 +647,8 @@ export function PanelGruposUnidades({
           : 'Clic en la unidad para llevar el mapa hasta su posición.'}
         {editable ? ' Escribe un grupo y pulsa ✓ para guardarlo (vacío = quitar).' : ''}
       </p>
+        </>
+        ) : null}
     </div>
   );
 }
@@ -620,6 +671,7 @@ export function TablaCoordenadas({
   // Buscador de unidades dentro de la tabla: escribe la placa y aparece el
   // listado; al pulsar una fila el mapa vuela hasta la unidad.
   const [busqueda, setBusqueda] = useState('');
+  const [desgloseAbierto, setDesgloseAbierto] = useState(true);
   const resultados = useMemo(() => {
     const term = busqueda.trim().toLowerCase();
     if (!term) return [];
@@ -629,6 +681,14 @@ export function TablaCoordenadas({
         .some((campo) => String(campo).toLowerCase().includes(term)))
       .slice(0, 8);
   }, [busqueda, filas]);
+  const desgloseEventos = useMemo(() => {
+    const map = new Map();
+    filas.forEach((f) => {
+      const key = String(f.evento || 'Sin evento');
+      map.set(key, (map.get(key) || 0) + 1);
+    });
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+  }, [filas]);
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
       <div className="p-4 sm:p-5 border-b border-slate-50 flex flex-wrap items-center gap-2">
@@ -652,8 +712,36 @@ export function TablaCoordenadas({
           {exportando ? <LoaderCircle size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />}
           Descargar Excel
         </button>
+        <button
+          type="button"
+          onClick={() => setDesgloseAbierto((abierto) => !abierto)}
+          aria-expanded={desgloseAbierto}
+          title={desgloseAbierto ? 'Ocultar desglose' : 'Ver desglose'}
+          aria-label={desgloseAbierto ? 'Ocultar desglose' : 'Ver desglose'}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-forest focus:outline-none focus:ring-2 focus:ring-emerald-100"
+        >
+          <ChevronDown size={18} className={`transition-transform ${desgloseAbierto ? '' : '-rotate-90'}`} />
+        </button>
         </div>
 
+      {desgloseAbierto ? (
+        <>
+      {desgloseEventos.length ? (
+        <div className="flex flex-wrap gap-1.5 border-b border-slate-100 px-4 py-2">
+          <span className="inline-flex items-center gap-1 rounded-full border border-forest/30 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-forest">
+            Total: {filas.length}
+          </span>
+          {desgloseEventos.map(([evento, total]) => (
+            <span
+              key={evento}
+              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600"
+              title={`${total} posición(es) con evento ${evento}`}
+            >
+              {evento}: <b className="text-forest">{total}</b>
+            </span>
+          ))}
+        </div>
+      ) : null}
       {errorExportar ? (
         <p className="px-4 pt-2 text-[10px] text-red-600" role="alert">{errorExportar}</p>
       ) : null}
@@ -767,6 +855,8 @@ export function TablaCoordenadas({
           No hay posiciones que mostrar: espera a que carguen las unidades o revisa el mapa.
         </p>
       )}
+        </>
+        ) : null}
     </div>
   );
 }
