@@ -31,6 +31,7 @@ import {
 } from '../../../lib/agrotrackFlota';
 import { useRango, ControlesRango, CuerpoEstado, numero, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, AvisoUnidadesSinTelemetria } from './reportesComunes';
 import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
+import { agruparPorDivision, aplanarGrupos } from '../../../lib/agrotrackDivisiones';
 import { armarContextoReporte } from '../../../lib/reportesIa';
 import { llamarIaGestion } from '../../../lib/agrotrackIa';
 
@@ -127,6 +128,38 @@ function CardEventos({ empresaId, periodo, fuente, vehicles = [] }) {
 
   // El XLSX se importa bajo demanda: la librería pesa ~430 kB y solo se
   // necesita cuando el usuario pide el archivo.
+  // Una sola definición de fila de lote para las dos vistas (todos / división).
+  const renderFilaLote = (fila, key) => (
+    <tr key={key} className="border-b border-slate-50 hover:bg-slate-50/60">
+      <td className="px-3 py-2">
+        <span className="font-bold text-slate-800">{fila.lote}</span>
+        {fila.anexo ? (
+          <span className="block text-[10px] text-slate-400">Anexo {fila.anexo}</span>
+        ) : null}
+      </td>
+      <td className="px-3 py-2 text-slate-500">{fila.division || '—'}</td>
+      <td className="px-3 py-2 text-right">{numero(fila.unidades, 0)}</td>
+      <td className="px-3 py-2 text-right font-semibold">{numero(fila.visitas, 0)}</td>
+      <td className="px-3 py-2 text-right text-slate-500">
+        {conDesglose ? formatearDuracion(fila.apagado_segundos) : '—'}
+      </td>
+      <td className="px-3 py-2 text-right text-amber-700">
+        {conDesglose ? formatearDuracion(fila.ralenti_segundos) : '—'}
+      </td>
+      <td className="px-3 py-2 text-right text-emerald-700">
+        {conDesglose ? formatearDuracion(fila.viaje_segundos) : '—'}
+      </td>
+      <td className="px-3 py-2 text-right font-bold text-slate-800">
+        {formatearDuracion(fila.permanencia_segundos)}
+      </td>
+      <td className="px-3 py-2 text-right">{numero(fila.km_recorridos, 1)}</td>
+      <td className="px-3 py-2 text-right text-slate-500">{numero(fila.puntos, 0)}</td>
+      <td className="px-3 py-2 text-right">
+        {fila.vel_max_kmh == null ? '—' : `${numero(fila.vel_max_kmh, 0)} km/h`}
+      </td>
+    </tr>
+  );
+
   const descargarExcel = async () => {
     setDescargaError(null);
     try {
@@ -311,6 +344,9 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
   const [rangoTexto, setRangoTexto] = useState('');
   const [avisoLotes, setAvisoLotes] = useState('');
   const [intento, setIntento] = useState(0);
+  // Dos vistas del MISMO reporte: todos los campos (detalle plano) y campos
+  // agrupados por la columna `division` de la geocerca.
+  const [vista, setVista] = useState('todos');
 
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
@@ -363,8 +399,14 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
     };
   }, [filas]);
 
+  // Los grupos salen de la columna `division` (ya incluida en la RPC).
+  // "Sin división" queda al final para no mezclarse con los campos.
+  const gruposDivision = useMemo(() => agruparPorDivision(filas), [filas]);
+  const filasAgrupadas = useMemo(() => aplanarGrupos(gruposDivision), [gruposDivision]);
+
   // Tabla limitada a 15 filas; totales y el Excel usan la lista completa.
-  const { filasVistas, expandido, alternar, total } = useLimiteFilas(filas);
+  const filasTabla = vista === 'division' ? filasAgrupadas : filas;
+  const { filasVistas, expandido, alternar, total } = useLimiteFilas(filasTabla);
 
   const puedeExportar = estado === 'ok' && filas.length > 0;
   // Si la RPC en Supabase todavía no tiene las columnas del desglose (script
@@ -446,6 +488,34 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
         childrenCuandoVacio={unidadesSinTelemetria.length > 0}
       >
         <AvisoUnidadesSinTelemetria unidades={unidadesSinTelemetria} />
+        <div className="flex flex-wrap items-center gap-2 px-4 sm:px-5 py-2.5 text-[11px] border-b border-slate-50">
+          <span className="font-semibold text-slate-500">Vista del reporte:</span>
+          <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5" role="group" aria-label="Vista del reporte de geocercas">
+            {[
+              { id: 'todos', label: 'Todos los campos' },
+              { id: 'division', label: 'Por división' },
+            ].map((opcion) => (
+              <button
+                key={opcion.id}
+                type="button"
+                onClick={() => setVista(opcion.id)}
+                aria-pressed={vista === opcion.id}
+                className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${
+                  vista === opcion.id
+                    ? 'bg-forest text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-white hover:text-forest'
+                }`}
+              >
+                {opcion.label}
+              </button>
+            ))}
+          </div>
+          {vista === 'division' ? (
+            <span className="text-slate-400">
+              Geocercas agrupadas por División; las que no tienen división van aparte al final.
+            </span>
+          ) : null}
+        </div>
         {estado === 'ok' ? (
           <>
             <div className="overflow-x-auto">
@@ -466,36 +536,36 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filasVistas.map((fila) => (
-                    <tr key={fila.geocerca_id} className="border-b border-slate-50 hover:bg-slate-50/60">
-                      <td className="px-3 py-2">
-                        <span className="font-bold text-slate-800">{fila.lote}</span>
-                        {fila.anexo ? (
-                          <span className="block text-[10px] text-slate-400">Anexo {fila.anexo}</span>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2 text-slate-500">{fila.division || '—'}</td>
-                      <td className="px-3 py-2 text-right">{numero(fila.unidades, 0)}</td>
-                      <td className="px-3 py-2 text-right font-semibold">{numero(fila.visitas, 0)}</td>
-                      <td className="px-3 py-2 text-right text-slate-500">
-                        {conDesglose ? formatearDuracion(fila.apagado_segundos) : '—'}
-                      </td>
-                      <td className="px-3 py-2 text-right text-amber-700">
-                        {conDesglose ? formatearDuracion(fila.ralenti_segundos) : '—'}
-                      </td>
-                      <td className="px-3 py-2 text-right text-emerald-700">
-                        {conDesglose ? formatearDuracion(fila.viaje_segundos) : '—'}
-                      </td>
-                      <td className="px-3 py-2 text-right font-bold text-slate-800">
-                        {formatearDuracion(fila.permanencia_segundos)}
-                      </td>
-                      <td className="px-3 py-2 text-right">{numero(fila.km_recorridos, 1)}</td>
-                      <td className="px-3 py-2 text-right text-slate-500">{numero(fila.puntos, 0)}</td>
-                      <td className="px-3 py-2 text-right">
-                        {fila.vel_max_kmh == null ? '—' : `${numero(fila.vel_max_kmh, 0)} km/h`}
-                      </td>
-                    </tr>
-                  ))}
+                  {filasVistas.map((item) =>
+                    item.tipo === 'division' ? (
+                      <tr key={`division-${item.division}`} className="border-b border-emerald-100 bg-emerald-50/70">
+                        <td className="px-3 py-2 font-bold text-emerald-800" colSpan={3}>
+                          {item.division}
+                          <span className="ml-2 text-[10px] font-semibold text-emerald-600">
+                            {item.cantidad} lote{item.cantidad === 1 ? '' : 's'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right font-bold text-emerald-800">{numero(item.totales.visitas, 0)}</td>
+                        <td className="px-3 py-2 text-right text-slate-500">
+                          {conDesglose ? formatearDuracion(item.totales.apagado_segundos) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right text-amber-700">
+                          {conDesglose ? formatearDuracion(item.totales.ralenti_segundos) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right text-emerald-700">
+                          {conDesglose ? formatearDuracion(item.totales.viaje_segundos) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right font-bold text-emerald-800">
+                          {formatearDuracion(item.totales.permanencia_segundos)}
+                        </td>
+                        <td className="px-3 py-2 text-right">{numero(item.totales.km_recorridos, 1)}</td>
+                        <td className="px-3 py-2 text-right text-slate-500">{numero(item.totales.puntos, 0)}</td>
+                        <td className="px-3 py-2 text-right">—</td>
+                      </tr>
+                    ) : (
+                      renderFilaLote(item.fila, item.fila.geocerca_id)
+                    )
+                  ))}                  ))}
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-50 text-slate-700 font-bold">

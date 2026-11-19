@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import { etiquetaPeriodoReporte, formatearFechaHora, formatearFechaLarga, clasificarEstado } from './agrotrackFlota';
 import { calcularEventosResumidos, totalesEventosResumidos, formatearHMS } from './agrotrackEventosResumidos';
 import { STATUS_META } from '../components/gestion/fleet/fleetTokens';
+import { agruparPorDivision } from './agrotrackDivisiones';
 
 export function exportarParcelasExcel(parcelas, registros) {
   const wb = XLSX.utils.book_new();
@@ -258,8 +259,49 @@ export function exportarLotesExcel(filas, { rangoTexto = '', placa = '', horaDes
   ];
   XLSX.utils.book_append_sheet(wb, ws, 'Lotes');
 
+  // Segunda hoja: el MISMO reporte, pero con las geocercas agrupadas por la
+  // columna `division`. Las sin división van al final para no mezclarse con
+  // los campos de Pampagrande / Pomalca / Saltur.
+  const columnasDivision = [
+    'División', 'Lote', 'Anexo', 'Unidades', 'Visitas', 'Apagado (h)', 'Ralentí (h)',
+    'Viajando (h)', 'Total en geocerca (h)', 'Recorrido (km)', 'Puntos',
+    'Vel. máx. (km/h)', 'Primera visita', 'Última visita',
+  ];
+  const filasDivision = [columnasDivision];
+  for (const grupo of agruparPorDivision(filas)) {
+    const t = grupo.totales;
+    filasDivision.push([
+      `${grupo.division} — ${grupo.filas.length} lote(s)`, '', '', '',
+      Number(t.visitas || 0),
+      horas(t.apagado_segundos), horas(t.ralenti_segundos), horas(t.viaje_segundos),
+      horas(t.permanencia_segundos), Number((t.km_recorridos || 0).toFixed(2)),
+      Number(t.puntos || 0), '', '', '',
+    ]);
+    for (const f of grupo.filas) {
+      filasDivision.push([
+        '', f.lote, f.anexo || '—', Number(f.unidades || 0), Number(f.visitas || 0),
+        f.apagado_segundos == null ? '' : horas(f.apagado_segundos),
+        f.ralenti_segundos == null ? '' : horas(f.ralenti_segundos),
+        f.viaje_segundos == null ? '' : horas(f.viaje_segundos),
+        horas(f.permanencia_segundos), Number(f.km_recorridos || 0),
+        Number(f.puntos || 0),
+        f.vel_max_kmh == null ? '' : Number(f.vel_max_kmh),
+        f.primera_visita ? formatearFechaLarga(f.primera_visita) : '—',
+        f.ultima_visita ? formatearFechaLarga(f.ultima_visita) : '—',
+      ]);
+    }
+  }
+  const wsDivision = XLSX.utils.aoa_to_sheet(filasDivision);
+  wsDivision['!cols'] = [
+    { wch: 30 }, { wch: 24 }, { wch: 14 }, { wch: 10 }, { wch: 9 },
+    { wch: 12 }, { wch: 11 }, { wch: 12 }, { wch: 19 }, { wch: 15 },
+    { wch: 9 }, { wch: 15 }, { wch: 22 }, { wch: 22 },
+  ];
+  XLSX.utils.book_append_sheet(wb, wsDivision, 'Por division');
+
   const criterio = [
     { Concepto: 'Reporte', Detalle: 'Tiempo en cada lote (Agrilux · réplica de Zonar)' },
+    { Concepto: 'Vistas', Detalle: 'Hoja "Lotes": todos los campos. Hoja "Por division": geocercas agrupadas por la columna division; las que no tienen división van al final.' },
     { Concepto: 'Rango', Detalle: rangoTexto || 'Todo el periodo cargado' },
     { Concepto: 'Unidad', Detalle: placa || 'Todas las unidades' },
     { Concepto: 'Franja horaria', Detalle: (horaDesde || horaHasta) ? `${horaDesde || '00:00'} a ${horaHasta || '23:59'} (hora de Perú)` : 'Todo el día' },
