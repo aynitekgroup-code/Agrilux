@@ -25,3 +25,4 @@ Thumbs.db
 
 scripts/importar-datos.html
 scripts/importar-diagnosticos-restantes.html
+supabase/.temp/
