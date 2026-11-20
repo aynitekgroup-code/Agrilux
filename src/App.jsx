@@ -56,8 +56,7 @@ function PantallaPendiente() {
               <Mail size={18} className="text-primary" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-gray-800">{user?.nombre || user?.email}</p>
-              <p className="text-xs text-gray-400">{user?.email}</p>
+              <p className="text-sm font-semibold text-gray-800">{user?.nombre}</p>
             </div>
           </div>
           <div className="bg-amber-50 rounded-xl p-3">

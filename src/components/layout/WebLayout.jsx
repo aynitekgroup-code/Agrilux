@@ -145,7 +145,6 @@ export default function WebLayout({ children }) {
                   <p className="text-sm font-semibold text-gray-800 truncate">
                     {user?.nombre || 'Invitado'}
                   </p>
-                  <p className="text-xs text-gray-400 truncate">{user?.email || 'Sin sesión'}</p>
                 </div>
               </div>
 

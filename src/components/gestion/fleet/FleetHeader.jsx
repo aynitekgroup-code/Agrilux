@@ -71,7 +71,6 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
           <div className="sm:ml-auto flex items-center gap-3">
             <div className="text-right hidden sm:block">
               <p className="text-sm font-semibold text-slate-800">{user?.nombre || 'Usuario Agrilux'}</p>
-              <p className="text-xs text-slate-400">{user?.email || 'Sesión no disponible'}</p>
             </div>
             <div className="w-10 h-10 rounded-full bg-forest/10 text-forest flex items-center justify-center font-bold">
               {inicial}
