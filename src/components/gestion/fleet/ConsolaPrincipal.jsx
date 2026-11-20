@@ -5,8 +5,6 @@ import { PanelUnidadesGeocerca } from './MapaControles';
 import ConfiguracionPrincipal from './ConfiguracionPrincipal';
 import {
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   ChevronUp,
   History,
   MapPin,
@@ -238,9 +236,7 @@ function ZonasPanel({ geofences = [], selectedId, onSeleccionar, unidadesEnGeoce
 function ContenidoSeccion({
   id, localizador, coordenadas, recorrido, zonas, configuracion,
   unidad, setUnidad, aplicarBusqueda,
-  ruta, setRuta,
   desde, setDesde, hasta, setHasta,
-  pagina, setPagina,
   clickUbicaciones, ping,
   mensaje, setMensaje,
   escuchandoUnidad, toggleVozUnidad,
@@ -305,17 +301,6 @@ function ContenidoSeccion({
             </ul>
           ) : null}
         </label>
-        <label className="grid gap-1 text-[11px] font-semibold text-slate-600">
-          Ruta
-          <select
-            value={ruta}
-            onChange={(event) => { setRuta(event.target.value); }}
-            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-normal text-slate-700 outline-none focus:border-forest"
-          >
-            <option value="recorrido">Recorrido por unidad</option>
-            <option value="personalizada" disabled>Ruta personalizada (próximamente)</option>
-          </select>
-        </label>
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="grid gap-1 text-[11px] font-semibold text-slate-600">
             Desde
@@ -352,12 +337,6 @@ function ContenidoSeccion({
           >
             Ping
           </button>
-          <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
-            Página
-            <button type="button" aria-label="Página anterior" onClick={() => setPagina((p) => Math.max(1, p - 1))} className="rounded p-1 hover:bg-slate-100"><ChevronLeft size={14} /></button>
-            {pagina}/5
-            <button type="button" aria-label="Página siguiente" onClick={() => setPagina((p) => Math.min(5, p + 1))} className="rounded p-1 hover:bg-slate-100"><ChevronRight size={14} /></button>
-          </span>
         </div>
         {mensaje ? (
           <p className="text-[10px] leading-snug text-slate-500" role="status" aria-live="polite">
@@ -422,14 +401,12 @@ export default function ConsolaPrincipal({
   const [panelAbierto, setPanelAbierto] = useState(true);
   const [seccionId, setSeccionId] = useState('localizador');
   const [unidad, setUnidad] = useState(unidadExterna || '');
-  const [ruta, setRuta] = useState('recorrido');
   const [desdeInterno, setDesdeInterno] = useState(inicial.desde);
   const [hastaInterno, setHastaInterno] = useState(inicial.hasta);
   const desde = desdeControlado ? rutaDesde : desdeInterno;
   const hasta = hastaControlado ? rutaHasta : hastaInterno;
   const setDesde = onRutaDesde || setDesdeInterno;
   const setHasta = onRutaHasta || setHastaInterno;
-  const [pagina, setPagina] = useState(1);
   const [mensaje, setMensaje] = useState('');
   const [escuchandoUnidad, setEscuchandoUnidad] = useState(false);
   const [resultadosUnidad, setResultadosUnidad] = useState([]);
@@ -719,14 +696,10 @@ export default function ConsolaPrincipal({
                 unidad={unidad}
                 setUnidad={setUnidad}
                 aplicarBusqueda={aplicarBusqueda}
-                ruta={ruta}
-                setRuta={setRuta}
                 desde={desde}
                 setDesde={setDesde}
                 hasta={hasta}
                 setHasta={setHasta}
-                pagina={pagina}
-                setPagina={setPagina}
                 clickUbicaciones={clickUbicaciones}
                 ping={ping}
                 mensaje={mensaje}

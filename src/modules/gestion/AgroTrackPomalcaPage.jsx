@@ -1,4 +1,3 @@
-successfully downloaded text file (SHA: 946eac0059792440b9060d7f9fe464132f37c412)
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCheck, X, Bell, RefreshCw, Database, Loader2, AlertTriangle } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
@@ -23,6 +22,7 @@ import FleetSinReportar from '../../components/gestion/fleet/FleetSinReportar';
 import FleetGeofenceReports from '../../components/gestion/fleet/FleetGeofenceReports';
 import FleetGeofenceSummary from '../../components/gestion/fleet/FleetGeofenceSummary';
 import FleetTablaDiariaGeocercas from '../../components/gestion/fleet/FleetTablaDiariaGeocercas';
+import ErrorBoundary from '../../components/gestion/fleet/ErrorBoundary';
 import VigiaFlota from '../../components/gestion/fleet/VigiaFlota';
 import BriefingFlota from '../../components/gestion/fleet/BriefingFlota';
 import RemoteCutModal from '../../components/gestion/fleet/RemoteCutModal';
@@ -515,18 +515,22 @@ export default function AgroTrackPomalcaPage({ initialSection = 'geocercas' }) {
             description="Entradas y salidas de los eventos de Zonar y tiempo dentro de cada lote, calculados con PostGIS sobre las posiciones GPS del periodo cargado."
           />
           {/* 14/11/2026: todas las unidades juntas + tabla dinámica de las 6:30. */}
-          <FleetTablaDiariaGeocercas
-            empresaId={empresa_activa_id}
-            periodo={conDatosReales ? panel.periodo : null}
-            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
-            vehicles={vehiclesFuente}
-          />
-          <FleetGeofenceReports
-            empresaId={empresa_activa_id}
-            periodo={conDatosReales ? panel.periodo : null}
-            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
-            vehicles={vehiclesFuente}
-          />
+          <ErrorBoundary mensaje="No se pudo dibujar la tabla diaria de geocercas.">
+            <FleetTablaDiariaGeocercas
+              empresaId={empresa_activa_id}
+              periodo={conDatosReales ? panel.periodo : null}
+              fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+              vehicles={vehiclesFuente}
+            />
+          </ErrorBoundary>
+          <ErrorBoundary mensaje="No se pudo dibujar el reporte de tiempo en cada lote. Prueba con otro rango o pulsa Reintentar.">
+            <FleetGeofenceReports
+              empresaId={empresa_activa_id}
+              periodo={conDatosReales ? panel.periodo : null}
+              fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+              vehicles={vehiclesFuente}
+            />
+          </ErrorBoundary>
           {/* El módulo "Geocercas y rutas" vive aquí, arriba del catálogo. */}
           <ModulesOverview modulos={['geocercas']} selectedId="geocercas" onSelect={() => {}} />
           <ReportesPage

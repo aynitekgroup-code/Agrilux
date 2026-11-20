@@ -571,7 +571,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filasVistas.map((item) =>
+                  {filasVistas.map((item, i) =>
                     item.tipo === 'division' ? (
                       <tr key={`division-${item.division}`} className="border-b border-emerald-100 bg-emerald-50/70">
                         <td className="px-3 py-2 font-bold text-emerald-800" colSpan={3}>
@@ -598,7 +598,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
                         <td className="px-3 py-2 text-right">—</td>
                       </tr>
                     ) : (
-                      renderFilaLote(item.fila || {}, item.fila?.geocerca_id)
+                      renderFilaLote(item.fila, item.fila?.geocerca_id ?? `lote-${i}`)
                     )
                   )}
                 </tbody>
