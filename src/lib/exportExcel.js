@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx';
 import { etiquetaPeriodoReporte, formatearFechaHora, formatearFechaLarga, clasificarEstado } from './agrotrackFlota';
 import { calcularEventosResumidos, totalesEventosResumidos, formatearHMS } from './agrotrackEventosResumidos';
 import { STATUS_META } from '../components/gestion/fleet/fleetTokens';
-import { agruparPorDivision } from './agrotrackDivisiones';
+import { normalizarDivision } from './agrotrackDivisiones';
 
 export function exportarParcelasExcel(parcelas, registros) {
   const wb = XLSX.utils.book_new();
@@ -206,121 +206,68 @@ export function exportarEventosGeocercaExcel(filas, { agrupar = 'geocerca', rang
 }
 
 /**
- * Reporte de tiempo en cada lote (FASE 3.5) a Excel: permanencia, visitas y
- * recorrido dentro de cada polígono (PostGIS), con la hoja de criterio.
- * @param {Array} filas  filas de agrotrack_lotes_flota
+ * Excel PLANO del reporte "Tiempo en cada lote": una fila por permanencia,
+ * lista para armar una tabla dinámica (filas Fecha/Área/Placa, columnas
+ * División, valores Suma de Duración). Sin totales, sin celdas combinadas y
+ * con una sola hoja. La duración es numérica en horas decimales (1.52).
+ *
+ * @param {Array} filas filas de agrotrack_permanencias_lote_excel
  * @param {{rangoTexto?: string}} opciones
  */
-export function exportarLotesExcel(filas, { rangoTexto = '', placa = '', horaDesde = '', horaHasta = '' } = {}) {
-  const wb = XLSX.utils.book_new();
+export function exportarPermanenciasLotesExcel(filas, { rangoTexto = '' } = {}) {
+  const encabezados = [
+    'Fecha entrada',
+    'Hora entrada',
+    'Grupo',
+    'Área Cod',
+    'Placa',
+    'Nombre',
+    'División',
+    'Duración (h decimal)',
+  ];
 
-  const datos = (filas || []).map((f) => ({
-    'Lote': f.lote,
-    'División': f.division || '—',
-    'Anexo': f.anexo || '—',
-    'Área (ha)': f.area_ha == null ? '' : Number(f.area_ha),
-    'Unidades': Number(f.unidades || 0),
-    'Visitas': Number(f.visitas || 0),
-    'Apagado (h)': f.apagado_segundos == null ? '' : horas(f.apagado_segundos),
-    'Ralentí (h)': f.ralenti_segundos == null ? '' : horas(f.ralenti_segundos),
-    'Viajando (h)': f.viaje_segundos == null ? '' : horas(f.viaje_segundos),
-    'Total en geocerca (h)': horas(f.permanencia_segundos),
-    'Recorrido (km)': Number(f.km_recorridos || 0),
-    'Puntos': Number(f.puntos || 0),
-    'Vel. máx. (km/h)': f.vel_max_kmh == null ? '' : Number(f.vel_max_kmh),
-    'Primera visita': f.primera_visita ? formatearFechaLarga(f.primera_visita) : '—',
-    'Última visita': f.ultima_visita ? formatearFechaLarga(f.ultima_visita) : '—',
-  }));
-
-  const suma = (campo) => (filas || []).reduce((s, f) => s + Number(f[campo] || 0), 0);
-  datos.push({
-    'Lote': 'TOTALES',
-    'División': `${filas.length} lote(s) con actividad`,
-    'Anexo': '',
-    'Área (ha)': '',
-    'Unidades': '',
-    'Visitas': suma('visitas'),
-    'Apagado (h)': horas(suma('apagado_segundos')),
-    'Ralentí (h)': horas(suma('ralenti_segundos')),
-    'Viajando (h)': horas(suma('viaje_segundos')),
-    'Total en geocerca (h)': horas(suma('permanencia_segundos')),
-    'Recorrido (km)': Number(suma('km_recorridos').toFixed(2)),
-    'Puntos': suma('puntos'),
-    'Vel. máx. (km/h)': '',
-    'Primera visita': '',
-    'Última visita': '',
+  const datos = (filas || []).map((f) => {
+    const nombre = String(f?.nombre || '').trim();
+    const fecha = String(f?.fecha_entrada || '').trim();
+    const hora = String(f?.hora_entrada || '').trim();
+    const division = normalizarDivision(f?.division, nombre) || 'Sin nombre';
+    return [
+      fecha,
+      hora,
+      String(f?.grupo || 'Sin grupo').trim() || 'Sin grupo',
+      String(f?.area_cod || 'Sin área').trim() || 'Sin área',
+      String(f?.placa || '').trim(),
+      nombre,
+      division,
+      // Numeric cell, never text like "1 h 31 min".
+      Number(f?.duracion_horas_decimal ?? f?.duracion_horas ?? 0),
+    ];
   });
 
-  const ws = XLSX.utils.json_to_sheet(datos);
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([encabezados, ...datos]);
   ws['!cols'] = [
-    { wch: 24 }, { wch: 16 }, { wch: 14 }, { wch: 11 }, { wch: 10 }, { wch: 9 },
-    { wch: 12 }, { wch: 11 }, { wch: 12 }, { wch: 19 }, { wch: 15 }, { wch: 9 },
-    { wch: 15 }, { wch: 22 }, { wch: 22 },
+    { wch: 14 }, { wch: 13 }, { wch: 20 }, { wch: 16 },
+    { wch: 14 }, { wch: 28 }, { wch: 24 }, { wch: 20 },
   ];
-  XLSX.utils.book_append_sheet(wb, ws, 'Lotes');
-
-  // Segunda hoja: el MISMO reporte, pero con las geocercas agrupadas por la
-  // columna `division`. Las sin división van al final para no mezclarse con
-  // los campos de Pampagrande / Pomalca / Saltur.
-  const columnasDivision = [
-    'División', 'Lote', 'Anexo', 'Unidades', 'Visitas', 'Apagado (h)', 'Ralentí (h)',
-    'Viajando (h)', 'Total en geocerca (h)', 'Recorrido (km)', 'Puntos',
-    'Vel. máx. (km/h)', 'Primera visita', 'Última visita',
-  ];
-  const filasDivision = [columnasDivision];
-  for (const grupo of agruparPorDivision(filas)) {
-    const t = grupo.totales;
-    filasDivision.push([
-      `${grupo.division} — ${grupo.filas.length} lote(s)`, '', '', '',
-      Number(t.visitas || 0),
-      horas(t.apagado_segundos), horas(t.ralenti_segundos), horas(t.viaje_segundos),
-      horas(t.permanencia_segundos), Number((t.km_recorridos || 0).toFixed(2)),
-      Number(t.puntos || 0), '', '', '',
-    ]);
-    for (const f of grupo.filas) {
-      filasDivision.push([
-        '', f.lote, f.anexo || '—', Number(f.unidades || 0), Number(f.visitas || 0),
-        f.apagado_segundos == null ? '' : horas(f.apagado_segundos),
-        f.ralenti_segundos == null ? '' : horas(f.ralenti_segundos),
-        f.viaje_segundos == null ? '' : horas(f.viaje_segundos),
-        horas(f.permanencia_segundos), Number(f.km_recorridos || 0),
-        Number(f.puntos || 0),
-        f.vel_max_kmh == null ? '' : Number(f.vel_max_kmh),
-        f.primera_visita ? formatearFechaLarga(f.primera_visita) : '—',
-        f.ultima_visita ? formatearFechaLarga(f.ultima_visita) : '—',
-      ]);
+  // Las horas se ven con dos decimales pero siguen siendo número para la
+  // tabla dinámica (Suma de Duración).
+  const ultimaFila = XLSX.utils.decode_range(ws['!ref']).e.r;
+  for (let fila = 2; fila <= ultimaFila; fila += 1) {
+    const celda = ws[`H${fila}`];
+    if (celda) {
+      celda.t = 'n';
+      celda.z = '0.00';
     }
   }
-  const wsDivision = XLSX.utils.aoa_to_sheet(filasDivision);
-  wsDivision['!cols'] = [
-    { wch: 30 }, { wch: 24 }, { wch: 14 }, { wch: 10 }, { wch: 9 },
-    { wch: 12 }, { wch: 11 }, { wch: 12 }, { wch: 19 }, { wch: 15 },
-    { wch: 9 }, { wch: 15 }, { wch: 22 }, { wch: 22 },
-  ];
-  XLSX.utils.book_append_sheet(wb, wsDivision, 'Por division');
-
-  const criterio = [
-    { Concepto: 'Reporte', Detalle: 'Tiempo en cada lote (Agrilux · réplica de Zonar)' },
-    { Concepto: 'Vistas', Detalle: 'Hoja "Lotes": todos los campos. Hoja "Por division": geocercas agrupadas por la columna division; las que no tienen división van al final.' },
-    { Concepto: 'Rango', Detalle: rangoTexto || 'Todo el periodo cargado' },
-    { Concepto: 'Unidad', Detalle: placa || 'Todas las unidades' },
-    { Concepto: 'Franja horaria', Detalle: (horaDesde || horaHasta) ? `${horaDesde || '00:00'} a ${horaHasta || '23:59'} (hora de Perú)` : 'Todo el día' },
-    { Concepto: 'Fuente', Detalle: 'public.agrotrack_geocercas + public.agrotrack_posiciones (agrotrack_lotes_flota)' },
-    { Concepto: 'Motor', Detalle: 'PostGIS: punto dentro del polígono (ST_Contains, EPSG:4326)' },
-    { Concepto: 'Visita', Detalle: 'Tramo de permanencia; un hueco de más de 10 minutos corta la visita' },
-    { Concepto: 'Desglose', Detalle: 'Apagado + Ralentí + Viajando = Total en geocerca (estado según el evento del punto final de cada tramo)' },
-    { Concepto: 'Recorrido', Detalle: 'Haversine entre puntos consecutivos, tramos <= 10 min, saltos >= 5 km descartados' },
-    { Concepto: 'Duplicados', Detalle: 'Puntos repetidos (misma fecha + secuencia) no cuentan dos veces' },
-    { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
-    { Concepto: 'Generado', Detalle: new Date().toLocaleString('es-PE') },
-  ];
-  const wsCriterio = XLSX.utils.json_to_sheet(criterio);
-  wsCriterio['!cols'] = [{ wch: 16 }, { wch: 90 }];
-  XLSX.utils.book_append_sheet(wb, wsCriterio, 'Criterio');
+  XLSX.utils.book_append_sheet(wb, ws, 'Permanencias');
 
   const etiquetaRango = (rangoTexto || 'todo').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
-  XLSX.writeFile(wb, `Agrilux_Geocercas_Lotes_${etiquetaRango || 'rango'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  XLSX.writeFile(wb, `Agrilux_Permanencias_Lotes_${etiquetaRango || 'rango'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
+
+/** Alias conservado para llamadas antiguas: ahora exporta la tabla plana. */
+export const exportarLotesExcel = exportarPermanenciasLotesExcel;
 
 /**
  * Reporte 15 de Zonar "Eventos resumidos" a Excel: Stop / Idle / Drive por

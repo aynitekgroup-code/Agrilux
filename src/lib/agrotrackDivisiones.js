@@ -2,19 +2,39 @@
  * src/lib/agrotrackDivisiones.js
  * Utilidades puras para el reporte de geocercas por división.
  *
- * La columna `division` ya viene en las RPC (agrotrack_lotes_flota,
- * agrotrack_eventos_flota, agrotrack_visitas_dia_flota), así que aquí solo se
- * agrupa en el cliente: no se toca Supabase. Las geocercas sin división
- * (Distrito, Oficinas, Establo, etc.) se dejan en un grupo aparte al final
- * para que NO se superpongan con los campos de Pampagrande / Pomalca / Saltur.
+ * Regla única (también aplicada en Supabase por
+ * scripts/agrotrack-reporte-lotes-permanencias.sql):
+ *   division = COALESCE(NULLIF(TRIM(division), ''), nombre)
+ *
+ * Los alias Pamp / Pom1 / Pom2 / Sal-Sip se homologan antes de agrupar para
+ * que no aparezcan columnas duplicadas en la tabla dinámica. Ya no existe el
+ * grupo "Sin división": una geocerca sin división toma su propio nombre.
  */
 
-export const SIN_DIVISION = 'Sin división';
+const DIVISIONES_EQUIVALENTES = new Map([
+  ['pamp', 'Pampagrande'],
+  ['pampagrande', 'Pampagrande'],
+  ['pom1', 'Pomalca 1'],
+  ['pomalca1', 'Pomalca 1'],
+  ['pomalca 1', 'Pomalca 1'],
+  ['pom2', 'Pomalca 2'],
+  ['pomalca2', 'Pomalca 2'],
+  ['pomalca 2', 'Pomalca 2'],
+  ['sal-sip', 'Saltur - Sipan'],
+  ['saltur-sipan', 'Saltur - Sipan'],
+  ['saltur sipan', 'Saltur - Sipan'],
+  ['saltur - sipan', 'Saltur - Sipan'],
+]);
 
-/** Normaliza la división de una fila; null/vacío => grupo "Sin división". */
+/** Normaliza division/nombre con la misma regla que el SQL de Supabase. */
+export function normalizarDivision(division, nombre = '') {
+  const valor = String(division ?? '').trim() || String(nombre ?? '').trim();
+  return DIVISIONES_EQUIVALENTES.get(valor.toLowerCase()) || valor;
+}
+
+/** División visible de una fila de lote/geocerca; nunca devuelve "Sin división". */
 export function nombreDivision(fila) {
-  const valor = typeof fila?.division === 'string' ? fila.division.trim() : '';
-  return valor || SIN_DIVISION;
+  return normalizarDivision(fila?.division, fila?.nombre || fila?.lote);
 }
 
 const CAMPOS_SUMA = [
@@ -36,7 +56,7 @@ function sumar(filas) {
 }
 
 /**
- * Agrupa filas por `division`, con los campos primero y "Sin división" al final.
+ * Agrupa filas por `division`, ordenado por nombre.
  * @param {Array} filas filas de agrotrack_lotes_flota
  * @returns {Array<{division: string, filas: Array, totales: Object}>}
  */
@@ -51,11 +71,7 @@ export function agruparPorDivision(filas = []) {
     mapa.get(division).push(fila);
   }
   return [...mapa.entries()]
-    .sort(([a], [b]) => {
-      if (a === SIN_DIVISION) return 1;
-      if (b === SIN_DIVISION) return -1;
-      return a.localeCompare(b, 'es', { sensitivity: 'base' });
-    })
+    .sort(([a], [b]) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
     .map(([division, filasGrupo]) => ({
       division,
       filas: filasGrupo,

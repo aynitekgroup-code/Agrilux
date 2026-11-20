@@ -13,6 +13,7 @@ import {
 import {
   obtenerEventosGeocerca,
   obtenerLotesFlota,
+  obtenerPermanenciasLoteExcel,
   guardarRespaldoVisitas,
   LIMITE_EVENTOS_GEOCERCA,
   LIMITE_LOTES,
@@ -31,7 +32,7 @@ import {
 } from '../../../lib/agrotrackFlota';
 import { useRango, ControlesRango, CuerpoEstado, numero, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, AvisoUnidadesSinTelemetria } from './reportesComunes';
 import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
-import { agruparPorDivision, aplanarGrupos } from '../../../lib/agrotrackDivisiones';
+import { agruparPorDivision, aplanarGrupos, nombreDivision } from '../../../lib/agrotrackDivisiones';
 import { armarContextoReporte } from '../../../lib/reportesIa';
 import { llamarIaGestion } from '../../../lib/agrotrackIa';
 
@@ -308,15 +309,21 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
     placasFiltro,
   } = useFiltroUnidadGrupo({ vehicles, empresaId });
   const [descargaError, setDescargaError] = useState(null);
+  const [descargando, setDescargando] = useState(false);
   const [estado, setEstado] = useState('inactivo');
   const [filas, setFilas] = useState([]);
   const [error, setError] = useState(null);
   const [rangoTexto, setRangoTexto] = useState('');
   const [avisoLotes, setAvisoLotes] = useState('');
   const [intento, setIntento] = useState(0);
-  // Dos vistas del MISMO reporte: todos los campos (detalle plano) y campos
-  // agrupados por la columna `division` de la geocerca.
-  const [vista, setVista] = useState('todos');
+  // Por defecto gerencia ve el resumen por División. Al elegir una unidad se
+  // cambia al detalle plano; al elegir grupo o "Todas las unidades" vuelve a
+  // División. El botón sigue permitiendo cambiar la vista manualmente.
+  const [vista, setVista] = useState('division');
+
+  useEffect(() => {
+    setVista(mostrar === 'unidades' && opcionFiltro ? 'todos' : 'division');
+  }, [mostrar, opcionFiltro]);
 
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
@@ -370,7 +377,8 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
   }, [filas]);
 
   // Los grupos salen de la columna `division` (ya incluida en la RPC).
-  // "Sin división" queda al final para no mezclarse con los campos.
+  // Supabase ya aplicó la regla division = COALESCE(NULLIF(TRIM(...)), nombre)
+  // y las equivalencias; aquí solo se agrupa, sin grupo "Sin división".
   const gruposDivision = useMemo(() => agruparPorDivision(filas), [filas]);
   const filasAgrupadas = useMemo(() => aplanarGrupos(gruposDivision), [gruposDivision]);
 
@@ -404,7 +412,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
           <span className="block text-[10px] text-slate-400">Anexo {fila.anexo}</span>
         ) : null}
       </td>
-      <td className="px-3 py-2 text-slate-500">{fila.division || '—'}</td>
+      <td className="px-3 py-2 text-slate-500">{nombreDivision(fila) || '—'}</td>
       <td className="px-3 py-2 text-right">{numero(fila.unidades, 0)}</td>
       <td className="px-3 py-2 text-right font-semibold">{numero(fila.visitas, 0)}</td>
       <td className="px-3 py-2 text-right text-slate-500">
@@ -428,11 +436,25 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
   );
   const descargarExcel = async () => {
     setDescargaError(null);
+    setDescargando(true);
     try {
-      const { exportarLotesExcel } = await import('../../../lib/exportExcel');
-      exportarLotesExcel(filas, { rangoTexto, placa: '' });
+      // El Excel no se arma desde las filas agregadas de la pantalla: la RPC
+      // devuelve cada permanencia individual, ya recortada al rango y en hora
+      // de Perú, para que la tabla dinámica sume las horas correctamente.
+      const permanencias = await obtenerPermanenciasLoteExcel(empresaId, {
+        desde: consulta.desde,
+        hasta: consulta.hasta,
+        placas: placasFiltro,
+      });
+      if (!permanencias.length) {
+        throw new Error('No hay permanencias en el rango elegido para exportar.');
+      }
+      const { exportarPermanenciasLotesExcel } = await import('../../../lib/exportExcel');
+      exportarPermanenciasLotesExcel(permanencias, { rangoTexto });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
+    } finally {
+      setDescargando(false);
     }
   };
 
@@ -459,10 +481,11 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
             <button
               type="button"
               onClick={descargarExcel}
-              disabled={!puedeExportar}
+              disabled={!puedeExportar || descargando}
               className="inline-flex items-center gap-1.5 rounded-lg border border-forest bg-forest px-2.5 py-1.5 text-[11px] font-semibold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              <FileSpreadsheet size={13} /> Descargar Excel
+              {descargando ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />}
+              {descargando ? 'Generando…' : 'Descargar Excel'}
             </button>
           </div>
         </div>
@@ -521,9 +544,12 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
           </div>
           {vista === 'division' ? (
             <span className="text-slate-400">
-              Geocercas agrupadas por División; las que no tienen división van aparte al final.
+              Geocercas agrupadas por División.
             </span>
           ) : null}
+          <span className="ml-auto text-[11px] font-semibold text-amber-700">
+            Las visitas no son sumables entre grupos, las horas sí.
+          </span>
         </div>
         {estado === 'ok' ? (
           <>

@@ -19,6 +19,7 @@ const RPC_PESADAS = new Set([
   'agrotrack_visitas_geocerca_flota',
   'agrotrack_visitas_dia_flota',
   'agrotrack_tabla_geocercas_dia',
+  'agrotrack_permanencias_lote_excel',
   'agrotrack_visitas_dia_pendientes',
   'agrotrack_calcular_visitas_dia',
   // 18/11/2026: el resumen de flota también barre agrotrack_posiciones (314 k

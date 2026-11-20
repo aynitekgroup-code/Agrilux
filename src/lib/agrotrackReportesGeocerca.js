@@ -27,6 +27,7 @@ import { llamarRpcReporte } from './rpcReportes.js';
 export const LIMITE_EVENTOS_GEOCERCA = 500;
 export const LIMITE_LOTES = 200;
 export const LIMITE_ESTADO_UNIDADES = 500;
+export const LIMITE_PERMANENCIAS_EXCEL = 1000;
 
 function mensajeDeError(error, contexto) {
   const detalle = error?.message || String(error);
@@ -183,6 +184,43 @@ export function rangoDeDiasCompletos(desde, hasta) {
   const h1 = hora(desde);
   const h2 = hora(hasta);
   return h1 === 0 && h2 !== null && h2 >= 23 * 60 + 59;
+}
+
+/**
+ * Detalle plano para el Excel: una fila por permanencia ya recortada al rango
+ * y en hora de Perú. La RPC devuelve máximo 1000 filas por llamada, así que se
+ * pagina para no perder horas de los días con más movimiento.
+ * @returns filas { fecha_entrada, hora_entrada, grupo, area_cod, placa, nombre,
+ *                  division, duracion_horas_decimal }
+ */
+export async function obtenerPermanenciasLoteExcel(
+  empresaId,
+  { desde = null, hasta = null, placas = null } = {}
+) {
+  if (!empresaId || !desde || !hasta) return [];
+  const todas = [];
+  const paginaTamano = LIMITE_PERMANENCIAS_EXCEL;
+  const maxPaginas = 50; // 50 000 permanencias: un mes completo de toda la flota
+
+  for (let pagina = 0; pagina < maxPaginas; pagina += 1) {
+    const params = {
+      p_empresa_id: empresaId,
+      p_desde: desde,
+      p_hasta: hasta,
+      p_offset: pagina * paginaTamano,
+      p_limite: paginaTamano,
+    };
+    if (Array.isArray(placas) && placas.length) params.p_placas = placas;
+    const filas = await llamarRpc(
+      'agrotrack_permanencias_lote_excel',
+      params,
+      'No se pudo cargar el detalle de permanencias para el Excel'
+    );
+    if (!Array.isArray(filas) || filas.length === 0) break;
+    todas.push(...filas);
+    if (filas.length < paginaTamano) break;
+  }
+  return todas;
 }
 
 /**
