@@ -35,6 +35,13 @@ const RPC_PESADAS = new Set([
 
 const EN_VUELO = new Map();
 const COLA = [];
+
+// Consultas que el usuario está esperando en pantalla (p. ej. "Ver recorrido"):
+// se atienden antes que las tarjetas de reportes para que no queden detrás de
+// toda la cola de la consola principal.
+const RPC_PRIORITARIAS = new Set([
+  'agrotrack_recorrido_flota',
+]);
 // Una sola RPC pesada a la vez: con 2 en paralelo seguían apareciendo 500
 // intermitentes en Geocercas (eventos/lotes/visitas compiten por el mismo pool
 // de conexiones de Supabase y una sola consulta que pase de 8 s baja a todas).
@@ -95,11 +102,13 @@ export function llamarRpcReporte(nombre, params, contexto, ejecutar) {
   if (compartida) return compartida;
 
   const promesa = new Promise((resolver, rechazar) => {
-    COLA.push({
+    const solicitud = {
       tarea: () => ejecutarConReintento(nombre, params, contexto, ejecutar),
       resolver,
       rechazar,
-    });
+    };
+    if (RPC_PRIORITARIAS.has(nombre)) COLA.unshift(solicitud);
+    else COLA.push(solicitud);
     desencolar();
   }).finally(() => {
     EN_VUELO.delete(clave);

@@ -325,7 +325,9 @@ export function PanelGruposUnidades({
 }) {
   const [busqueda, setBusqueda] = useState('');
   const [colapsados, setColapsados] = useState({});
-  const [desgloseAbierto, setDesgloseAbierto] = useState(true);
+  // Contraído por defecto: al entrar a una pestaña, el panel muestra solo el
+  // buscador (la lista se abre con el botón de desglose).
+  const [desgloseAbierto, setDesgloseAbierto] = useState(false);
   const [escuchandoVoz, setEscuchandoVoz] = useState(false);
   const [vozAviso, setVozAviso] = useState('');
   const vozRecognitionRef = React.useRef(null);
@@ -668,10 +670,10 @@ export function TablaCoordenadas({
   const muchas = filas.length > 100;
   // Tabla limitada a 15 filas; el pie y el Excel usan el total completo.
   const { filasVistas, expandido, alternar, total } = useLimiteFilas(filas);
-  // Buscador de unidades dentro de la tabla: escribe la placa y aparece el
-  // listado; al pulsar una fila el mapa vuela hasta la unidad.
+  // Contraída por defecto: al entrar a una pestaña solo se ve la cabecera con
+  // el botón de Excel (la tabla se abre con el botón de desglose).
   const [busqueda, setBusqueda] = useState('');
-  const [desgloseAbierto, setDesgloseAbierto] = useState(true);
+  const [desgloseAbierto, setDesgloseAbierto] = useState(false);
   const resultados = useMemo(() => {
     const term = busqueda.trim().toLowerCase();
     if (!term) return [];

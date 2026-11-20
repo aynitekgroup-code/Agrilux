@@ -9,13 +9,12 @@
  * de PostgREST). No acepta offset/limit, así que cada "página" es una
  * VENTANA TEMPORAL contigua del rango pedido:
  *
- *   - ventana objetivo: 16 horas por página. Con el ritmo de Zonar (un punto
- *     GPS cada ~2 minutos) son ~480 puntos: un tamaño de página cercano a
- *     las 500 filas pedido y por debajo del tope de 1000 de PostgREST.
- *   - si el rango no cabe en MAX_PAGINAS_RECORRIDO (20) ventanas de 16 h
- *     (> 13 días), la ventana se amplía a (duración total / 20) para no
- *     pasar de 20 llamadas RPC. Nunca se descarga el histórico completo:
- *     el navegador solo conserva la página cargada (<= 900 filas).
+ *   - rango de hasta 16 h: una sola ventana con todo el rango.
+ *   - rango mayor a 16 h: se divide en MAX_PAGINAS_RECORRIDO (20) ventanas
+ *     contiguas de (duración total / 20). Al ser ventanas cortas, cada llamada
+ *     queda muy por debajo de los 900 puntos y la RPC no muestrea: se traen
+ *     TODOS los puntos del rango. Es el modo que el usuario pidió como más
+ *     exacto (24 h = 20 ventanas de 72 min).
  *   - cada llamada pide p_max_puntos = LIMITE_PUNTOS_RECORRIDO (900).
  *
  * Si una ventana vuelve llena (>= 900 puntos) la RPC la muestreó: se avisa
@@ -52,6 +51,9 @@ export function planearPaginas(desdeIso, hastaIso) {
   }
 
   const duracion = hastaMs - desdeMs;
+  // Hasta 16 h cabe en una llamada. Si el rango es mayor, se parte en 20
+  // ventanas cortas: así cada consulta queda bajo el tope de 900 puntos y la
+  // RPC no muestrea (información exacta).
   const ventanaMs = duracion <= VENTANA_OBJETIVO_MS
     ? duracion
     : Math.ceil(duracion / MAX_PAGINAS_RECORRIDO);

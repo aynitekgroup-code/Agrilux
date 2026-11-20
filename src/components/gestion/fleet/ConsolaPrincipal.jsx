@@ -393,13 +393,19 @@ export default function ConsolaPrincipal({
   recorrido,
   zonas,
   configuracion,
+  seccionActiva, onSeccionActiva, apertura = 0,
 }) {
   const inicial = rangoDefault();
   const desdeControlado = rutaDesde !== undefined;
   const hastaControlado = rutaHasta !== undefined;
   const [colapsado, setColapsado] = useState(false);
   const [panelAbierto, setPanelAbierto] = useState(true);
-  const [seccionId, setSeccionId] = useState('localizador');
+  const [seccionInterna, setSeccionInterna] = useState('localizador');
+  const seccionId = seccionActiva ?? seccionInterna;
+  const setSeccionId = (id) => {
+    setSeccionInterna(id);
+    onSeccionActiva?.(id);
+  };
   const [unidad, setUnidad] = useState(unidadExterna || '');
   const [desdeInterno, setDesdeInterno] = useState(inicial.desde);
   const [hastaInterno, setHastaInterno] = useState(inicial.hasta);
@@ -413,6 +419,17 @@ export default function ConsolaPrincipal({
   const unidadRecognitionRef = useRef(null);
 
   useEffect(() => () => unidadRecognitionRef.current?.abort?.(), []);
+
+  // Apertura externa (por ejemplo desde «Ver recorrido detallado»): despliega
+  // la consola y se desplaza hasta ella.
+  useEffect(() => {
+    if (apertura <= 0) return;
+    setColapsado(false);
+    setPanelAbierto(true);
+    requestAnimationFrame(() => {
+      document.getElementById('consola-principal')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [apertura]);
 
   // Unidad sincronizada con la placa seleccionada en el mapa/lista de unidades
   // y con la tarjeta «Recorrido histórico»: cambiarla allí también la cambia aquí.
@@ -585,7 +602,7 @@ export default function ConsolaPrincipal({
   }, {});
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+    <section id="consola-principal" className="scroll-mt-4 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
       <button
         type="button"
         onClick={toggleColapsado}

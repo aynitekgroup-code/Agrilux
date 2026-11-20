@@ -402,7 +402,12 @@ function ZoomRutaTracker({ onZoom }) {
 
 /* ---------- Componente ---------- */
 
-export default function FleetMap({ empresaId, userId, canImport = false, canDelete = false, vehicles = [], selectedId, onSelect, fuentePosiciones = 'demo', periodo = null, consolaVisible = false, mostrarTablasAlFinal = true, actualizarMapaCada = 30 * 1000, onActualizarMapaCada = null, errorUnidades = null, onReintentarUnidades = null }) {
+// Recorrido pedido desde la pestaña «Consola principal»: al cambiar a «Mapas»
+// este componente se desmonta, así que la solicitud se guarda fuera y la
+// consume el FleetMap de Mapas al montarse.
+let solicitudRecorridoMapas = null;
+
+export default function FleetMap({ empresaId, userId, canImport = false, canDelete = false, vehicles = [], selectedId, onSelect, fuentePosiciones = 'demo', periodo = null, consolaVisible = false, mostrarTablasAlFinal = true, actualizarMapaCada = 30 * 1000, onActualizarMapaCada = null, errorUnidades = null, onReintentarUnidades = null, onIrAMapas = null }) {
   const [rawGeofences, setRawGeofences] = useState([]);
   const [loading, setLoading] = useState(Boolean(empresaId));
   const [importing, setImporting] = useState(false);
@@ -440,6 +445,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // Panel de unidades junto al mapa: se puede contraer a una franja de iconos
   // para que el mapa gane todo el ancho disponible.
   const [panelUnidadesContraido, setPanelUnidadesContraido] = useState(false);
+  // Consola Principal: sección activa y aviso de apertura externa.
+  const [consolaSeccion, setConsolaSeccion] = useState('localizador');
+  const [consolaApertura, setConsolaApertura] = useState(0);
   const [fitToken, setFitToken] = useState(0);
   // VII: recorrido histórico paginado por VENTANAS TEMPORALES (fecha + hora
   // en hora de Perú). La RPC no tiene offset, así que cada página es una
@@ -1149,6 +1157,18 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     return undefined;
   }, [selectedId, cargarRecorridoCon]);
 
+  // Recorrido pedido desde «Consola principal»: al llegar a Mapas se abre la
+  // sección Ubicaciones Históricas y se vuelve a cargar la misma unidad/rango.
+  useEffect(() => {
+    const solicitud = solicitudRecorridoMapas;
+    if (!solicitud || !consolaVisible || !empresaId || !selectedId) return;
+    if (solicitud.placa && solicitud.placa !== selectedId) return;
+    solicitudRecorridoMapas = null;
+    setConsolaSeccion('historicas');
+    setConsolaApertura((n) => n + 1);
+    cargarRecorridoCon(solicitud.desde, solicitud.hasta);
+  }, [consolaVisible, empresaId, selectedId, cargarRecorridoCon]);
+
   const exportarRecorridoPagina = async () => {
     setExportandoRecorrido(true);
     setErrorExportarRecorrido('');
@@ -1819,13 +1839,40 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     </>
   );
 
+  const verRecorridoDetallado = () => {
+    if (consolaVisible) {
+      setConsolaSeccion('historicas');
+      setConsolaApertura((n) => n + 1);
+      return;
+    }
+    if (onIrAMapas && selectedId) {
+      solicitudRecorridoMapas = { placa: selectedId, desde: rutaDesde, hasta: rutaHasta };
+      onIrAMapas();
+      return;
+    }
+    document.getElementById('recorrido-detallado')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const ubicacionesHistoricasNodo = empresaId && fuentePosiciones !== 'demo' && (vehicles.length || unidadesMaestro.length) ? (
     <div className="rounded-xl border border-slate-200 bg-white p-3">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ubicaciones históricas</p>
-      <p className="mt-0.5 text-[11px] text-slate-500">
-        {selectedId ? `Unidad seleccionada: ${selectedId}` : 'Selecciona una unidad en el mapa o en la lista.'}
-        {' '}· rango con fecha y hora.
-      </p>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ubicaciones históricas</p>
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            {selectedId ? `Unidad seleccionada: ${selectedId}` : 'Selecciona una unidad en el mapa o en la lista.'}
+            {' '}· rango con fecha y hora.
+          </p>
+        </div>
+        {rutaPlan ? (
+          <button
+            type="button"
+            onClick={verRecorridoDetallado}
+            className="shrink-0 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+          >
+            Ver recorrido detallado
+          </button>
+        ) : null}
+      </div>
       <div className="mt-2 grid gap-2">
         <label className="relative flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
           Unidad (placa o descripción)
@@ -2553,6 +2600,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             onRutaDesde={setRutaDesde}
             onRutaHasta={setRutaHasta}
             recorrido={nodoRecorrido}
+            seccionActiva={consolaSeccion}
+            onSeccionActiva={setConsolaSeccion}
+            apertura={consolaApertura}
             configuracion={{ empresaId, userId, puedePosiciones: canImport }}
             zonas={{
               geofences,
@@ -2581,7 +2631,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       ) : null}
 
       {!consolaVisible && nodoRecorrido ? (
-        <div className="px-4 sm:px-5 pb-3">{nodoRecorrido}</div>
+        <div id="recorrido-detallado" className="scroll-mt-4 px-4 sm:px-5 pb-3">{nodoRecorrido}</div>
       ) : null}
 
       <div className="px-4 sm:px-5 pb-4 pt-1 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-slate-500">

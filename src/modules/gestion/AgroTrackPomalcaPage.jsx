@@ -381,6 +381,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'geocercas' }) {
                 periodo={conDatosReales ? panel.periodo : null}
                 errorUnidades={hayErrorPanel ? panel.error : null}
                 onReintentarUnidades={recargarPanel}
+                onIrAMapas={() => setSection('mapas')}
               />
             </div>
             <div className="xl:col-span-12 min-w-0" id="alertas-operacion">
