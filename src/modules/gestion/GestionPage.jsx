@@ -71,6 +71,7 @@ export default function Gestion() {
   const nombreUsuario = (user?.nombre || '').trim();
   const nombreVisible = nombreUsuario || 'Usuario Agrilux';
   const primerNombre = nombreVisible.split(' ')[0];
+  const emailUsuario = user?.email || 'Sin correo configurado';
 
   const empresaActiva = (empresas_disponibles || []).find((empresa) => empresa.id === empresa_activa_id);
   const ROL_EMPRESA = { administrador: 'Administrador', ingeniero: 'Ingeniero', supervisor: 'Supervisor', operario: 'Operario' };

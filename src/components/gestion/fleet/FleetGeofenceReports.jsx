@@ -23,6 +23,7 @@ import {
   leerVisitasDia,
   filtrarVisitasPorRango,
   partesLima,
+  codigoArea,
 } from '../../../lib/agrotrackVisitasDia';
 import {
   formatearDuracion,
@@ -294,6 +295,179 @@ function CardEventos({ empresaId, periodo, fuente, vehicles = [] }) {
   );
 }
 
+const MESES_CORTO = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+const VALORES_PIVOT = [
+  { id: 'duracion_segundos', label: 'Duración total' },
+  { id: 'apagado_segundos', label: 'Apagado' },
+  { id: 'ralenti_segundos', label: 'Ralentí' },
+  { id: 'viaje_segundos', label: 'Viajando' },
+];
+
+/**
+ * Arma la estructura de la tabla dinámica "Suma de Duración (h)":
+ * filas = placa/máquina, columnas = geocerca (o división), agrupado por mes y día.
+ */
+function construirTablaDinamica(permanencias, columnasMode, valor) {
+  const columnaDe = (f) =>
+    columnasMode === 'division'
+      ? normalizarDivision(f?.division, f?.geocerca) || 'Sin división'
+      : String(f?.geocerca || f?.nombre || '').trim() || 'Sin geocerca';
+  const filaDe = (f) => codigoArea(f?.unidad, f?.placa) || String(f?.placa || '').trim() || 'Sin placa';
+  const valorDe = (f) => Number(f?.[valor] || 0) / 3600;
+  const fechaDe = (f) => String(f?.dia || '').trim();
+
+  const columnasSet = new Set();
+  const filasSet = new Set();
+  const porDia = new Map();
+
+  for (const f of permanencias || []) {
+    const fecha = fechaDe(f);
+    const col = columnaDe(f);
+    const fila = filaDe(f);
+    if (!fecha || !col || !fila) continue;
+    columnasSet.add(col);
+    filasSet.add(fila);
+    if (!porDia.has(fecha)) porDia.set(fecha, new Map());
+    const mapaDia = porDia.get(fecha);
+    if (!mapaDia.has(fila)) mapaDia.set(fila, new Map());
+    const mapaFila = mapaDia.get(fila);
+    mapaFila.set(col, (mapaFila.get(col) || 0) + valorDe(f));
+  }
+
+  const columnas = [...columnasSet].sort((a, b) => a.localeCompare(b, 'es'));
+  const filas = [...filasSet].sort((a, b) => a.localeCompare(b, 'es'));
+  const grupos = [];
+
+  for (const fecha of [...porDia.keys()].sort()) {
+    const [anio, mes, dia] = fecha.split('-');
+    const indiceMes = Number(mes) - 1;
+    const etiquetaMes = `${MESES_CORTO[indiceMes] || mes} ${anio}`;
+    const etiquetaDia = `${Number(dia)}-${MESES_CORTO[indiceMes] || mes}`;
+    let grupo = grupos.find((g) => g.etiqueta === etiquetaMes);
+    if (!grupo) {
+      grupo = { etiqueta: etiquetaMes, dias: [] };
+      grupos.push(grupo);
+    }
+
+    const celdas = new Map();
+    const totalesCol = new Map();
+    let totalDia = 0;
+    for (const fila of filas) {
+      const valores = porDia.get(fecha)?.get(fila);
+      if (!valores) continue;
+      celdas.set(fila, valores);
+      for (const [col, valor] of valores) {
+        totalesCol.set(col, (totalesCol.get(col) || 0) + valor);
+        totalDia += valor;
+      }
+    }
+    grupo.dias.push({ fecha, etiqueta: etiquetaDia, celdas, totalesCol, totalDia });
+  }
+
+  const totalesGenerales = new Map();
+  for (const dia of grupos.flatMap((g) => g.dias)) {
+    for (const [col, valor] of dia.totalesCol) {
+      totalesGenerales.set(col, (totalesGenerales.get(col) || 0) + valor);
+    }
+  }
+
+  return { columnas, filas, grupos, totalesGenerales, total: [...totalesGenerales.values()].reduce((s, v) => s + v, 0) };
+}
+
+/** Tabla dinámica estilo Excel: una columna por geocerca, suma de duración en horas. */
+function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
+  const { columnas, filas, grupos, totalesGenerales, total } = useMemo(
+    () => construirTablaDinamica(permanencias, columnasMode, valor),
+    [permanencias, columnasMode, valor],
+  );
+  if (!columnas.length) {
+    return <p className="p-8 text-center text-xs text-slate-400">Sin permanencias para mostrar en la tabla dinámica.</p>;
+  }
+  const etiquetaValor = VALORES_PIVOT.find((v) => v.id === valor)?.label || 'Duración total';
+  const celda = (valorCelda) => (valorCelda ? <span className="tabular-nums">{numero(valorCelda, 2)}</span> : null);
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs text-slate-700 border-collapse">
+        <thead>
+          <tr className="bg-amber-600 text-white">
+            <th className="sticky left-0 z-10 bg-amber-600 px-3 py-2.5 text-left font-bold whitespace-nowrap border-r border-amber-500">
+              Suma de {etiquetaValor} (h)
+            </th>
+            {columnas.map((col) => (
+              <th key={col} className="px-3 py-2.5 text-center font-bold whitespace-nowrap border-r border-amber-500/60">
+                {col}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {grupos.map((grupo) => (
+            <React.Fragment key={grupo.etiqueta}>
+              <tr className="bg-slate-100">
+                <td colSpan={columnas.length + 1} className="px-3 py-1.5 font-bold text-slate-700">
+                  {grupo.etiqueta}
+                </td>
+              </tr>
+              {grupo.dias.map((dia) => (
+                <React.Fragment key={dia.fecha}>
+                  <tr className="bg-slate-50/80">
+                    <td className="px-3 py-1.5 font-bold text-slate-600 sticky left-0 z-10 bg-slate-50/95 border-r border-slate-100">
+                      {dia.etiqueta}
+                    </td>
+                    {columnas.map((col) => (
+                      <td key={col} className="px-3 py-1.5" />
+                    ))}
+                  </tr>
+                  {filas
+                    .filter((fila) => dia.celdas.has(fila))
+                    .map((fila) => (
+                      <tr key={fila} className="border-b border-slate-50 hover:bg-slate-50/60">
+                        <td className="px-3 py-1.5 font-medium text-slate-700 sticky left-0 z-10 bg-white border-r border-slate-100">
+                          {fila}
+                        </td>
+                        {columnas.map((col) => (
+                          <td key={col} className="px-3 py-1.5 text-center">
+                            {celda(dia.celdas.get(fila)?.get(col))}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  <tr className="bg-amber-50 text-amber-900 font-semibold border-y border-amber-200">
+                    <td className="px-3 py-1.5 sticky left-0 z-10 bg-amber-50 border-r border-amber-200">Total {dia.etiqueta}</td>
+                    {columnas.map((col) => (
+                      <td key={col} className="px-3 py-1.5 text-center tabular-nums">
+                        {dia.totalesCol.get(col) ? numero(dia.totalesCol.get(col), 2) : null}
+                      </td>
+                    ))}
+                  </tr>
+                </React.Fragment>
+              ))}
+            </React.Fragment>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="bg-amber-100 text-amber-900 font-bold">
+            <td className="px-3 py-2.5 sticky left-0 z-10 bg-amber-100 border-r border-amber-200">Total general</td>
+            {columnas.map((col) => (
+              <td key={col} className="px-3 py-2.5 text-center tabular-nums">
+                {totalesGenerales.get(col) ? numero(totalesGenerales.get(col), 2) : null}
+              </td>
+            ))}
+          </tr>
+        </tfoot>
+      </table>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-[10px] text-slate-400 border-t border-slate-50">
+        <span>
+          {permanencias.length} visitas · {columnas.length} columnas · columnas por {columnasMode === 'division' ? 'división' : 'geocerca'}.
+        </span>
+        <span className="font-semibold text-amber-700">Total general: {numero(total, 2)} h · {etiquetaValor}</span>
+      </div>
+    </div>
+  );
+}
+
 /** Tarjeta 2: tiempo dentro de cada lote (punto dentro del polígono, PostGIS). */
 function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
   const { rango, setRango, dia, setDia, mes, setMes, desdeHora, setDesdeHora, hastaHora, setHastaHora, consulta, pendienteDeFecha } = useRango(periodo);
@@ -319,11 +493,51 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
   // Por defecto gerencia ve el resumen por División. Al elegir una unidad se
   // cambia al detalle plano; al elegir grupo o "Todas las unidades" vuelve a
   // División. El botón sigue permitiendo cambiar la vista manualmente.
-  const [vista, setVista] = useState('division');
+  const [vista, setVista] = useState('dinamica');
+  const [columnas, setColumnas] = useState('geocerca');
+  const [valor, setValor] = useState('duracion_segundos');
+  const [permanencias, setPermanencias] = useState([]);
+  const [estadoPivot, setEstadoPivot] = useState('inactivo');
+  const [errorPivot, setErrorPivot] = useState(null);
 
   useEffect(() => {
-    setVista(mostrar === 'unidades' && opcionFiltro ? 'todos' : 'division');
+    setVista((prev) => (prev === 'dinamica' ? 'dinamica' : mostrar === 'unidades' && opcionFiltro ? 'todos' : 'division'));
   }, [mostrar, opcionFiltro]);
+
+  useEffect(() => {
+    if (vista !== 'dinamica' || !empresaId || pendienteDeFecha) {
+      setEstadoPivot((prev) => (prev === 'cargando' ? 'inactivo' : prev));
+      return undefined;
+    }
+    let cancelado = false;
+    setEstadoPivot('cargando');
+    setErrorPivot(null);
+    const desdeDia = partesLima(consulta.desde).fecha;
+    const hastaDia = partesLima(consulta.hasta).fecha;
+    leerVisitasDia(empresaId, {
+      desdeDia,
+      hastaDia,
+      ...(placasFiltro?.length === 1 ? { placa: placasFiltro[0] } : {}),
+    })
+      .then((filas) => {
+        if (cancelado) return;
+        const enRango = filtrarVisitasPorRango(filas, consulta.desde, consulta.hasta);
+        const filasFiltradas = Array.isArray(placasFiltro) && placasFiltro.length > 1
+          ? filtrarFilasPorPlaca(enRango, placasFiltro)
+          : enRango;
+        setPermanencias(filasFiltradas);
+        setEstadoPivot(filasFiltradas.length ? 'ok' : 'vacio');
+      })
+      .catch((e) => {
+        if (cancelado) return;
+        setPermanencias([]);
+        setErrorPivot(e?.message || 'No se pudo cargar la tabla dinámica.');
+        setEstadoPivot('error');
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [vista, empresaId, consulta, placasFiltro, pendienteDeFecha, intento]);
 
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
@@ -466,9 +680,14 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
             <LogOut size={17} />
           </div>
           <div className="min-w-0">
-            <h2 className="text-base font-bold text-slate-900">Tiempo en cada lote</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-slate-900">Tiempo en cada lote · Tabla dinámica</h2>
+              <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-700">
+                Nuevo
+              </span>
+            </div>
             <p className="text-xs text-slate-500">
-              Permanencia, visitas y recorrido dentro de cada polígono (PostGIS), por lote con actividad.
+              Horas dentro de cada geocerca por fecha, área y placa. Una máquina: todos sus campos; grupo: todas por División.
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">
@@ -477,7 +696,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
                 <Database size={12} /> Datos reales: {rangoTexto}
               </span>
             ) : null}
-            <BotonActualizarAhora onClick={() => setIntento((n) => n + 1)} disabled={estado === 'cargando' || pendienteDeFecha} cargando={estado === 'cargando'} />
+            <BotonActualizarAhora onClick={() => setIntento((n) => n + 1)} disabled={estado === 'cargando' || estadoPivot === 'cargando' || pendienteDeFecha} cargando={estado === 'cargando' || estadoPivot === 'cargando'} />
             <button
               type="button"
               onClick={descargarExcel}
@@ -524,34 +743,93 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
           <span className="font-semibold text-slate-500">Vista del reporte:</span>
           <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5" role="group" aria-label="Vista del reporte de geocercas">
             {[
-              { id: 'todos', label: 'Todos los campos' },
-              { id: 'division', label: 'Por división' },
+              { id: 'dinamica', label: 'Tabla dinámica', badge: true },
+              { id: 'todos', label: 'Lotes: todos los campos' },
+              { id: 'division', label: 'Lotes: por división' },
             ].map((opcion) => (
               <button
                 key={opcion.id}
                 type="button"
                 onClick={() => setVista(opcion.id)}
                 aria-pressed={vista === opcion.id}
-                className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${
+                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-semibold transition-colors ${
                   vista === opcion.id
                     ? 'bg-forest text-white shadow-sm'
                     : 'text-slate-600 hover:bg-white hover:text-forest'
                 }`}
               >
+                {opcion.badge ? (
+                  <span className={`rounded px-1 py-0.5 text-[9px] font-black uppercase ${
+                    vista === opcion.id ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'
+                  }`}>Nuevo</span>
+                ) : null}
                 {opcion.label}
               </button>
             ))}
           </div>
-          {vista === 'division' ? (
-            <span className="text-slate-400">
-              Geocercas agrupadas por División.
-            </span>
-          ) : null}
-          <span className="ml-auto text-[11px] font-semibold text-amber-700">
-            Las visitas no son sumables entre grupos, las horas sí.
-          </span>
+          {vista === 'dinamica' ? (
+            <>
+              <span className="ml-2 font-semibold text-slate-500">Columnas:</span>
+              <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5" role="group" aria-label="Columnas de la tabla dinámica">
+                {[
+                  { id: 'geocerca', label: 'Cada geocerca' },
+                  { id: 'division', label: 'Por división' },
+                ].map((opcion) => (
+                  <button
+                    key={opcion.id}
+                    type="button"
+                    onClick={() => setColumnas(opcion.id)}
+                    aria-pressed={columnas === opcion.id}
+                    className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${
+                      columnas === opcion.id
+                        ? 'bg-amber-500 text-white shadow-sm'
+                        : 'text-slate-600 hover:bg-white hover:text-amber-700'
+                    }`}
+                  >
+                    {opcion.label}
+                  </button>
+                ))}
+              </div>
+              <span className="ml-2 font-semibold text-slate-500">Valores:</span>
+              <select
+                value={valor}
+                onChange={(e) => setValor(e.target.value)}
+                aria-label="Valor de la tabla dinámica"
+                className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-800 outline-none focus:ring-2 focus:ring-amber-200"
+              >
+                {VALORES_PIVOT.map((opcion) => (
+                  <option key={opcion.id} value={opcion.id}>{opcion.label} (h)</option>
+                ))}
+              </select>
+              <span className="ml-auto font-semibold text-amber-700">
+                Una columna por {columnas === 'division' ? 'división' : 'geocerca'}.
+              </span>
+            </>
+          ) : (
+            <>
+              {vista === 'division' ? (
+                <span className="text-slate-400">Geocercas agrupadas por División.</span>
+              ) : null}
+              <span className="ml-auto text-[11px] font-semibold text-amber-700">
+                Las visitas no son sumables entre grupos, las horas sí.
+              </span>
+            </>
+          )}
         </div>
-        {estado === 'ok' ? (
+        {vista === 'dinamica' ? (
+          estadoPivot === 'ok' ? (
+            <TablaDinamicaLotes permanencias={permanencias} columnasMode={columnas} valor={valor} />
+          ) : (
+            <CuerpoEstado
+              pendienteDeFecha={pendienteDeFecha}
+              mensajePendiente={mensajePendiente}
+              estado={estadoPivot}
+              error={errorPivot}
+              onReintentar={() => setIntento((n) => n + 1)}
+              mensajeVacio={`Sin permanencias en ${rangoTexto || 'el rango elegido'}${opcionFiltro ? ` para ${mostrar === 'grupos' ? 'el grupo' : 'la unidad'} ${opcionFiltro}` : ''}. Prueba con otro día o quitando filtros.`}
+            />
+          )
+        ) : estado === 'ok' ? (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-slate-700">
@@ -646,14 +924,13 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
       <p className="px-4 py-2.5 text-[10px] text-slate-400 border-t border-slate-50 leading-relaxed">
         {fuente === 'real' ? (
           <span className="inline-flex items-center gap-1">
-            <Database size={10} /> Cálculo en SQL con PostGIS sobre public.agrotrack_geocercas + public.agrotrack_posiciones (agrotrack_lotes_flota).
+            <Database size={10} /> Visitas guardadas por día (agrotrack_visitas_día) + Nombre/División (agrotrack_geocercas_reportes) · hora de Perú.
           </span>
         ) : (
           'Aún no hay datos reales para esta empresa.'
         )}
         <span className="block mt-0.5">
-          Punto dentro del polígono (ST_Contains) · tramos ≤ 10 min · haversine con salto ≥ 5 km descartado ·
-          apagado + ralentí + viajando = total en la geocerca · hora de Perú · orden: más tiempo primero.
+          Una fila por máquina, una columna por geocerca/división · valores: duración total, apagado, ralentí o viajando en horas decimales · hora de Perú.
         </span>
       </p>
     </div>
