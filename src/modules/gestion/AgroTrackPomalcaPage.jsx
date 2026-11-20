@@ -1,3 +1,4 @@
+successfully downloaded text file (SHA: 946eac0059792440b9060d7f9fe464132f37c412)
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCheck, X, Bell, RefreshCw, Database, Loader2, AlertTriangle } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
@@ -64,7 +65,12 @@ function SectionHeading({ title, description, children }) {
  * reportes se vean idénticos.
  */
 
-export default function AgroTrackPomalcaPage({ initialSection = 'consola' }) {
+/**
+ * 20/11/2026: la gerencia entra por /gestion/vehiculos-flota sin query string.
+ * El aterrizaje debe ser el reporte de geocercas con la vista por división, no
+ * la consola. Cualquier ?section=... explícito sigue teniendo prioridad.
+ */
+export default function AgroTrackPomalcaPage({ initialSection = 'geocercas' }) {
   const [searchParams] = useSearchParams();
   const { user, empresa_activa_id, empresas_disponibles } = useAuth();
   const empresaActiva = (empresas_disponibles || []).find((empresa) => empresa.id === empresa_activa_id);
