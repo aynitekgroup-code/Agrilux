@@ -1,0 +1,152 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #0F4C3A;
+  --primary-dark: #0B3A2B;
+  --primary-light: #1A5E48;
+  --accent: #f5a623;
+  --earth: #5d4e37;
+  --bg: #F8F9FA;
+  --card: #FFFFFF;
+}
+
+* { box-sizing: border-box; }
+
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+#admin-tabs {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.4) transparent;
+}
+#admin-tabs::-webkit-scrollbar { height: 4px; }
+#admin-tabs::-webkit-scrollbar-track { background: transparent; }
+#admin-tabs::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.4); border-radius: 4px; }
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  background: var(--bg);
+  color: #1a1a1a;
+  -webkit-font-smoothing: antialiased;
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100vh;
+  position: relative;
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
+@media (min-width: 768px) {
+  body {
+    max-width: none;
+    margin: 0;
+  }
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: rgba(248, 250, 248, 0.92);
+  z-index: 0;
+  pointer-events: none;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+}
+
+.fleet-reports-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+}
+
+@media (max-width: 767px) {
+  .fleet-reports-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeIn { animation: fadeIn 0.3s ease forwards; }
+
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(26, 107, 60, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(26, 107, 60, 0); }
+}
+.pulse-green { animation: pulse-green 2s infinite; }
+
+/* Marcadores de unidades: iconos DOM sobre el mapa (siempre encima de las
+   geocercas) con anillo blanco y sombra para resaltar sobre el satélite. */
+.fleet-unidad-icon {
+  background: transparent;
+  border: 0;
+}
+.fleet-unidad-punto {
+  display: block;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border-radius: 9999px;
+  border: 3px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.55);
+}
+.fleet-unidad-icon--activa .fleet-unidad-punto {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.4), 0 1px 4px rgba(15, 23, 42, 0.55);
+}
+
+/* FASE 3.8: tooltip de geocerca (HTML con nombre + chip de grupo) */.fleet-geocerca-tooltip {
+  border: none;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.28);
+  padding: 7px 10px;
+  font-size: 12px;
+  color: #0F172A;
+}
+.fleet-geocerca-tooltip::before { display: none; }
+.fleet-geocerca-tooltip.leaflet-tooltip-top::before {
+  border-top-color: #fff;
+  display: block;
+}
+.fleet-geocerca-tooltip.leaflet-tooltip-bottom::before {
+  border-bottom-color: #fff;
+  display: block;
+}
+
+/* Consola PRINCIPAL y tablas del mapa: scrollbar delgado, redondeado y agarrable */
+.scroll-consola {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5ce transparent;
+}
+.scroll-consola::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.scroll-consola::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-consola::-webkit-scrollbar-thumb {
+  background: #c8d4cd;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.scroll-consola::-webkit-scrollbar-thumb:hover {
+  background: #aabbb1;
+  background-clip: padding-box;
+}

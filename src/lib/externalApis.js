@@ -1,0 +1,229 @@
+/**
+ * src/lib/externalApis.js
+ * Cliente frontend para todas las APIs externas de Agrilux
+ *
+ * Funciones exportadas:
+ *   geocodePlace(query)                        → {lat, lon, name}
+ *   getWeather(lat, lon, label)                → datos clima
+ *   identifyPlantDisease(compressedUrls)       → diagnóstico visual (crop.health → plant.id → HF)
+ *   getSoilData(lat, lon)                      → pH, carbono orgánico, textura
+ *   getNasaAlerts(lat, lon)                    → alertas incendios NASA FIRMS
+ *   getSentinelNDVI(lat, lon, radiusKm)        → imagen NDVI satelital
+ *   sendWhatsApp(telefono, tipo, datos)        → notificación WhatsApp vía Twilio
+ *   getMapboxStaticMap(lat, lon, zoom)         → URL de mapa estático Mapbox
+ */
+
+// ─── Geocodificación ──────────────────────────────────────────────────────────
+export async function geocodePlace(query) {
+  const res = await fetch(`/api/mercadolibre?type=geocode&q=${encodeURIComponent(query)}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'No se pudo geocodificar la ubicación');
+  }
+  return res.json();
+}
+
+// ─── Clima (Open-Meteo gratuito o OpenWeatherMap si tienes key) ───────────────
+export async function getWeather(lat, lon, label = '') {
+  const params = new URLSearchParams({
+    lat: lat.toString(),
+    lon: lon.toString(),
+    label: label,
+  });
+  const res = await fetch(`/api/weather?${params}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error obteniendo clima');
+  }
+  return res.json();
+}
+
+// ─── Pronóstico SENAMHI (scraping del sitio oficial) ────────────────────────
+export async function getPronosticoSENAMHI(lat, lon) {
+  const params = new URLSearchParams({ lat: lat.toString(), lon: lon.toString() });
+  const res = await fetch(`/api/senamhi?${params}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error obteniendo pronóstico SENAMHI');
+  }
+  return res.json();
+}
+
+// ─── Diagnóstico visual de plantas (crop.health → plant.id → HuggingFace) ────
+export async function identifyPlantDisease(compressedUrls) {
+  const res = await fetch('/api/analizar-imagen', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      images: compressedUrls,
+      prompt: 'Identifica la enfermedad o plaga de esta planta. Diagnóstico específico.',
+    }),
+  });
+
+  // 204 = ningún proveedor configurado, no es error crítico
+  if (res.status === 204) return null;
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error en identificación de planta');
+  }
+  return res.json();
+}
+
+// ─── Datos de suelo (SoilGrids ISRIC — 100% gratuito) ────────────────────────
+export async function getSoilData(lat, lon) {
+  const res = await fetch(
+    `/api/soil-nasa?action=soil&lat=${lat}&lon=${lon}`
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error obteniendo datos de suelo');
+  }
+  return res.json();
+}
+
+// ─── Alertas NASA FIRMS (incendios y anomalías de vegetación) ─────────────────
+export async function getNasaAlerts(lat, lon) {
+  const res = await fetch(
+    `/api/soil-nasa?action=nasa&lat=${lat}&lon=${lon}`
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error obteniendo alertas NASA');
+  }
+  return res.json();
+}
+
+// ─── Índices satelitales: NDVI, MSAVI2, NDRE (Sentinel Hub ESA) ───────────────
+export async function getSentinelNDVI(lat, lon, radiusKm = 2, opts = {}) {
+  const options = typeof opts === 'string' ? { cultivo: opts } : opts;
+  const {
+    cultivo = '',
+    dias = 0,
+    parcelaId = '',
+    coordenadas = null,
+  } = options;
+
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lon: String(lon),
+    radius: String(radiusKm),
+    dias: String(dias),
+  });
+  if (cultivo) params.set('cultivo', cultivo);
+  if (parcelaId) params.set('parcelaId', parcelaId);
+  if (coordenadas?.length >= 3) {
+    params.set('coordenadas', JSON.stringify(coordenadas));
+  }
+  const res = await fetch(`/api/sentinel?${params}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error obteniendo imagen satelital');
+  }
+  return res.json();
+}
+
+// ─── Mapbox — mapa estático centrado en parcela ───────────────────────────────
+/**
+ * Genera URL de imagen estática de Mapbox (sin backend, solo token público)
+ * El token VITE_MAPBOX_TOKEN es público por diseño de Mapbox
+ *
+ * @param {number} lat
+ * @param {number} lon
+ * @param {number} zoom  - 13 ≈ parcela, 10 ≈ distrito
+ * @param {string} size  - "400x300" (WxH en px)
+ */
+export function getMapboxStaticMap(lat, lon, zoom = 13, size = '400x250') {
+  const token = import.meta.env.VITE_MAPBOX_TOKEN;
+  if (!token) {
+    console.warn('VITE_MAPBOX_TOKEN no configurado');
+    return null;
+  }
+
+  // Pin rojo en la parcela
+  const marker = `pin-l-leaf+00aa44(${lon},${lat})`;
+
+  return `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/${marker}/${lon},${lat},${zoom},0/${size}@2x?access_token=${token}`;
+}
+
+/**
+ * URL de mapa interactivo de Mapbox para abrir en navegador
+ * (sin necesidad de token para el enlace básico)
+ */
+export function getMapboxExploreUrl(lat, lon, zoom = 13) {
+  return `https://www.mapbox.com/maps/satellite?latlng=${lat},${lon}&zoom=${zoom}`;
+}
+
+// ─── Recomendaciones del ciclo del cultivo (IA) ──────────────────────────────
+export async function getCicloRecomendaciones(data) {
+  const res = await fetch('/api/ciclo-recomendaciones', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error obteniendo recomendaciones del ciclo');
+  }
+  return res.json();
+}
+
+// ─── SENAMHI — Clima real de Perú + pronóstico agrícola ─────────────────────
+export async function getClimaSenamhi(lat, lon) {
+  const res = await fetch(`/api/senamhi?lat=${lat}&lon=${lon}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error obteniendo datos SENAMHI');
+  }
+  return res.json();
+}
+
+// ─── Pronóstico 16 días para predicción de plagas (Open-Meteo gratuito) ──────
+export async function getPronosticoPlagas(lat, lon) {
+  const params = new URLSearchParams({
+    latitude: lat.toString(),
+    longitude: lon.toString(),
+    daily: 'temperature_2m_max,temperature_2m_min,relative_humidity_2m_max,relative_humidity_2m_min,precipitation_sum,wind_speed_10m_max',
+    current: 'temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m',
+    timezone: 'auto',
+    forecast_days: '16',
+  });
+  const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+  if (!res.ok) throw new Error('Error obteniendo pronóstico de plagas');
+  const data = await res.json();
+
+  const pronostico = (data.daily?.time || []).map((fecha, i) => ({
+    fecha,
+    temp: Math.round(((data.daily.temperature_2m_max[i] + data.daily.temperature_2m_min[i]) / 2) * 10) / 10,
+    humedad: Math.round(((data.daily.relative_humidity_2m_max[i] + data.daily.relative_humidity_2m_min[i]) / 2)),
+    lluvia: Math.round((data.daily.precipitation_sum[i] || 0) * 10) / 10,
+    viento: Math.round((data.daily.wind_speed_10m_max[i] || 0) * 10) / 10,
+  }));
+
+  const climaActual = data.current ? {
+    temp: data.current.temperature_2m,
+    humedad: data.current.relative_humidity_2m,
+    lluvia: data.current.precipitation,
+    viento: data.current.wind_speed_10m,
+  } : pronostico[0] || {};
+
+  return { pronostico, climaActual };
+}
+
+// ─── Buscar insumos — tiendas locales + redes sociales ──────────────────────
+export async function buscarInsumos({ lat, lon, producto, cultivo, ubicacion, radio = 30 }) {
+  const params = new URLSearchParams({
+    lat: (lat || -12.05).toString(),
+    lon: (lon || -77.04).toString(),
+    producto: producto || '',
+    cultivo: cultivo || '',
+    ubicacion: ubicacion || '',
+    radio: radio.toString(),
+  });
+  const res = await fetch(`/api/buscar-insumos?${params}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error buscando insumos');
+  }
+  return res.json();
+}

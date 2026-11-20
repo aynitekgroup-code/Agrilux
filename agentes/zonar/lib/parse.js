@@ -1,0 +1,254 @@
+/**
+ * agentes/zonar/lib/parse.js
+ * Lógica de lectura de reportes de Zonar — copia autocontenida de
+ * src/lib/agrotrackParse.js (para poder copiar esta carpeta a la PC de Carlos
+ * sin el repo completo). La pariedad con el importador web está garantizada por
+ * tests/agenteZonarParidad.test.mjs: si cambia uno, cambian los dos o el test
+ * falla.
+ *
+ * Además agrega la ruta que solo usa el agente: transformar el JSON del
+ * endpoint GetUnitsHistory en filas de agrotrack_posiciones con el MISMO
+ * source_key que produciría la importación manual del Excel, de modo que las
+ * cargas del agente y las manuales colisionen en el upsert y no se dupliquen.
+ */
+
+export const PERU_OFFSET = '-05:00'; // Zonar exporta la hora local sin zona horaria.
+
+export const MONTHS = {
+  jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+  jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+  ene: '01', abr: '04', ago: '08', set: '09', dic: '12',
+};
+
+export function normalizeHeader(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+// "Nov 01 2026 12:01 AM" -> "2026-11-01T00:01:00-05:00"
+export function parseFechaZonar(value) {
+  // 18/11/2026: además del texto en inglés de Zonar se aceptan los formatos
+  // que aparecen cuando el reporte sale con la interfaz en español o cuando
+  // el archivo se abrió y guardó en Excel (antes esas filas se descartaban
+  // como "faltan unidad, fecha o evento"):
+  //   "12/11/2026 04:00 p. m." · "12/11/2026 16:00:05" · "2026-11-12 16:00"
+  //   "12 nov 2026 04:00 PM"  · número de serie de Excel (46338.6666)
+  if (value instanceof Date) return fechaDesdePartes(value.getFullYear(), value.getMonth() + 1, value.getDate(), value.getHours(), value.getMinutes(), value.getSeconds());
+  if (typeof value === 'number') return fechaDesdeSerialExcel(value);
+  const text = String(value ?? '').trim().replace(/\s+/g, ' ');
+  if (!text) return null;
+  if (/^\d{5}(\.\d+)?$/.test(text)) return fechaDesdeSerialExcel(Number(text));
+
+  const ampm = '(?:\\s*([AaPp])\\.?\\s*[Mm]\\.?)?';
+  const hora = `(\\d{1,2}):(\\d{2})(?::(\\d{2}))?${ampm}`;
+
+  // "Nov 01 2026 12:01 AM" (inglés, el de siempre)
+  let m = text.match(new RegExp(`^([A-Za-z]{3})[a-z]*\\.?\\s+(\\d{1,2}),?\\s+(\\d{4})\\s+${hora}$`));
+  if (m && MONTHS[m[1].toLowerCase()]) {
+    return fechaDesdePartes(m[3], MONTHS[m[1].toLowerCase()], m[2], ajustarHora(m[4], m[7]), m[5], m[6]);
+  }
+  // "12 nov 2026 04:00 PM" / "12-nov-2026 16:00"
+  m = text.match(new RegExp(`^(\\d{1,2})[\\s-]([A-Za-z]{3})[a-z]*\\.?[\\s-](\\d{4})\\s+${hora}$`));
+  if (m && MONTHS[m[2].toLowerCase()]) {
+    return fechaDesdePartes(m[3], MONTHS[m[2].toLowerCase()], m[1], ajustarHora(m[4], m[7]), m[5], m[6]);
+  }
+  // "2026-11-12 16:00[:05]" (con espacio; el ISO con "T" lo resuelve el
+  // agente según su modo de fecha)
+  m = text.match(new RegExp(`^(\\d{4})-(\\d{1,2})-(\\d{1,2}) ${hora}$`));
+  if (m) return fechaDesdePartes(m[1], m[2], m[3], ajustarHora(m[4], m[7]), m[5], m[6]);
+  // "12/11/2026 04:00 p. m." -> en Perú siempre DÍA/MES/AÑO
+  m = text.match(new RegExp(`^(\\d{1,2})[/.-](\\d{1,2})[/.-](\\d{4}),?\\s+${hora}$`));
+  if (m) return fechaDesdePartes(m[3], m[2], m[1], ajustarHora(m[4], m[7]), m[5], m[6]);
+  return null;
+}
+
+function ajustarHora(h, ap) {
+  let hour = Number(h);
+  if (ap) {
+    hour %= 12;
+    if (ap.toLowerCase() === 'p') hour += 12;
+  }
+  return hour;
+}
+
+function fechaDesdePartes(y, mo, d, h, mi, s) {
+  const n = (x) => String(Number(x || 0)).padStart(2, '0');
+  const anio = Number(y);
+  const mes = Number(mo);
+  const dia = Number(d);
+  if (!(anio >= 2000 && anio <= 2100) || !(mes >= 1 && mes <= 12) || !(dia >= 1 && dia <= 31)) return null;
+  if (!(Number(h) >= 0 && Number(h) <= 23) || !(Number(mi) >= 0 && Number(mi) <= 59) || !(Number(s || 0) >= 0 && Number(s || 0) <= 59)) return null;
+  // Zonar exporta con minutos; si no hay segundos el resultado es idéntico al
+  // de siempre ("...:00-05:00") y el source_key no cambia.
+  return `${anio}-${n(mes)}-${n(dia)}T${n(h)}:${n(mi)}:${n(s)}${PERU_OFFSET}`;
+}
+
+// Número de serie de Excel (días desde 1899-12-30), leído como hora de Perú.
+function fechaDesdeSerialExcel(serial) {
+  if (!Number.isFinite(serial) || serial < 36526 || serial > 73050) return null; // 2000..2099
+  const ms = Math.round((serial - 25569) * 86400 * 1000);
+  const t = new Date(ms);
+  return fechaDesdePartes(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate(), t.getUTCHours(), t.getUTCMinutes(), t.getUTCSeconds());
+}
+
+// "BPH-767/SEGURIDAD" -> { placa: "BPH-767", descripcion: "SEGURIDAD" }
+export function separarUnidad(unidad) {
+  const text = String(unidad ?? '').trim();
+  const slash = text.indexOf('/');
+  const placa = (slash === -1 ? text : text.slice(0, slash)).trim().toUpperCase();
+  const descripcion = slash === -1 ? null : text.slice(slash + 1).trim() || null;
+  return { placa, descripcion };
+}
+
+export function cleanText(value) {
+  const text = String(value ?? '').trim();
+  return text === '' ? null : text;
+}
+
+export function numberOrNull(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return null;
+  const parsed = Number(String(value).replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Misma clave de deduplicación que el importador web (agrotrack_posiciones). */
+export function armarSourceKey(placa, fecha, evento, latitud, longitud) {
+  return [placa, fecha, evento, Number(latitud).toFixed(7), Number(longitud).toFixed(7)].join('|');
+}
+
+/* ── Ruta propia del agente: JSON de GetUnitsHistory -> fila ──────────────── */
+
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+/** Instante epoch (ms) -> "YYYY-MM-DDTHH:mm:ss-05:00" en hora de Perú. */
+function isoPeruDesdeMs(ms) {
+  const t = new Date(ms - 5 * 3600 * 1000); // resto 5h y leo como UTC = hora de Perú
+  return `${t.getUTCFullYear()}-${pad2(t.getUTCMonth() + 1)}-${pad2(t.getUTCDate())}`
+    + `T${pad2(t.getUTCHours())}:${pad2(t.getUTCMinutes())}:${pad2(t.getUTCSeconds())}${PERU_OFFSET}`;
+}
+
+function normalizarOffset(tz) {
+  if (tz === 'Z') return 'Z';
+  const m = tz.match(/^([+-])(\d{2}):?(\d{2})$/);
+  return m ? `${m[1]}${m[2]}:${m[3]}` : tz;
+}
+
+/**
+ * Normaliza la fecha que trae cada marcador de GetUnitsHistory al MISMO formato
+ * que produce parseFechaZonar desde el Excel ("...-05:00"), para que el
+ * source_key coincida con las cargas manuales.
+ *
+ * Formatos aceptados:
+ *   - "Nov 09 2026 11:58 PM"   (texto del Excel; hora de Perú tal cual)
+ *   - "/Date(1781234567890)/"  (WCF clásico; instante UTC)
+ *   - "2026-11-09T23:58:00"    (ISO sin zona; asumida hora de Perú, o UTC si
+ *                               fechaModo === 'utc')
+ *   - "2026-11-09T23:58:00Z" / con offset (instante real -> convertido a Perú)
+ *   - epoch en segundos o milisegundos
+ *
+ * @param {*} valor
+ * @param {'auto'|'local'|'utc'} [modo] manejo de los ISO sin zona ('auto' = local)
+ */
+export function fechaDesdeJsonZonar(valor, modo = 'auto') {
+  if (valor === null || valor === undefined || valor === '') return null;
+
+  if (typeof valor === 'number' && Number.isFinite(valor)) {
+    const ms = Math.abs(valor) > 1e12 ? valor : valor * 1000;
+    return isoPeruDesdeMs(ms);
+  }
+
+  const texto = String(valor).trim();
+
+  const dotnet = texto.match(/^\/Date\((\d+)(?:[+-]\d{4})?\)\/$/);
+  if (dotnet) return isoPeruDesdeMs(Number(dotnet[1]));
+
+  // Texto del reporte de Zonar: la hora que muestra Zonar es la de Perú.
+  const excel = parseFechaZonar(texto);
+  if (excel) return excel;
+
+  // "11/15/2026 11:58:27 PM" — formato real de GetUnitsHistory (mes/día/año,
+  // con o sin segundos). La hora que muestra Zonar es la de Perú.
+  const slash = texto.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp])\.?\s*[Mm]\.?$/,
+  );
+  if (slash) {
+    let [, mes, dia, anio, hora, min, seg, ampm] = slash;
+    if (+mes > 12 && +dia <= 12) [mes, dia] = [dia, mes]; // por si viene D/M/A
+    let h = +hora % 12;
+    if (ampm.toLowerCase() === 'p') h += 12;
+    return `${anio}-${pad2(+mes)}-${pad2(+dia)}T${pad2(h)}:${min}:${seg || '00'}${PERU_OFFSET}`;
+  }
+
+  // "nov. 16 2026 8:13:27 p. m." — mes abreviado en español con segundos
+  // (aparece en la sesión en español; parseFechaZonar no acepta segundos).
+  const espanol = texto.match(
+    /^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})\s+(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp])\.?\s*[Mm]\.?$/,
+  );
+  if (espanol) {
+    const month = MONTHS[espanol[1].toLowerCase()];
+    if (month) {
+      let h = +espanol[4] % 12;
+      if (espanol[7].toLowerCase() === 'p') h += 12;
+      return `${espanol[3]}-${month}-${pad2(+espanol[2])}T${pad2(h)}:${espanol[5]}:${espanol[6] || '00'}${PERU_OFFSET}`;
+    }
+  }
+
+  const iso = texto.match(
+    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?\s*(Z|[+-]\d{2}:?\d{2})?$/,
+  );
+  if (iso) {
+    const [, y, mo, d, h, mi, s, tz] = iso;
+    if (tz) {
+      const instant = Date.parse(`${y}-${mo}-${d}T${h}:${mi}:${s || '00'}${normalizarOffset(tz)}`);
+      return Number.isNaN(instant) ? null : isoPeruDesdeMs(instant);
+    }
+    if (modo === 'utc') return isoPeruDesdeMs(Date.UTC(+y, +mo - 1, +d, +h, +mi, +(s || 0)));
+    return `${y}-${mo}-${d}T${h}:${mi}:${s || '00'}${PERU_OFFSET}`;
+  }
+
+  return null;
+}
+
+/**
+ * Convierte un marcador de GetUnitsHistory en fila de agrotrack_posiciones
+ * (mismos campos, validaciones y source_key que buildRow del importador web).
+ * @returns {{row: object}|{error: string}}
+ */
+export function armarFilaZonar(marcador, empresaId, userId, { fechaModo = 'auto' } = {}) {
+  // `||` y no `??`: si el campo viene como cadena vacía, usamos el respaldo.
+  const unidad = String(marcador?.Unit || marcador?.MarkerName || '').trim();
+  const { placa, descripcion } = separarUnidad(unidad);
+  const fecha = fechaDesdeJsonZonar(marcador?.LastEventDate || marcador?.Date, fechaModo);
+  const latitud = numberOrNull(marcador?.Latitude);
+  const longitud = numberOrNull(marcador?.Longitude);
+  const evento = cleanText(marcador?.Event);
+
+  if (!placa || !fecha || !evento) return { error: 'faltan unidad, fecha o evento' };
+  if (latitud === null || longitud === null || Math.abs(latitud) > 90 || Math.abs(longitud) > 180) {
+    return { error: 'coordenadas inválidas' };
+  }
+
+  return {
+    row: {
+      empresa_id: empresaId,
+      placa,
+      unidad,
+      descripcion,
+      fecha,
+      secuencia: numberOrNull(marcador?.Sequence),
+      evento,
+      pt_referencia: cleanText(marcador?.Landmark),
+      direccion: cleanText(marcador?.Address),
+      velocidad: numberOrNull(marcador?.Speed),
+      latitud,
+      longitud,
+      source_key: armarSourceKey(placa, fecha, evento, latitud, longitud),
+      creado_por: userId || null,
+    },
+  };
+}

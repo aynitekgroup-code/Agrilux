@@ -1,0 +1,327 @@
+import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Camera, Leaf, Calendar, ClipboardList, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle, Download, BookOpen, Trash2, Users, Building } from 'lucide-react';
+import { useAuth } from '../lib/AuthContext';
+import { supabase } from '../lib/supabase';
+import SelectorUbicacion from './SelectorUbicacion';
+import OnlineStatus from './OnlineStatus';
+import AgentStatus from './AgentStatus';
+
+const navItems = [
+  { path: '/',        icon: Camera,  label: 'Diagnóstico' },
+  { path: '/ciclo',   icon: Calendar, label: 'Ciclo' },
+  { path: '/parcela', icon: Leaf,    label: 'Parcela' },
+  { path: '/gestion', icon: ClipboardList, label: 'Gestión' },
+];
+
+export default function Layout({ children }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user, logout, empresa_activa_id, empresas_disponibles, setEmpresaActiva } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [mostrarUbicacion, setMostrarUbicacion] = useState(false);
+  const [adminModal, setAdminModal] = useState(false);
+  const [adminClave, setAdminClave] = useState('');
+  const [adminError, setAdminError] = useState('');
+  const [modalClave, setModalClave] = useState(false);
+  const [claveEmail, setClaveEmail] = useState('');
+  const [claveLoading, setClaveLoading] = useState(false);
+  const [claveExito, setClaveExito] = useState(false);
+  const [claveError, setClaveError] = useState('');
+  const [adminIntentos, setAdminIntentos] = useState(0);
+  const adminBloqueado = adminIntentos >= 5;
+
+  const ADMIN_EMAIL = 'aynitek.group@gmail.com';
+  const esAdmin = user?.email === ADMIN_EMAIL;
+
+  const handleLogout = async () => {
+    await logout();
+    setMenuOpen(false);
+    navigate('/');
+  };
+
+  const handleActuarAdmin = () => {
+    setMenuOpen(false);
+    setAdminClave('');
+    setAdminError('');
+    setAdminModal(true);
+  };
+
+  const handleAdminLogin = async () => {
+    if (adminBloqueado) { setAdminError('Demasiados intentos. Espera unos minutos.'); return; }
+    try {
+      const res = await fetch('/api/alertas-preventivas?type=auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clave: adminClave }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        sessionStorage.setItem('agrilux_admin_token', data.token || Date.now().toString());
+        setAdminModal(false);
+        navigate('/admin');
+      } else {
+        setAdminIntentos(prev => prev + 1);
+        setAdminError('Clave incorrecta');
+      }
+    } catch {
+      setAdminError('Error de conexión');
+    }
+  };
+
+  const enviarRecuperacion = async () => {
+    if (!claveEmail.trim()) { setClaveError('Ingresa tu correo'); return; }
+    setClaveLoading(true);
+    setClaveError('');
+    setClaveExito(false);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(claveEmail.trim());
+      if (error) throw error;
+      setClaveExito(true);
+    } catch (e) {
+      const msg = e.message || '';
+      if (msg.includes('not found')) {
+        setClaveError('No existe una cuenta con ese correo');
+      } else if (msg.includes('invalid')) {
+        setClaveError('Correo inválido');
+      } else {
+        setClaveError('Error al enviar. Intenta de nuevo.');
+      }
+    }
+    setClaveLoading(false);
+  };
+
+  return (
+    <div className="flex flex-col min-h-screen max-w-[430px] mx-auto">
+      <OnlineStatus />
+      <div className="flex justify-between items-center px-4 py-0.3 bg-white border-b border-gray-100 sticky top-0 z-40">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="text-sm font-semibold text-gray-700 truncate">
+            {user?.nombre ? (
+              `Hola, ${user.nombre.split(' ')[0]}`
+            ) : (
+              <img
+                src="/icons/Agrilux.logo.sinfondo.png"
+                alt="Logo Agrilux"
+                className="w-23 h-24 object-contain"
+              />
+            )}
+          </div>
+        </div>
+        <div className="relative flex items-center gap-1">
+          <button
+            onClick={() => navigate('/descargar')}
+            title="Descargar app sin Play Store"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[#1a6b3c] text-white rounded-full text-xs font-bold hover:bg-[#14522e] transition-colors"
+          >
+            <Download size={14} /> Descargar
+          </button>
+          <button
+            onClick={() => navigate('/descargar')}
+            title="Descargar app"
+            className="sm:hidden p-2 bg-[#1a6b3c]/10 text-[#1a6b3c] rounded-lg hover:bg-[#1a6b3c]/20 transition-colors"
+          >
+            <Download size={18} />
+          </button>
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            {menuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+          {menuOpen && (
+            <div className="absolute top-full right-0 mt-2 w-56 max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain bg-white rounded-lg shadow-lg border border-gray-100 z-50">
+              <button
+                onClick={() => { setMenuOpen(false); setMostrarUbicacion(true); }}
+                className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg">
+                <MapPin size={18} />
+                Cambiar ubicación
+              </button>
+              {user && (
+                <>
+                  <div className="border-t border-gray-100 pt-3 mb-2"></div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 px-4">Empresa</h3>
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      navigate('/empresa/miembros');
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg"
+                  >
+                    <Users size={18} />
+                    Trabajadores de empresa
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => { setMenuOpen(false); navigate('/descargar'); }}
+                className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg">
+                <Download size={18} />
+                Descargar app
+                <span className="ml-auto text-[10px] font-black bg-[#1a6b3c] text-white px-1.5 py-0.5 rounded">SIN PLAY STORE</span>
+              </button>
+              <a
+                href="/icons/Manual_de_uso_Agrilux_mejorado.pdf"
+                onClick={() => setMenuOpen(false)}
+                className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg">
+                <BookOpen size={18} />
+                Manual usuario
+              </a>
+              {user && (
+                <button
+                  type="button"
+                  onClick={() => { setMenuOpen(false); navigate('/eliminar-cuenta'); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors text-sm font-medium rounded-lg">
+                  <Trash2 size={18} />
+                  Eliminar cuenta
+                </button>
+              )}
+              {user ? (
+                <>
+                  <button
+                    onClick={() => { setMenuOpen(false); setClaveEmail(user.email || ''); setModalClave(true); setClaveExito(false); setClaveError(''); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-amber-50 hover:text-amber-700 transition-colors text-sm font-medium rounded-lg">
+                    <Key size={18} />
+                    Cambiar contraseña
+                  </button>
+                  {esAdmin && (
+                    <button
+                      onClick={handleActuarAdmin}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors text-sm font-medium rounded-lg">
+                      <Shield size={18} />
+                      Actuar como administrador
+                    </button>
+                  )}
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors text-sm font-medium rounded-lg">
+                    <LogOut size={18} />
+                    Cerrar sesión
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => { setMenuOpen(false); navigate('/registro'); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-primary/5 transition-colors text-sm font-medium rounded-lg">
+                  <User size={18} />
+                  Iniciar sesión
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <main className="flex-1 pb-28 overflow-y-auto">
+        <div className="px-4 pt-2">
+          <AgentStatus />
+        </div>
+        {children}
+      </main>
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-gray-100 shadow-lg z-50">
+        <div className="flex">
+          {navItems.map(({ path, icon: Icon, label }) => {
+            const active = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
+            return (
+              <button key={path} onClick={() => {
+                  if (!user && (path === '/parcela' || path === '/ciclo' || path === '/gestion')) {
+                    navigate('/registro');
+                  } else {
+                    navigate(path);
+                  }
+                }}
+                className={`flex-1 flex flex-col items-center py-2.5 gap-0.5 transition-colors ${active ? 'text-primary' : 'text-gray-400'}`}>
+                <Icon size={22} strokeWidth={active ? 2.5 : 1.8} />
+                <span className="text-[10px] font-medium">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      {mostrarUbicacion && (
+        <div className="fixed inset-0 z-50 bg-white/95 flex items-center justify-center" style={{ backdropFilter: 'blur(4px)' }}>
+          <div className="w-full max-w-[430px] mx-auto relative">
+            <SelectorUbicacion esPrimeraVez={false} onClose={() => setMostrarUbicacion(false)} />
+          </div>
+        </div>
+      )}
+
+      {adminModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setAdminModal(false)}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-800 mb-1 flex items-center gap-2">
+              <Shield size={20} className="text-blue-600" />
+              Acceso administrador
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">Ingresa la clave de administrador:</p>
+            <input
+              type="password"
+              value={adminClave}
+              onChange={e => { setAdminClave(e.target.value); setAdminError(''); }}
+              onKeyDown={e => e.key === 'Enter' && handleAdminLogin()}
+              placeholder="Clave..."
+              className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            />
+            {adminError && <p className="text-red-500 text-xs mt-1">{adminError}</p>}
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setAdminModal(false)} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Cancelar</button>
+              <button onClick={handleAdminLogin} className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">Entrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalClave && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setModalClave(false)}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-800 mb-1 flex items-center gap-2">
+              <Key size={20} className="text-amber-600" />
+              Cambiar contraseña
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Te enviaremos un enlace a tu correo para restablecer la contraseña.
+            </p>
+
+            {claveExito ? (
+              <div className="text-center py-4">
+                <CheckCircle size={48} className="text-green-500 mx-auto mb-3" />
+                <p className="text-sm font-semibold text-gray-800">Correo enviado</p>
+                <p className="text-xs text-gray-500 mt-1">Revisa tu bandeja de entrada y sigue las instrucciones.</p>
+              </div>
+            ) : (
+              <>
+                <label className="text-xs font-semibold text-gray-600 block mb-1">Correo electrónico</label>
+                <input
+                  type="email"
+                  value={claveEmail}
+                  onChange={e => { setClaveEmail(e.target.value); setClaveError(''); }}
+                  placeholder="tu@email.com"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                />
+                {claveError && <p className="text-red-500 text-xs mt-1">{claveError}</p>}
+              </>
+            )}
+
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setModalClave(false)} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">
+                {claveExito ? 'Cerrar' : 'Cancelar'}
+              </button>
+              {!claveExito && (
+                <button
+                  onClick={enviarRecuperacion}
+                  disabled={claveLoading || !claveEmail.trim()}
+                  className="flex-1 py-2.5 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {claveLoading ? <><Loader2 size={14} className="animate-spin" /> Enviando...</> : 'Enviar enlace'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

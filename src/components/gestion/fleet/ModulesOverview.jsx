@@ -1,0 +1,124 @@
+import { Truck, MapPin, Fuel, Bell, Database, Link2, GitBranch } from 'lucide-react';
+import { modules } from '../../../mocks/agrotrackData';
+
+const ICONS = {
+  truck: Truck,
+  map: MapPin,
+  fuel: Fuel,
+  bell: Bell,
+  database: Database,
+};
+
+const nombreDe = (id) => {
+  const found = modules.find((m) => m.id === id);
+  return found ? found.nombre : id;
+};
+
+/**
+ * Esquema funcional de AgroTrack. Por defecto muestra los cuatro módulos;
+ * `modulos` permite limitarlo a los que corresponden a la sección actual
+ * (p. ej. ['flota', 'alertas'] en Reportes, ['geocercas'] en Geocercas,
+ * ['combustible'] en Control de combustible).
+ */
+export default function ModulesOverview({ modulos = null, selectedId, onSelect }) {
+  const visibles = modulos ? modules.filter((m) => modulos.includes(m.id)) : modules;
+  const selected = visibles.find((m) => m.id === selectedId) || visibles[0] || null;
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-5">
+        <div className="flex flex-wrap items-start gap-2">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">Esquema funcional de AgroTrack</h2>
+            <p className="text-xs text-slate-500">Vehículos y conductores en Flota; recorridos y telemetría en Geocercas y rutas.</p>
+          </div>
+          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide">
+            <GitBranch size={12} /> Arquitectura modular
+          </span>
+        </div>
+
+        {visibles.length > 1 ? (
+          <div className="mt-4 flex flex-wrap items-center gap-1.5">
+            {visibles.map((m) => {
+              const Icon = ICONS[m.icon] || Database;
+              const active = m.id === selectedId;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => onSelect(m.id)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+                    active ? 'bg-forest text-white' : 'bg-slate-50 text-slate-600 hover:text-forest'
+                  }`}
+                >
+                  <Icon size={13} />
+                  {m.nombre}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${visibles.length > 2 ? 'xl:grid-cols-4' : 'xl:grid-cols-2'}`}>
+        {visibles.map((m) => {
+          const Icon = ICONS[m.icon] || Database;
+          const active = m.id === selectedId;
+          return (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onSelect(m.id)}
+              className={`text-left bg-white rounded-2xl border shadow-sm p-4 transition-all ${
+                active ? 'border-forest ring-1 ring-forest/20' : 'border-slate-100 hover:border-slate-200'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${active ? 'bg-forest text-white' : 'bg-emerald-50 text-emerald-700'}`}>
+                  <Icon size={17} />
+                </span>
+              </div>
+              <p className="mt-2 text-sm font-bold text-slate-900">{m.nombre}</p>
+              <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{m.descripcion}</p>
+              <p className="mt-2 text-[10px] font-mono text-slate-400 truncate">{m.tabla}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      {selected ? (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Detalle del módulo</span>
+            <span className="rounded-full bg-forest text-white px-2.5 py-0.5 text-[11px] font-semibold">{selected.nombre}</span>
+            <span className="ml-auto font-mono text-[11px] text-slate-400">{selected.tabla}</span>
+          </div>
+          <p className="text-sm text-slate-600 mt-2">{selected.descripcion}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+              <Link2 size={13} /> Depende de:
+            </span>
+            {selected.depende_de.length === 0 ? (
+              <span className="text-[11px] text-slate-400">Módulo base</span>
+            ) : (
+              selected.depende_de.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onSelect(id)}
+                  className="rounded-full border border-slate-200 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest"
+                >
+                  {nombreDe(id)}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      <p className="text-[11px] text-slate-400 px-1">
+        Los mocks viven en <span className="font-mono">src/mocks/agrotrackData.js</span> con nombres de campos alineados a futuras tablas PostgreSQL.
+      </p>
+    </div>
+  );
+}

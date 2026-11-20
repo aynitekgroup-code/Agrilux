@@ -1,0 +1,7 @@
+# Credenciales y datos de corrida: NUNCA se suben al repo.
+config.json
+node_modules/
+logs/
+descargas/
+descubrimiento/
+estado.json

@@ -1,0 +1,500 @@
+/**
+ * src/lib/exportExcel.js
+ * Exporta datos de parcelas y diagnósticos a Excel
+ */
+import * as XLSX from 'xlsx';
+import { etiquetaPeriodoReporte, formatearFechaHora, formatearFechaLarga, clasificarEstado } from './agrotrackFlota';
+import { calcularEventosResumidos, totalesEventosResumidos, formatearHMS } from './agrotrackEventosResumidos';
+import { STATUS_META } from '../components/gestion/fleet/fleetTokens';
+import { normalizarDivision } from './agrotrackDivisiones';
+
+export function exportarParcelasExcel(parcelas, registros) {
+  const wb = XLSX.utils.book_new();
+
+  // Hoja de parcelas
+  const datosParcelas = parcelas.map(p => ({
+    'Nombre': p.nombre,
+    'Cultivo': p.cultivo_nombre || p.cultivo,
+    'Variedad': p.variedad || '-',
+    'Área (ha)': p.area || '-',
+    'Fecha siembra': p.fecha_siembra || '-',
+    'Días desde siembra': p.fecha_siembra
+      ? Math.floor((new Date() - new Date(p.fecha_siembra)) / (1000 * 60 * 60 * 24))
+      : '-',
+    'Puntos mapeados': p.coordenadas?.length || 0,
+    'Estado': 'Activa',
+  }));
+  const wsParcelas = XLSX.utils.json_to_sheet(datosParcelas);
+  wsParcelas['!cols'] = [
+    { wch: 25 }, { wch: 18 }, { wch: 15 }, { wch: 12 },
+    { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 },
+  ];
+  XLSX.utils.book_append_sheet(wb, wsParcelas, 'Parcelas');
+
+  // Hoja de registros de monitoreo
+  if (registros?.length > 0) {
+    const datosRegistros = registros.map(r => ({
+      'Fecha': r.fecha ? new Date(r.fecha).toLocaleDateString('es-PE') : '-',
+      'Parcela ID': r.parcelaId,
+      'Días desde siembra': r.diasDesdeSiembra || '-',
+      'Recomendación': r.recomendacion || '-',
+    }));
+    const wsRegistros = XLSX.utils.json_to_sheet(datosRegistros);
+    wsRegistros['!cols'] = [
+      { wch: 15 }, { wch: 25 }, { wch: 15 }, { wch: 60 },
+    ];
+    XLSX.utils.book_append_sheet(wb, wsRegistros, 'Monitoreos');
+  }
+
+  XLSX.writeFile(wb, `Agrilux_Parcelas_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+export function exportarDiagnosticoExcel(diagnosticos) {
+  const wb = XLSX.utils.book_new();
+
+  const datos = diagnosticos.map(d => ({
+    'Fecha': d.fecha ? new Date(d.fecha).toLocaleDateString('es-PE') : '-',
+    'Cultivo': d.cultivo || '-',
+    'Plaga/Enfermedad': d.plaga || d.diagnostico?.split('\n')[0] || '-',
+    'Diagnóstico completo': d.diagnostico || '-',
+    'Recomendación': d.recomendacion || '-',
+    'Ubicación': d.ubicacion || '-',
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(datos);
+  ws['!cols'] = [
+    { wch: 15 }, { wch: 18 }, { wch: 25 }, { wch: 60 }, { wch: 60 }, { wch: 20 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'Diagnósticos');
+
+  XLSX.writeFile(wb, `Agrilux_Diagnosticos_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+function horas(segundos) {
+  return Math.round((Number(segundos || 0) / 3600) * 100) / 100;
+}
+
+/**
+ * Reporte de actividad de flota (FASE 3) a Excel, con las mismas columnas de
+ * la consola y una hoja de criterio para que el archivo se entienda solo.
+ * @param {Array} filas  filas de agrotrack_actividad_flota
+ * @param {{modo?: string, rangoTexto?: string, placa?: string}} opciones
+ */
+export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', placa = '' } = {}) {
+  const wb = XLSX.utils.book_new();
+
+  const datos = (filas || []).map((f) => {
+    const encendido = Number(f.encendido_segundos || 0);
+    const ralenti = Number(f.ralenti_segundos || 0);
+    return {
+      'Período': etiquetaPeriodoReporte(f, modo),
+      'Placa': f.placa,
+      'Unidad': f.unidad || f.placa,
+      'Recorrido (km)': Number(f.km_recorridos || 0),
+      // "Encendido" se quitó (7:47 a. m.): duplicaba "Horas prendido"
+      // (encendido = viaje + ralentí, criterio único del reporte).
+      'Horas prendido (h)': horas(Number(f.viaje_segundos || 0) + Number(f.ralenti_segundos || 0)),
+      'Hora de viaje (h)': horas(f.viaje_segundos),
+      'Ralentí (h)': horas(ralenti),
+      '% ralentí': encendido > 0 ? Math.round((ralenti / encendido) * 1000) / 10 : 0,
+      'Vel. máx. (km/h)': f.vel_max_kmh == null ? '' : Number(f.vel_max_kmh),
+      'Alertas': Number(f.alertas || 0),
+      'Posiciones': Number(f.posiciones || 0),
+    };
+  });
+
+  // Totales al pie, igual que en la consola.
+  const suma = (campo) => (filas || []).reduce((s, f) => s + Number(f[campo] || 0), 0);
+  const totalEncendido = suma('encendido_segundos');
+  const totalRalenti = suma('ralenti_segundos');
+  datos.push({
+    'Período': 'TOTALES',
+    'Placa': '',
+    'Unidad': `${filas.length} fila(s)`,
+    'Recorrido (km)': Number(suma('km_recorridos').toFixed(2)),
+    'Horas prendido (h)': horas(suma('viaje_segundos') + suma('ralenti_segundos')),
+    'Hora de viaje (h)': horas(suma('viaje_segundos')),
+    'Ralentí (h)': horas(totalRalenti),
+    '% ralentí': totalEncendido > 0 ? Math.round((totalRalenti / totalEncendido) * 1000) / 10 : 0,
+    'Vel. máx. (km/h)': '',
+    'Alertas': suma('alertas'),
+    'Posiciones': suma('posiciones'),
+  });
+
+  const ws = XLSX.utils.json_to_sheet(datos);
+  ws['!cols'] = [
+    { wch: 14 }, { wch: 12 }, { wch: 30 }, { wch: 14 }, { wch: 17 },
+    { wch: 16 }, { wch: 12 }, { wch: 11 }, { wch: 15 }, { wch: 9 }, { wch: 12 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'Actividades');
+
+  const criterio = [
+    { Concepto: 'Reporte', Detalle: 'Actividades de flota (Agrilux · réplica de Zonar)' },
+    { Concepto: 'Agrupación', Detalle: modo === 'dia' ? 'Por día' : modo === 'mes' ? 'Por mes' : modo === 'libre' ? 'Por día dentro del rango Desde / hasta' : 'Todo el periodo' },
+    { Concepto: 'Rango', Detalle: rangoTexto || 'Todo el histórico cargado' },
+    { Concepto: 'Unidad', Detalle: placa || 'Todas las unidades' },
+    { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones (agrotrack_actividad_flota)' },
+    { Concepto: 'Viaje', Detalle: 'Encendido y velocidad > 5 km/h' },
+    { Concepto: 'Ralentí', Detalle: 'Encendido y velocidad <= 5 km/h' },
+    { Concepto: 'Encendido', Detalle: 'Viaje + Ralentí (evento no indica estacionado/apagado)' },
+    { Concepto: 'Recorrido', Detalle: 'Haversine entre puntos consecutivos, tramos <= 10 min, saltos >= 5 km descartados' },
+    { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
+    { Concepto: 'Generado', Detalle: new Date().toLocaleString('es-PE') },
+  ];
+  const wsCriterio = XLSX.utils.json_to_sheet(criterio);
+  wsCriterio['!cols'] = [{ wch: 16 }, { wch: 90 }];
+  XLSX.utils.book_append_sheet(wb, wsCriterio, 'Criterio');
+
+  const etiquetaRango = (rangoTexto || 'todo').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
+  XLSX.writeFile(wb, `Agrilux_Actividades_${etiquetaRango || 'rango'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/**
+ * Reporte de entradas y salidas de geocerca (FASE 3.5) a Excel: los eventos de
+ * Zonar agrupados por geocerca, por día o por mes, con la hoja de criterio
+ * para que el archivo se entienda solo.
+ * @param {Array} filas  filas de agrotrack_eventos_geocerca_flota
+ * @param {{agrupar?: string, rangoTexto?: string}} opciones
+ */
+export function exportarEventosGeocercaExcel(filas, { agrupar = 'geocerca', rangoTexto = '' } = {}) {
+  const wb = XLSX.utils.book_new();
+
+  // En 'geocerca' el grupo es el nombre tal cual; en día/mes se etiqueta como
+  // en el reporte de actividad (mismo texto en pantalla y en el archivo).
+  const etiquetaGrupo = (fila) => etiquetaPeriodoReporte({ periodo: fila.grupo }, agrupar);
+
+  const datos = (filas || []).map((f) => ({
+    'Grupo': etiquetaGrupo(f),
+    'Entradas': Number(f.entradas || 0),
+    'Salidas': Number(f.salidas || 0),
+    'Unidades': Number(f.unidades || 0),
+    'Última entrada': f.ultima_entrada ? formatearFechaLarga(f.ultima_entrada) : '—',
+  }));
+
+  // Totales al pie. Unidades no se suman: una placa puede aparecer en varios
+  // grupos y sumarla duplicaría el conteo.
+  const suma = (campo) => (filas || []).reduce((s, f) => s + Number(f[campo] || 0), 0);
+  datos.push({
+    'Grupo': 'TOTALES',
+    'Entradas': suma('entradas'),
+    'Salidas': suma('salidas'),
+    'Unidades': '',
+    'Última entrada': '',
+  });
+
+  const ws = XLSX.utils.json_to_sheet(datos);
+  ws['!cols'] = [{ wch: 26 }, { wch: 11 }, { wch: 11 }, { wch: 11 }, { wch: 24 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Eventos');
+
+  const criterio = [
+    { Concepto: 'Reporte', Detalle: 'Entradas y salidas de geocerca (Agrilux · réplica de Zonar)' },
+    { Concepto: 'Agrupación', Detalle: agrupar === 'dia' ? 'Por día' : agrupar === 'mes' ? 'Por mes' : 'Por geocerca' },
+    { Concepto: 'Rango', Detalle: rangoTexto || 'Todo el periodo cargado' },
+    { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones (agrotrack_eventos_geocerca_flota)' },
+    { Concepto: 'Eventos', Detalle: "Zonar: 'Entrada a Geocerca' / 'Salida de Geocerca' con pt_referencia (nombre de la geocerca)" },
+    { Concepto: 'Unidades', Detalle: 'Placas distintas que registraron una entrada' },
+    { Concepto: 'Salidas', Detalle: 'Pueden no cuadrar con las entradas: una unidad aún dentro deja la última entrada sin salida' },
+    { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
+    { Concepto: 'Generado', Detalle: new Date().toLocaleString('es-PE') },
+  ];
+  const wsCriterio = XLSX.utils.json_to_sheet(criterio);
+  wsCriterio['!cols'] = [{ wch: 16 }, { wch: 90 }];
+  XLSX.utils.book_append_sheet(wb, wsCriterio, 'Criterio');
+
+  const etiquetaRango = (rangoTexto || 'todo').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
+  XLSX.writeFile(wb, `Agrilux_Geocercas_Eventos_${etiquetaRango || 'rango'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/**
+ * Excel PLANO del reporte "Tiempo en cada lote": una fila por permanencia,
+ * lista para armar una tabla dinámica (filas Fecha/Área/Placa, columnas
+ * División, valores Suma de Duración). Sin totales, sin celdas combinadas y
+ * con una sola hoja. La duración es numérica en horas decimales (1.52).
+ *
+ * @param {Array} filas filas de agrotrack_permanencias_lote_excel
+ * @param {{rangoTexto?: string}} opciones
+ */
+export function exportarPermanenciasLotesExcel(filas, { rangoTexto = '' } = {}) {
+  const encabezados = [
+    'Fecha entrada',
+    'Hora entrada',
+    'Grupo',
+    'Área Cod',
+    'Placa',
+    'Nombre',
+    'División',
+    'Duración (h decimal)',
+  ];
+
+  const datos = (filas || []).map((f) => {
+    const nombre = String(f?.nombre || '').trim();
+    const fecha = String(f?.fecha_entrada || '').trim();
+    const hora = String(f?.hora_entrada || '').trim();
+    const division = normalizarDivision(f?.division, nombre) || 'Sin nombre';
+    return [
+      fecha,
+      hora,
+      String(f?.grupo || 'Sin grupo').trim() || 'Sin grupo',
+      String(f?.area_cod || 'Sin área').trim() || 'Sin área',
+      String(f?.placa || '').trim(),
+      nombre,
+      division,
+      // Numeric cell, never text like "1 h 31 min".
+      Number(f?.duracion_horas_decimal ?? f?.duracion_horas ?? 0),
+    ];
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([encabezados, ...datos]);
+  ws['!cols'] = [
+    { wch: 14 }, { wch: 13 }, { wch: 20 }, { wch: 16 },
+    { wch: 14 }, { wch: 28 }, { wch: 24 }, { wch: 20 },
+  ];
+  // Las horas se ven con dos decimales pero siguen siendo número para la
+  // tabla dinámica (Suma de Duración).
+  const ultimaFila = XLSX.utils.decode_range(ws['!ref']).e.r;
+  for (let fila = 2; fila <= ultimaFila; fila += 1) {
+    const celda = ws[`H${fila}`];
+    if (celda) {
+      celda.t = 'n';
+      celda.z = '0.00';
+    }
+  }
+  XLSX.utils.book_append_sheet(wb, ws, 'Permanencias');
+
+  const etiquetaRango = (rangoTexto || 'todo').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
+  XLSX.writeFile(wb, `Agrilux_Permanencias_Lotes_${etiquetaRango || 'rango'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/** Alias conservado para llamadas antiguas: ahora exporta la tabla plana. */
+export const exportarLotesExcel = exportarPermanenciasLotesExcel;
+
+/**
+ * Reporte 15 de Zonar "Eventos resumidos" a Excel: Stop / Idle / Drive por
+ * unidad con su porcentaje, mismas cifras que la pantalla y hoja de criterio.
+ * @param {Array} filas  filas de agrotrack_actividad_flota (agrupar 'unidad')
+ * @param {{totalSegundos?: number|null, rangoTexto?: string, placa?: string}} opciones
+ */
+export function exportarEventosResumidosExcel(filas, { totalSegundos = null, rangoTexto = '', placa = '' } = {}) {
+  const wb = XLSX.utils.book_new();
+
+  const calculadas = calcularEventosResumidos(filas, totalSegundos);
+  const datos = calculadas.map((f) => ({
+    'Placa': f.placa,
+    'Unidad': f.unidad,
+    'Total Stop': f.total == null ? '' : formatearHMS(f.stop),
+    'Stop %': f.pct_stop,
+    'Total Idle': f.total == null ? '' : formatearHMS(f.idle),
+    'Idle %': f.pct_idle,
+    'Total Drive': f.total == null ? '' : formatearHMS(f.drive),
+    'Drive %': f.pct_drive,
+    'Total': f.total == null ? '' : formatearHMS(f.total),
+  }));
+
+  // Totales al pie (la flota completa), igual que en la consola.
+  const totales = totalesEventosResumidos(calculadas);
+  datos.push({
+    'Placa': 'TOTALES',
+    'Unidad': `${calculadas.length} unidad(es)`,
+    'Total Stop': formatearHMS(totales.stop),
+    'Stop %': totales.pct_stop,
+    'Total Idle': formatearHMS(totales.idle),
+    'Idle %': totales.pct_idle,
+    'Total Drive': formatearHMS(totales.drive),
+    'Drive %': totales.pct_drive,
+    'Total': formatearHMS(totales.total),
+  });
+
+  const ws = XLSX.utils.json_to_sheet(datos);
+  ws['!cols'] = [
+    { wch: 12 }, { wch: 30 }, { wch: 13 }, { wch: 9 },
+    { wch: 13 }, { wch: 9 }, { wch: 13 }, { wch: 10 }, { wch: 13 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'Eventos resumidos');
+
+  const criterio = [
+    { Concepto: 'Reporte', Detalle: 'Eventos resumidos Stop/Idle/Drive (Agrilux · réplica de Zonar, reporte 15)' },
+    { Concepto: 'Rango', Detalle: rangoTexto || 'Todo el periodo cargado' },
+    { Concepto: 'Unidad', Detalle: placa || 'Todas las unidades' },
+    { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones (agrotrack_actividad_flota); Stop/Idle/Drive derivados de esas filas agregadas' },
+    { Concepto: 'Drive', Detalle: 'Motor encendido y velocidad > 5 km/h' },
+    { Concepto: 'Idle', Detalle: 'Motor encendido y velocidad <= 5 km/h' },
+    { Concepto: 'Stop', Detalle: 'Tiempo del rango sin motor encendido (total del rango − encendido)' },
+    { Concepto: 'Total', Detalle: `Duración del rango${totalSegundos ? ` (${formatearHMS(totalSegundos)})` : ''}, limitada al periodo realmente cargado` },
+    { Concepto: 'Porcentajes', Detalle: 'Stop + Idle + Drive = 100% en cada fila (Stop se cierra por resta)' },
+    { Concepto: 'Recorrido', Detalle: 'Haversine entre puntos consecutivos, tramos <= 10 min, saltos >= 5 km descartados' },
+    { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
+    { Concepto: 'Generado', Detalle: new Date().toLocaleString('es-PE') },
+  ];
+  const wsCriterio = XLSX.utils.json_to_sheet(criterio);
+  wsCriterio['!cols'] = [{ wch: 16 }, { wch: 90 }];
+  XLSX.utils.book_append_sheet(wb, wsCriterio, 'Criterio');
+
+  const etiquetaRango = (rangoTexto || 'todo').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
+  XLSX.writeFile(wb, `Agrilux_Eventos_Resumidos_${etiquetaRango || 'rango'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/**
+ * Reporte 34 de Zonar "Estado de unidades" a Excel, con la columna extra de
+ * geocerca actual y la hoja de criterio.
+ * @param {Array} filas  filas de agrotrack_estado_unidades_flota
+ * @param {{rangoTexto?: string, periodo?: {hasta: string|null}|null, filtro?: string}} opciones
+ */
+export function exportarEstadoUnidadesExcel(filas, { rangoTexto = '', periodo = null, filtro = '' } = {}) {
+  const wb = XLSX.utils.book_new();
+
+  const datos = (filas || []).map((f) => {
+    const estado = clasificarEstado(f, periodo?.hasta);
+    return {
+      'Placa': f.placa,
+      'Unidad': f.unidad || f.placa,
+      'Últ. fecha': f.ultima_fecha ? formatearFechaLarga(f.ultima_fecha) : '—',
+      'Estado': STATUS_META[estado]?.label || estado,
+      'Dirección': f.direccion || '—',
+      'Últ. evento': f.ultimo_evento || '—',
+      'Vel. (km/h)': f.ultima_velocidad == null ? '' : Number(f.ultima_velocidad),
+      'Odómetro actual': '—',
+      'Geocerca': f.geocerca || 'Fuera de geocercas',
+      'División': f.geocerca_division || '—',
+      // Fallback pedido por el Ing. Carlos Perez: si la última posición está
+      // fuera, la última geocerca de campo en la que estuvo y cuándo.
+      'Últ. geocerca (si está fuera)': f.geocerca ? '' : (f.geocerca_ultima || ''),
+      'Últ. geocerca fecha': (!f.geocerca && f.geocerca_ultima_fecha) ? formatearFechaLarga(f.geocerca_ultima_fecha) : '',
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(datos);
+  ws['!cols'] = [
+    { wch: 12 }, { wch: 30 }, { wch: 22 }, { wch: 15 }, { wch: 45 },
+    { wch: 22 }, { wch: 11 }, { wch: 17 }, { wch: 26 }, { wch: 18 },
+    { wch: 28 }, { wch: 22 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'Estado unidades');
+
+  const criterio = [
+    { Concepto: 'Reporte', Detalle: 'Estado de unidades + geocerca (Agrilux · réplica de Zonar, reporte 34)' },
+    { Concepto: 'Rango', Detalle: rangoTexto || 'Todo el periodo cargado' },
+    { Concepto: 'Filtros', Detalle: filtro || 'Sin filtros: todas las unidades y geocercas' },
+    { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones + public.agrotrack_geocercas_reportes (agrotrack_estado_unidades_flota)' },
+    { Concepto: 'Motor', Detalle: 'PostGIS: polígono que contiene la última posición (ST_Contains, EPSG:4326) con prefilter de bbox' },
+    { Concepto: 'Geocerca', Detalle: 'Nombre del polígono que contiene la última posición; si está fuera, "Últ. geocerca" trae la última geocerca de campo en la que estuvo la unidad (evento pt_referencia); "Fuera de geocercas" solo si no hay ninguna' },
+    { Concepto: 'Estado', Detalle: 'En ruta / Detenido / Sin conexión contra max(fecha) del periodo cargado (umbral 30 min), nunca contra la fecha de hoy' },
+    { Concepto: 'Odómetro', Detalle: 'Sin dato: el archivo "Reporte por placa" de Zonar que importamos no incluye la columna de odómetro' },
+    { Concepto: 'Orden', Detalle: 'Última posición más reciente primero' },
+    { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
+    { Concepto: 'Generado', Detalle: new Date().toLocaleString('es-PE') },
+  ];
+  const wsCriterio = XLSX.utils.json_to_sheet(criterio);
+  wsCriterio['!cols'] = [{ wch: 16 }, { wch: 90 }];
+  XLSX.utils.book_append_sheet(wb, wsCriterio, 'Criterio');
+
+  const etiquetaRango = (rangoTexto || 'todo').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
+  XLSX.writeFile(wb, `Agrilux_Estado_Unidades_${etiquetaRango || 'rango'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/**
+ * Tabla de coordenadas/posiciones del localizador de unidades (observación VI)
+ * a Excel: una fila por marcador visible en el mapa, mismas columnas que la
+ * pantalla y hoja de criterio para que el archivo se entienda solo.
+ * @param {Array} filas  filas normalizadas:
+ *   { placa, descripcion, evento, fecha (iso|null), direccion, velocidad, latitud, longitud }
+ * @param {{rangoTexto?: string, fuente?: string, unidades?: number}} opciones
+ */
+export function exportarCoordenadasUnidadesExcel(filas, { rangoTexto = '', fuente = '', unidades = 0 } = {}) {
+  const wb = XLSX.utils.book_new();
+
+  const datos = (filas || []).map((f) => ({
+    'Unidad': f.placa || '—',
+    'Descripción': f.descripcion || '—',
+    'Evento': f.evento || '—',
+    'Fecha': f.fecha ? formatearFechaHora(f.fecha) : '—',
+    'Dirección': f.direccion || '—',
+    'Geocerca': f.geocerca || '—',
+    'Vel. (km/h)': f.velocidad == null || f.velocidad === '' ? '' : Number(f.velocidad),
+    'Últ. contacto': f.fecha ? formatearFechaLarga(f.fecha) : '—',
+    'Latitud': f.latitud == null ? '' : Number(Number(f.latitud).toFixed(6)),
+    'Longitud': f.longitud == null ? '' : Number(Number(f.longitud).toFixed(6)),
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(datos);
+  ws['!cols'] = [
+    { wch: 14 }, { wch: 30 }, { wch: 26 }, { wch: 16 }, { wch: 46 },
+    { wch: 24 }, { wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 12 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'Coordenadas');
+
+  const criterio = [
+    { Concepto: 'Reporte', Detalle: 'Localizador de unidades: posiciones visibles en el mapa (Agrilux · réplica de Zonar)' },
+    { Concepto: 'Rango', Detalle: rangoTexto || 'Última posición del periodo cargado' },
+    { Concepto: 'Unidades', Detalle: unidades ? `${unidades} unidad(es) con posición válida en el mapa` : 'Solo las unidades con latitud y longitud distintas de cero' },
+    { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones (agrotrack_resumen_flota + agrotrack_estado_unidades_flota)' },
+    { Concepto: 'Dirección / geocerca', Detalle: 'Dirección y geocerca (polígono que contiene la última posición) de cada placa; la geocerca se calcula en el navegador con los polígonos cargados en el mapa («—» = fuera de todas)' },
+    { Concepto: 'Velocidad', Detalle: 'Velocidad de la última posición (km/h)' },
+    { Concepto: 'Últ. contacto', Detalle: 'Fecha y hora larga de la última posición recibida' },
+    { Concepto: 'Odómetro / Hrs. motor', Detalle: 'Sin dato: el archivo "Reporte por placa" de Zonar que importamos no incluye odómetro ni horas de motor' },
+    { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
+    { Concepto: 'Generado', Detalle: new Date().toLocaleString('es-PE') },
+  ];
+  const wsCriterio = XLSX.utils.json_to_sheet(criterio);
+  wsCriterio['!cols'] = [{ wch: 24 }, { wch: 96 }];
+  XLSX.utils.book_append_sheet(wb, wsCriterio, 'Criterio');
+
+  const etiquetaRango = (rangoTexto || 'coordenadas').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
+  XLSX.writeFile(wb, `Agrilux_Coordenadas_${etiquetaRango || 'coordenadas'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/**
+ * Tabla del recorrido histórico paginado (observación VII) a Excel: la página
+ * (ventana temporal) cargada en pantalla, con el rango completo anotado en la
+ * hoja Criterio.
+ * @param {Array} filas  puntos de agrotrack_recorrido_flota:
+ *   { fecha, evento, direccion, velocidad, latitud, longitud, es_alerta }
+ * @param {{placa?: string, rangoTexto?: string, pagina?: number,
+ *          totalPaginas?: number, ventanaTexto?: string, muestreada?: boolean}} opciones
+ */
+export function exportarRecorridoExcel(
+  filas,
+  { placa = '', rangoTexto = '', pagina = 1, totalPaginas = 1, ventanaTexto = '', muestreada = false } = {},
+) {
+  const wb = XLSX.utils.book_new();
+
+  const datos = (filas || []).map((f) => ({
+    'Fecha': f.fecha ? formatearFechaLarga(f.fecha) : '—',
+    'Evento': f.evento || '—',
+    'Dirección': f.direccion || '—',
+    'Geocerca': f.geocerca || '—',
+    'Vel. (km/h)': f.velocidad == null || f.velocidad === '' ? '' : Number(f.velocidad),
+    'Latitud': f.latitud == null ? '' : Number(Number(f.latitud).toFixed(6)),
+    'Longitud': f.longitud == null ? '' : Number(Number(f.longitud).toFixed(6)),
+    'Alerta': f.es_alerta ? 'Sí' : '',
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(datos);
+  ws['!cols'] = [
+    { wch: 24 }, { wch: 28 }, { wch: 46 }, { wch: 24 },
+    { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 9 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'Recorrido');
+
+  const criterio = [
+    { Concepto: 'Reporte', Detalle: 'Recorrido histórico paginado (Agrilux · réplica de Zonar)' },
+    { Concepto: 'Unidad', Detalle: placa || 'Sin unidad' },
+    { Concepto: 'Rango pedido', Detalle: rangoTexto || '—' },
+    { Concepto: 'Página', Detalle: `Página ${pagina} de ${totalPaginas}${ventanaTexto ? ` · ventana ${ventanaTexto}` : ''}` },
+    { Concepto: 'Criterio de paginación', Detalle: 'La RPC agrotrack_recorrido_flota no acepta offset: cada página es una ventana temporal contigua del rango (objetivo ~500 filas = 16 h al ritmo de 1 punto cada 2 min; se amplía para no pasar de 20 llamadas). En el archivo solo va la página cargada.' },
+    { Concepto: 'Muestreo', Detalle: muestreada
+      ? 'La ventana superó el tope de 900 puntos: la RPC muestrea por paso entero (conserva inicio, fin y alertas). Reduce el rango para ver todos los puntos.'
+      : 'Sin muestreo: la ventana trajo menos de 900 puntos.' },
+    { Concepto: 'Fuente', Detalle: 'public.agrotrack_posiciones (agrotrack_recorrido_flota)' },
+    { Concepto: 'Geocerca', Detalle: 'Geocerca (o distrito / oficina) que contiene cada punto, calculada en el navegador con los polígonos cargados en el mapa. «—» = fuera de todas.' },
+    { Concepto: 'Alerta', Detalle: 'Alta velocidad (sin cierre) o botón de pánico' },
+    { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
+    { Concepto: 'Generado', Detalle: new Date().toLocaleString('es-PE') },
+  ];
+  const wsCriterio = XLSX.utils.json_to_sheet(criterio);
+  wsCriterio['!cols'] = [{ wch: 24 }, { wch: 96 }];
+  XLSX.utils.book_append_sheet(wb, wsCriterio, 'Criterio');
+
+  const etiquetaRango = (rangoTexto || 'recorrido').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
+  XLSX.writeFile(wb, `Agrilux_Recorrido_${etiquetaRango || 'recorrido'}_p${pagina}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
