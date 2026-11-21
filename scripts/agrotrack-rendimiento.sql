@@ -136,6 +136,16 @@ where n.nspname = 'public'
   and (p.prosrc !~ 'antes as materialized' or p.prosrc !~ 'dentro as materialized')
 
 union all
+-- 21/11/2026: `security definer` o cualquier cláusula SET (proconfig) en el
+-- motor de visitas impide el inlining y dispara timeouts del cron.
+select 'visitas no inlineables', p.oid::regprocedure
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname = 'agrotrack_visitas_geocerca_calc'
+  and (p.prosecdef or p.proconfig is not null)
+
+union all
 select 'sobrecarga ambigua', p.oid::regprocedure
 from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace

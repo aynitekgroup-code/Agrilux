@@ -921,12 +921,20 @@ grant execute on function public.agrotrack_estado_unidades_flota(uuid, timestamp
 --    largo superara ese tope, PostgREST cortaría como en cualquier otra RPC
 --    (consultar por tramos de día/mes).
 -- ---------------------------------------------------------------------------
--- 4.a) MOTOR interno del cálculo de visitas (14/11/2026).
+-- 4.a) MOTOR interno del cálculo de visitas (14/11/2026, optimizado 21/11/2026).
 --    Es el mismo cálculo de siempre, pero SIN la validación de membresía:
 --    así lo pueden usar el cálculo diario guardado (pg_cron, sin usuario) y
 --    el agente de Zonar. NO se expone a anon/authenticated: solo lo llaman
 --    las funciones security definer de este archivo y de
 --    scripts/agrotrack-visitas-diarias.sql, que sí validan la membresía.
+--
+--    21/11/2026: la función es SQL simple, SIN `security definer` y SIN
+--    cláusula `set search_path`. Cualquiera de las dos (y en particular el SET)
+--    impide que PostgreSQL la inline y obliga a ejecutarla como una "caja
+--    negra" (Function Scan): 13 s por placa y timeouts del cron. Inlineada,
+--    el plan usa el índice (empresa_id, placa, fecha) y tarda ~0,4-0,9 s.
+--    Todo se llama con el esquema explícito (public., extensions.) para que
+--    siga funcionando con el search_path vacío que usa PostgREST.
 drop function if exists public.agrotrack_visitas_geocerca_calc(uuid, timestamptz, timestamptz, text, text);
 
 create function public.agrotrack_visitas_geocerca_calc(
@@ -947,13 +955,9 @@ returns table (
   viaje_segundos    integer,
   abierta           boolean
 )
-language plpgsql
+language sql
 stable
-security definer
-set search_path = public, extensions, pg_catalog, pg_temp
 as $$
-begin
-  return query execute format($q$
 -- 18/11/2026: se consulta la geometría INDEXADA directamente (GIST en
   -- agrotrack_posiciones.geom y agrotrack_geocercas_subdiv.geom) en vez de
   -- reconstruir ST_MakePoint y volver a convertir el GeoJSON en cada llamada.
@@ -965,10 +969,10 @@ begin
     select p.id, p.placa, p.fecha, p.secuencia, p.latitud, p.longitud,
            p.velocidad, p.evento, p.geom
     from public.agrotrack_posiciones p
-    where p.empresa_id = %L
-      and (%L is null or p.placa = %L)
-      and p.fecha >= coalesce(%L, '-infinity'::timestamptz)
-      and p.fecha <= coalesce(%L, 'infinity'::timestamptz)
+    where p.empresa_id = p_empresa_id
+      and (p_placa is null or p.placa = p_placa)
+      and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
+      and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
       and p.geom is not null
   ),
   -- Última posición de cada placa ANTES de abrir el rango: de ahí sale si ya
@@ -977,35 +981,35 @@ begin
     select distinct on (p.placa)
       p.placa, p.fecha, p.latitud, p.longitud, p.velocidad, p.evento, p.geom
     from public.agrotrack_posiciones p
-    where p.empresa_id = %L
-      and (%L is null or p.placa = %L)
-      and %L is not null
-      and p.fecha < %L
+    where p.empresa_id = p_empresa_id
+      and (p_placa is null or p.placa = p_placa)
+      and p_desde is not null
+      and p.fecha < p_desde
       and p.geom is not null
     order by p.placa, p.fecha desc, coalesce(p.secuencia, 0) desc, p.id desc
   ),
-  dentro_antes as (
+  dentro_antes as materialized (
     select
       a.placa,
       s.geocerca_id,
       s.nombre,
       -- Estado del último punto DENTRO con el que se abre el rango (mismo
       -- criterio de encendido/viaje que el resto del archivo).
-      (not (lower(coalesce(a.evento, '')) like '%%estacionad%%'
-         or lower(coalesce(a.evento, '')) like '%%apagad%%'))          as encendido_base,
-      (not (lower(coalesce(a.evento, '')) like '%%estacionad%%'
-         or lower(coalesce(a.evento, '')) like '%%apagad%%'))
+      (not (lower(coalesce(a.evento, '')) like '%estacionad%'
+         or lower(coalesce(a.evento, '')) like '%apagad%'))          as encendido_base,
+      (not (lower(coalesce(a.evento, '')) like '%estacionad%'
+         or lower(coalesce(a.evento, '')) like '%apagad%'))
         and coalesce(a.velocidad, 0) > 5                            as viaje_base
     from antes a
     join lateral (
       select s.geocerca_id, btrim(s.nombre) as nombre
       from public.agrotrack_geocercas_subdiv s
-      where s.empresa_id = %L
+      where s.empresa_id = p_empresa_id
         and s.activa is true
         and s.incluir_reportes
-        and (%L is null
-          or lower(btrim(s.nombre)) = lower(btrim(%L)))
-        and ST_Contains(s.geom, a.geom)
+        and (p_geocerca is null
+          or lower(btrim(s.nombre)) = lower(btrim(p_geocerca)))
+        and extensions.ST_Contains(s.geom, a.geom)
       group by s.geocerca_id, btrim(s.nombre)
     ) s on true
   ),
@@ -1017,12 +1021,12 @@ begin
     join lateral (
       select s.geocerca_id, btrim(s.nombre) as nombre
       from public.agrotrack_geocercas_subdiv s
-      where s.empresa_id = %L
+      where s.empresa_id = p_empresa_id
         and s.activa is true
         and s.incluir_reportes
-        and (%L is null
-          or lower(btrim(s.nombre)) = lower(btrim(%L)))
-        and ST_Contains(s.geom, p.geom)
+        and (p_geocerca is null
+          or lower(btrim(s.nombre)) = lower(btrim(p_geocerca)))
+        and extensions.ST_Contains(s.geom, p.geom)
       group by s.geocerca_id, btrim(s.nombre)
     ) d on true
   ),
@@ -1042,9 +1046,9 @@ begin
       da.encendido_base,
       da.viaje_base,
       -- Arranque de la serie de estados: en la entrada real o, si la unidad
-      -- ya estaba dentro, en el propio %L.
+      -- ya estaba dentro, en el propio p_desde.
       case
-        when da.placa is not null then %L
+        when da.placa is not null then p_desde
         else dmin.primera_dentro
       end                                             as inicio_serie
     from claves c
@@ -1066,10 +1070,10 @@ begin
       pu.id as punto_id, pu.fecha, coalesce(pu.secuencia, 0) as secuencia,
       pu.velocidad, pu.evento,
       (dn.punto_id is not null)                       as dentro,
-      (not (lower(coalesce(pu.evento, '')) like '%%estacionad%%'
-         or lower(coalesce(pu.evento, '')) like '%%apagad%%')) as encendido,
-      (not (lower(coalesce(pu.evento, '')) like '%%estacionad%%'
-         or lower(coalesce(pu.evento, '')) like '%%apagad%%'))
+      (not (lower(coalesce(pu.evento, '')) like '%estacionad%'
+         or lower(coalesce(pu.evento, '')) like '%apagad%')) as encendido,
+      (not (lower(coalesce(pu.evento, '')) like '%estacionad%'
+         or lower(coalesce(pu.evento, '')) like '%apagad%'))
         and coalesce(pu.velocidad, 0) > 5             as es_viaje
     from pares p
     join puntos pu
@@ -1127,7 +1131,7 @@ begin
       case
         when m.prev_fecha is null then
           -- Primera fila de la serie: solo cuenta si la visita ya estaba
-          -- abierta al entrar al rango (entrada continuada desde %L).
+          -- abierta al entrar al rango (entrada continuada desde p_desde).
           case when m.dentro_inicio
                then extract(epoch from (m.fecha - m.inicio_serie))
                else 0::double precision end
@@ -1135,11 +1139,11 @@ begin
         when coalesce(m.dt_crudo, 0) > 600 then 0::double precision
         else m.dt_crudo
       end as seg,
-      -- Cierre "en curso": el último punto dentro lleva el tiempo hasta %L.
+      -- Cierre "en curso": el último punto dentro lleva el tiempo hasta p_hasta.
       case
         when m.sig_fecha is null and m.dentro and m.visita_n > 0
-         and %L is not null
-        then greatest(extract(epoch from (%L - m.fecha)), 0)
+         and p_hasta is not null
+        then greatest(extract(epoch from (p_hasta - m.fecha)), 0)
         else 0::double precision
       end as seg_abierto,
       -- ¿Este tramo pertenece a la visita?
@@ -1160,7 +1164,7 @@ begin
       -- si no hay puntos dentro en el rango, el estado con el que abría).
       -- 14/11/2026: el tramo toma el estado del punto donde EMPIEZA (como
       -- Zonar y como agrotrack_actividad_flota); la cola "en curso" hasta
-      -- %L usa el estado del último punto (ver seg_abierto abajo).
+      -- p_hasta usa el estado del último punto (ver seg_abierto abajo).
       case
         when m.prev_fecha is null then coalesce(m.encendido_base, m.encendido)
         when m.prev_dentro then coalesce(m.prev_encendido, m.encendido)
@@ -1179,21 +1183,21 @@ begin
       f.geocerca,
       f.placa,
       f.visita_n,
-      -- ENTRADA: primera posición dentro, o %L si ya estaba dentro.
+      -- ENTRADA: primera posición dentro, o p_desde si ya estaba dentro.
       case
         when bool_or(f.prev_fecha is null and f.dentro_inicio)
           then min(f.inicio_serie)
         else min(f.fecha) filter (where f.dentro)
       end as entrada,
       -- SALIDA: primer punto fuera con continuidad; si no, el último punto
-      -- dentro cuando hubo un hueco; si no, sigue "en curso" hasta %L.
+      -- dentro cuando hubo un hueco; si no, sigue "en curso" hasta p_hasta.
       case
         when min(f.visita_n) = 0 then max(f.fecha)
         else coalesce(
           min(f.fecha) filter (
             where not f.dentro and f.prev_dentro and coalesce(f.dt_crudo, 0) <= 600),
           max(f.fecha) filter (where f.cierra_hueco),
-          %L
+          p_hasta
         )
       end as salida,
       (min(f.visita_n) > 0
@@ -1232,11 +1236,11 @@ begin
       v.abierta
     from visitas v
     -- Aquí NO se emite nada más: una unidad que ya estaba dentro al abrir
-    -- %L pero no reportó NADA en el rango no genera visita. Sin
+    -- p_desde pero no reportó NADA en el rango no genera visita. Sin
     -- posiciones en el rango no hay evidencia de que siguió en el polígono
     -- (un rastreador apagado dentro de un lote la inventaría todos los
     -- días); sí la genera en cuanto reporta aunque sea una vez, y ahí la
-    -- entrada se recorta en %L (continuación) como en el resto.
+    -- entrada se recorta en p_desde (continuación) como en el resto.
   )
   select
     e.placa                as placa,
@@ -1251,8 +1255,6 @@ begin
   from emitidas e
   -- Pedido: orden de salida por la fecha/hora de entrada.
   order by e.entrada asc nulls last, e.geocerca, e.placa;
-$q$, p_empresa_id, p_placa, p_placa, p_desde, p_hasta, p_empresa_id, p_placa, p_placa, p_desde, p_desde, p_empresa_id, p_geocerca, p_geocerca, p_empresa_id, p_geocerca, p_geocerca, p_desde, p_desde, p_desde, p_hasta, p_hasta, p_hasta, p_hasta, p_desde, p_hasta, p_hasta, p_desde, p_desde);
-end;
 $$;
 
 
