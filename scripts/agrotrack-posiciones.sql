@@ -27,6 +27,12 @@ create index if not exists agrotrack_posiciones_empresa_fecha_idx
   on public.agrotrack_posiciones (empresa_id, fecha);
 create index if not exists agrotrack_posiciones_empresa_evento_idx
   on public.agrotrack_posiciones (empresa_id, evento);
+-- 21/11/2026: el reporte "Entradas y salidas de geocerca" necesita el ÚLTIMO
+-- evento por (placa, geocerca) ANTERIOR al rango. Sin este índice, `distinct on
+-- (placa, btrim(pt_referencia))` recorre todo el histórico para cada placa.
+create index if not exists agrotrack_posiciones_empresa_placa_geo_fecha_idx
+  on public.agrotrack_posiciones (empresa_id, placa, (btrim(pt_referencia)), fecha desc)
+  where pt_referencia is not null and btrim(pt_referencia) <> '';
 
 alter table public.agrotrack_posiciones enable row level security;
 

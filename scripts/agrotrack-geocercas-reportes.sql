@@ -229,8 +229,10 @@ returns table (
 )
 language sql
 stable
-security definer
-set search_path = public, pg_catalog, pg_temp
+-- 21/11/2026: SIN `security definer` NI `set search_path`. PostgreSQL solo
+-- inlinea SQL functions con security invoker y sin proconfig; con definer el
+-- plan es genérico, el índice de fecha no se usa y la RPC daba statement
+-- timeout. La membresía ya la valida `onboarding_es_miembro` y la RLS.
 as $$
   with base_eventos as (
     select
@@ -272,7 +274,6 @@ as $$
       and p.empresa_id = p_empresa_id
       and (p_placas is null or p.placa = any(p_placas))
       and p_desde is not null
-      and (p_placas is null or p.placa = any(p_placas))
       and p.fecha < p_desde
       and (lower(p.evento) like '%entrada%geocerca%'
         or lower(p.evento) like '%salida%geocerca%')

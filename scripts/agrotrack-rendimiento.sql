@@ -146,6 +146,18 @@ where n.nspname = 'public'
   and (p.prosecdef or p.proconfig is not null)
 
 union all
+-- 21/11/2026: mismas dos RPC que el reporte de geocercas dejó de cargar.
+select 'reportes no inlineables', p.oid::regprocedure
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname in (
+    'agrotrack_eventos_geocerca_flota',
+    'agrotrack_actividad_flota'
+  )
+  and (p.prosecdef or p.proconfig is not null)
+
+union all
 select 'sobrecarga ambigua', p.oid::regprocedure
 from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace

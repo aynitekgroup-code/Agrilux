@@ -179,8 +179,9 @@ returns table (
 )
 language sql
 stable
-security definer
-set search_path = public, pg_temp
+-- 21/11/2026: SIN `security definer` NI `set search_path`: se requiere para
+-- que PostgreSQL inlinee la función y el índice de fecha se use con los
+-- parámetros reales. La membresía y la RLS ya validan el acceso.
 as $$
   -- ---------------------------------------------------------------------------
   -- CRITERIO 14/11/2026 (diferencia de ~10 % contra Zonar, observaciones I y II):
