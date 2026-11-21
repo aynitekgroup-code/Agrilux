@@ -155,263 +155,175 @@ grant execute on function public.onboarding_es_admin(uuid) to authenticated, ano
 --    rango nulo la función recorre las +103 mil filas completas: ahí estaba
 --    el statement timeout de 8 s de Supabase.
 -- ---------------------------------------------------------------------------
-drop function if exists public.agrotrack_actividad_flota(uuid, timestamptz, timestamptz, text, text, integer);
+drop function if exists public.agrotrack_actividad_flota_sql2(uuid, timestamptz, timestamptz, text, text, integer);
 
-create function public.agrotrack_actividad_flota(
-  p_empresa_id uuid,
-  p_desde      timestamptz default null,
-  p_hasta      timestamptz default null,
-  p_placa      text        default null,
-  p_agrupar    text        default 'dia',
-  p_limite     integer     default 1000
+create or replace function public.agrotrack_actividad_flota_sql2(
+  p_empresa_id uuid, p_desde timestamptz default null, p_hasta timestamptz default null,
+  p_placa text default null, p_agrupar text default 'dia', p_limite integer default 1000
 )
 returns table (
-  periodo            text,          -- 'YYYY-MM-DD' | 'YYYY-MM' | null (total)
-  placa              text,
-  unidad             text,
-  km_recorridos      numeric,       -- recorrido del periodo
-  encendido_segundos bigint,        -- horas de encendido del motor
-  viaje_segundos     bigint,        -- hora de viaje
-  ralenti_segundos   bigint,        -- tiempo en ralentí
-  vel_max_kmh        numeric,       -- velocidad máxima punta
-  alertas            bigint,        -- alta velocidad (apertura) + botón de pánico
-  posiciones         bigint         -- puntos leídos (densidad del reporte)
+  periodo text, placa text, unidad text, km_recorridos numeric,
+  encendido_segundos bigint, viaje_segundos bigint, ralenti_segundos bigint,
+  vel_max_kmh numeric, alertas bigint, posiciones bigint
 )
 language sql
 stable
--- 21/11/2026: SIN `security definer` NI `set search_path`: se requiere para
--- que PostgreSQL inlinee la función y el índice de fecha se use con los
--- parámetros reales. La membresía y la RLS ya validan el acceso.
 as $$
-  -- ---------------------------------------------------------------------------
-  -- CRITERIO 14/11/2026 (diferencia de ~10 % contra Zonar, observaciones I y II):
-  --   1) Cada tramo entre dos reportes toma el estado del punto donde EMPIEZA
-  --      (como Zonar: un estado dura hasta el siguiente evento). Antes tomaba
-  --      el del punto final, y el tiempo estacionado previo a una
-  --      "Ignición Encendida" se contaba como motor prendido.
-  --   2) Corte de días y horas exacto: se leen también los 10 minutos antes de
-  --      p_desde y después de p_hasta, y cada tramo se RECORTA al rango. Así el
-  --      tramo que cruza la medianoche se reparte entre los dos días en vez de
-  --      perderse, y un rango 08:00–12:00 suma exactamente esas horas.
-  -- ---------------------------------------------------------------------------
   with base as (
-    select
-      p.id, p.placa, p.unidad, p.fecha, p.secuencia, p.evento,
-      p.velocidad, p.latitud, p.longitud,
-      (p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
-        and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz))              as en_rango
+    select p.id, p.placa, p.unidad, p.fecha, p.secuencia, p.evento,
+           p.velocidad, p.latitud, p.longitud,
+           (p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
+            and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)) as en_rango
     from public.agrotrack_posiciones p
-    -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
     where (select public.onboarding_es_miembro(p_empresa_id))
       and p.empresa_id = p_empresa_id
       and (p_placa is null or p.placa = p_placa)
-      -- 10 minutos de margen a cada lado: el tramo que cruza el borde existe.
-      -- 16/11/2026: predicados INDEXABLES aunque el plan sea generico (con
-      -- "p_desde is null or ..." el indice de fecha queda inservible).
       and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz) - interval '10 minutes'
       and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz) + interval '10 minutes'
   ),
-  -- Estado de cada punto según el criterio único de la cabecera.
   puntos as (
-    select
-      b.*,
-      (not (lower(b.evento) like '%estacionad%'
-         or lower(b.evento) like '%apagad%'))                    as encendido,
-      (not (lower(b.evento) like '%estacionad%'
-         or lower(b.evento) like '%apagad%'))
-        and coalesce(b.velocidad, 0) > 5                         as es_viaje
+    select b.*,
+      (not (lower(b.evento) like '%estacionad%' or lower(b.evento) like '%apagad%')) as encendido,
+      (not (lower(b.evento) like '%estacionad%' or lower(b.evento) like '%apagad%'))
+        and coalesce(b.velocidad, 0) > 5 as es_viaje
     from base b
   ),
   tramos as (
-    select
-      q.*,
-      lag(q.latitud)                over ventana as prev_lat,
-      lag(q.longitud)               over ventana as prev_lon,
-      lag(q.fecha)                  over ventana as prev_fecha,
-      lag(coalesce(q.secuencia, 0)) over ventana as prev_sec,
-      lag(q.encendido)              over ventana as prev_encendido,
-      lag(q.es_viaje)               over ventana as prev_viaje
+    select q.*,
+      lag(q.latitud) over w as prev_lat, lag(q.longitud) over w as prev_lon,
+      lag(q.fecha) over w as prev_fecha, lag(coalesce(q.secuencia,0)) over w as prev_sec,
+      lag(q.encendido) over w as prev_encendido, lag(q.es_viaje) over w as prev_viaje
     from puntos q
-    window ventana as (
-      partition by q.placa
-      order by q.fecha, coalesce(q.secuencia, 0), q.id
-    )
+    window w as (partition by q.placa order by q.fecha, coalesce(q.secuencia,0), q.id)
   ),
   calculado as (
-    select
-      t.*,
-      (t.prev_fecha is not null
-        and t.prev_fecha = t.fecha
-        and coalesce(t.secuencia, 0) = coalesce(t.prev_sec, 0))  as es_duplicado,
-      -- Duración bruta del tramo (null = sin continuidad: hueco > 10 min).
-      case
-        when t.prev_fecha is null then null
-        when t.prev_fecha = t.fecha
-          and coalesce(t.secuencia, 0) = coalesce(t.prev_sec, 0) then 0
-        when extract(epoch from (t.fecha - t.prev_fecha)) > 600 then null
-        else extract(epoch from (t.fecha - t.prev_fecha))
-      end                                                        as dt_bruto,
-      -- Parte del tramo que cae DENTRO del rango pedido.
-      case
-        when t.prev_fecha is null then null
-        when extract(epoch from (t.fecha - t.prev_fecha)) > 600 then null
-        else greatest(0, extract(epoch from (
-               least(t.fecha, coalesce(p_hasta, t.fecha))
-               - greatest(t.prev_fecha, coalesce(p_desde, t.prev_fecha)))))
-      end                                                        as dt_segundos,
-      -- Inicio del tramo (recortado): decide en qué día/mes cae.
-      case
-        when t.prev_fecha is null then t.fecha
-        else greatest(t.prev_fecha, coalesce(p_desde, t.prev_fecha))
-      end                                                        as fecha_ref,
-      case
-        when t.prev_lat is null or t.prev_fecha is null then null
-        when t.prev_fecha = t.fecha
-          and coalesce(t.secuencia, 0) = coalesce(t.prev_sec, 0) then null
-        when extract(epoch from (t.fecha - t.prev_fecha)) > 600 then null
-        else 2.0 * 6371.0 * asin(least(1.0, sqrt(
-          power(sin(radians(t.latitud - t.prev_lat) / 2.0), 2) +
-          cos(radians(t.prev_lat)) * cos(radians(t.latitud)) *
-          power(sin(radians(t.longitud - t.prev_lon) / 2.0), 2)
-        )))
-      end                                                        as dist_bruta
+    select t.*,
+      (t.prev_fecha is not null and t.prev_fecha = t.fecha
+       and coalesce(t.secuencia,0) = coalesce(t.prev_sec,0)) as es_duplicado,
+      case when t.prev_fecha is null then null
+           when t.prev_fecha = t.fecha and coalesce(t.secuencia,0) = coalesce(t.prev_sec,0) then 0
+           when extract(epoch from (t.fecha - t.prev_fecha)) > 600 then null
+           else extract(epoch from (t.fecha - t.prev_fecha)) end as dt_bruto,
+      case when t.prev_fecha is null then null
+           when extract(epoch from (t.fecha - t.prev_fecha)) > 600 then null
+           else greatest(0, extract(epoch from (
+             least(t.fecha, coalesce(p_hasta, t.fecha))
+             - greatest(t.prev_fecha, coalesce(p_desde, t.prev_fecha))))) end as dt_segundos,
+      case when t.prev_fecha is null then t.fecha
+           else greatest(t.prev_fecha, coalesce(p_desde, t.prev_fecha)) end as fecha_ref,
+      case when t.prev_lat is null or t.prev_fecha is null then null
+           when t.prev_fecha = t.fecha and coalesce(t.secuencia,0) = coalesce(t.prev_sec,0) then null
+           when extract(epoch from (t.fecha - t.prev_fecha)) > 600 then null
+           else 2.0 * 6371.0 * asin(least(1.0, sqrt(
+             power(sin(radians(t.latitud - t.prev_lat) / 2.0), 2) +
+             cos(radians(t.prev_lat)) * cos(radians(t.latitud)) *
+             power(sin(radians(t.longitud - t.prev_lon) / 2.0), 2)))) end as dist_bruta
     from tramos t
   ),
-  -- Solo filas que aportan: un punto dentro del rango o un tramo que entra en él.
   utiles as (
-    select
-      c.*,
-      -- km del tramo proporcional a la parte que cae dentro del rango
-      case
-        when c.dist_bruta is null or c.dist_bruta >= 5 then 0::double precision
-        when coalesce(c.dt_bruto, 0) <= 0 then case when c.en_rango then c.dist_bruta else 0 end
-        else c.dist_bruta * least(1.0, coalesce(c.dt_segundos, 0) / c.dt_bruto)
-      end                                                        as dist_km
+    select c.*,
+      case when c.dist_bruta is null or c.dist_bruta >= 5 then 0::double precision
+           when coalesce(c.dt_bruto,0) <= 0 then case when c.en_rango then c.dist_bruta else 0 end
+           else c.dist_bruta * least(1.0, coalesce(c.dt_segundos,0) / c.dt_bruto) end as dist_km
     from calculado c
-    where c.en_rango or coalesce(c.dt_segundos, 0) > 0
+    where c.en_rango or coalesce(c.dt_segundos,0) > 0
   ),
-  -- ---------------------------------------------------------------------------
-  -- AGREGADO: una fila por (periodo, placa) con datos en el rango.
-  -- ---------------------------------------------------------------------------
   agregado as (
     select
-      case
-        when lower(coalesce(p_agrupar, 'dia')) = 'unidad' then null
-        when lower(p_agrupar) = 'mes'
-          then to_char(c.fecha_ref at time zone 'America/Lima', 'YYYY-MM')
-        else to_char(c.fecha_ref at time zone 'America/Lima', 'YYYY-MM-DD')
-      end                                                as periodo,
-      c.placa                                            as placa,
-      max(c.unidad)                                      as unidad,
-      coalesce(round(sum(c.dist_km)::numeric, 2), 0)     as km_recorridos,
-      -- El tramo toma el estado del punto donde empieza (prev_*).
-      coalesce((sum(c.dt_segundos) filter (where c.prev_encendido))::bigint, 0) as encendido_segundos,
-      coalesce((sum(c.dt_segundos) filter (where c.prev_viaje))::bigint, 0)     as viaje_segundos,
-      coalesce((sum(c.dt_segundos) filter (where c.prev_encendido and not c.prev_viaje))::bigint, 0)
-                                                                              as ralenti_segundos,
-      max(c.velocidad) filter (where c.en_rango)         as vel_max_kmh,
-      count(*) filter (
-        where c.en_rango
-          and not c.es_duplicado
-          and (
-            (lower(c.evento) like '%alta velocidad%'
-              and lower(c.evento) not like 'fin%')
-            or lower(c.evento) like '%pánico%'
-            or lower(c.evento) like '%panico%'
-          )
-      )                                                  as alertas,
-      count(*) filter (where c.en_rango)                 as posiciones
-    from utiles c
-    group by 1, c.placa
+      case when lower(coalesce(p_agrupar,'dia')) = 'unidad' then null
+           when lower(p_agrupar) = 'mes' then to_char(c.fecha_ref at time zone 'America/Lima','YYYY-MM')
+           else to_char(c.fecha_ref at time zone 'America/Lima','YYYY-MM-DD') end as periodo,
+      c.placa, max(c.unidad) as unidad,
+      coalesce(round(sum(c.dist_km)::numeric,2),0) as km_recorridos,
+      coalesce((sum(c.dt_segundos) filter (where c.prev_encendido))::bigint,0) as encendido_segundos,
+      coalesce((sum(c.dt_segundos) filter (where c.prev_viaje))::bigint,0) as viaje_segundos,
+      coalesce((sum(c.dt_segundos) filter (where c.prev_encendido and not c.prev_viaje))::bigint,0) as ralenti_segundos,
+      max(c.velocidad) filter (where c.en_rango) as vel_max_kmh,
+      count(*) filter (where c.en_rango and not c.es_duplicado and (
+        (lower(c.evento) like '%alta velocidad%' and lower(c.evento) not like 'fin%')
+        or lower(c.evento) like '%pánico%' or lower(c.evento) like '%panico%')) as alertas,
+      count(*) filter (where c.en_rango) as posiciones
+    from utiles c group by 1, c.placa
   ),
-  -- ---------------------------------------------------------------------------
-  -- UNIVERSO de placas (observación I/II): histórico COMPLETO de la empresa
-  -- sin filtro de rango, para que una unidad en taller/mantenimiento (sin una
-  -- sola posición en el rango) también salga en el reporte. Respetan la
-  -- membresía y el filtro p_placa igual que el resto de la función.
-  -- ---------------------------------------------------------------------------
   universo as (
-    select p.placa, max(p.unidad) as unidad
-    from public.agrotrack_posiciones p
-    -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
+    select g.placa,
+           coalesce((
+             select p.unidad from public.agrotrack_posiciones p
+             where p.empresa_id = g.empresa_id and p.placa = g.placa
+             order by p.fecha desc limit 1
+           ), g.placa) as unidad
+    from public.agrotrack_grupos_unidades g
     where (select public.onboarding_es_miembro(p_empresa_id))
-      and p.empresa_id = p_empresa_id
-      and (p_placa is null or p.placa = p_placa)
-    group by p.placa
+      and g.empresa_id = p_empresa_id
+      and (p_placa is null or g.placa = p_placa)
   ),
-  -- Unidades sin NINGUNA posición en el rango: las candidatas a fila en cero.
   sin_datos as (
-    select u.placa, u.unidad
-    from universo u
+    select u.placa, u.unidad from universo u
     where not exists (select 1 from agregado a where a.placa = u.placa)
   ),
-  -- Periodos que deben aparecer en cero (ver la cabecera del archivo):
-  --   'unidad' -> una sola clave con periodo null;
-  --   'dia'/'mes' -> los periodos con datos UNION los días/meses del rango
-  --   pedido (si p_desde y p_hasta están acotados; con rango abierto no se
-  --   pueden inventar fechas y solo valen los periodos con datos).
-  --   generate_series con límites null devuelve 0 filas (no es error), así
-  --   que el guard con p_desde/p_hasta basta.
   periodos as (
-    select null::text as periodo
-    where lower(coalesce(p_agrupar, 'dia')) = 'unidad'
+    select null::text as periodo where lower(coalesce(p_agrupar,'dia')) = 'unidad'
     union
     select periodo from (
       select a.periodo from agregado a where a.periodo is not null
       union
       select to_char(g at time zone 'America/Lima',
-                     case when lower(coalesce(p_agrupar, 'dia')) = 'mes'
-                          then 'YYYY-MM' else 'YYYY-MM-DD' end)
-      from generate_series(
-        p_desde, p_hasta,
-        case when lower(coalesce(p_agrupar, 'dia')) = 'mes'
-             then interval '1 month' else interval '1 day' end
-      ) g
-      where p_desde is not null
-        and p_hasta is not null
-        and lower(coalesce(p_agrupar, 'dia')) <> 'unidad'
-    ) t
+        case when lower(coalesce(p_agrupar,'dia')) = 'mes' then 'YYYY-MM' else 'YYYY-MM-DD' end)
+      from generate_series(p_desde, p_hasta,
+        case when lower(coalesce(p_agrupar,'dia')) = 'mes' then interval '1 month' else interval '1 day' end) g
+      where p_desde is not null and p_hasta is not null
+        and lower(coalesce(p_agrupar,'dia')) <> 'unidad'
+    ) x
   ),
-  -- Claves en cero: cada unidad sin datos x cada periodo que corresponde.
   claves_cero as (
-    select s.placa, s.unidad, t.periodo
-    from sin_datos s
-    cross join periodos t
+    select s.placa, s.unidad, t.periodo from sin_datos s cross join periodos t
   ),
   filas as (
-    select
-      a.periodo, a.placa, a.unidad, a.km_recorridos, a.encendido_segundos,
-      a.viaje_segundos, a.ralenti_segundos, a.vel_max_kmh, a.alertas, a.posiciones
+    select a.periodo, a.placa, a.unidad, a.km_recorridos, a.encendido_segundos,
+           a.viaje_segundos, a.ralenti_segundos, a.vel_max_kmh, a.alertas, a.posiciones
     from agregado a
     union all
-    -- Fila en cero: km/encendido/viaje/ralentí/alertas 0, vel_max null
-    -- (nunca hubo posición que mida) y posiciones 0 => cero tramos.
-    select
-      z.periodo, z.placa, z.unidad,
-      0::numeric, 0::bigint, 0::bigint, 0::bigint, null::numeric, 0::bigint, 0::bigint
+    select z.periodo, z.placa, z.unidad, 0::numeric, 0::bigint, 0::bigint, 0::bigint,
+           null::numeric, 0::bigint, 0::bigint
     from claves_cero z
   )
-  select
-    f.periodo                                             as periodo,
-    f.placa                                               as placa,
-    f.unidad                                              as unidad,
-    f.km_recorridos                                       as km_recorridos,
-    f.encendido_segundos                                  as encendido_segundos,
-    f.viaje_segundos                                      as viaje_segundos,
-    f.ralenti_segundos                                    as ralenti_segundos,
-    f.vel_max_kmh                                         as vel_max_kmh,
-    f.alertas                                             as alertas,
-    f.posiciones                                          as posiciones
+  select f.periodo, f.placa, f.unidad, f.km_recorridos, f.encendido_segundos,
+         f.viaje_segundos, f.ralenti_segundos, f.vel_max_kmh, f.alertas, f.posiciones
   from filas f
-  -- Único ORDER BY + LIMIT del conjunto unido: es el que garantiza que nunca
-  -- se superen las 1000 filas de PostgREST (las filas en cero compiten por el
-  -- mismo tope y el periodo descendente conserva primero lo más reciente).
   order by 1 desc nulls last, f.placa
-  limit greatest(coalesce(p_limite, 1000), 1);
+  limit greatest(coalesce(p_limite,1000),1);
 $$;
 
-grant execute on function public.agrotrack_actividad_flota(uuid, timestamptz, timestamptz, text, text, integer)
-  to anon, authenticated, service_role;
+alter function public.agrotrack_actividad_flota_sql2(uuid,timestamptz,timestamptz,text,text,integer) security invoker;
+alter function public.agrotrack_actividad_flota_sql2(uuid,timestamptz,timestamptz,text,text,integer) reset search_path;
+grant execute on function public.agrotrack_actividad_flota_sql2(uuid,timestamptz,timestamptz,text,text,integer) to authenticated, service_role;
+
+-- 4) Wrapper público: convierte los parámetros de fecha en literales antes de
+--    llamar al cuerpo SQL, para que PostgREST no fuerce un plan genérico.
+create or replace function public.agrotrack_actividad_flota(
+  p_empresa_id uuid, p_desde timestamptz default null, p_hasta timestamptz default null,
+  p_placa text default null, p_agrupar text default 'dia', p_limite integer default 1000
+)
+returns table (
+  periodo text, placa text, unidad text, km_recorridos numeric,
+  encendido_segundos bigint, viaje_segundos bigint, ralenti_segundos bigint,
+  vel_max_kmh numeric, alertas bigint, posiciones bigint
+)
+language plpgsql
+stable
+as $fn$
+begin
+  return query execute format(
+    'select * from public.agrotrack_actividad_flota_sql2($1, %L::timestamptz, %L::timestamptz, $2, $3, $4)',
+    p_desde, p_hasta
+  ) using p_empresa_id, p_placa, p_agrupar, p_limite;
+end
+$fn$;
+
+alter function public.agrotrack_actividad_flota(uuid,timestamptz,timestamptz,text,text,integer) security invoker;
+alter function public.agrotrack_actividad_flota(uuid,timestamptz,timestamptz,text,text,integer) reset search_path;
+grant execute on function public.agrotrack_actividad_flota(uuid,timestamptz,timestamptz,text,text,integer) to anon, authenticated, service_role;
+
 
 -- ---------------------------------------------------------------------------
 -- Comprobaciones (opcionales):

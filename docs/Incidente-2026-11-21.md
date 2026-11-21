@@ -55,3 +55,63 @@ El `0` visto en el SQL Editor era un artefacto de no tener `auth.uid()`.
 
 - Validación visual en producción con credenciales de usuario (la URL pública
   redirige a `/registro` cuando no hay sesión).
+
+---
+
+# Incidente 21/11/2026 (2ª parte) — `57014` en “Entradas y salidas” y “Tiempo en cada lote”
+
+## Síntoma
+
+En la pestaña *Geocercas* de `gestion/vehiculos-flota`, con el usuario de prueba
+de Pomalca, ambos reportes mostraban “No se pudo cargar el reporte”:
+
+- `POST /api/supabase-proxy/rest/v1/rpc/agrotrack_eventos_geocerca_flota`
+  → `500 {"code":"57014","message":"canceling statement due to statement timeout"}`
+  en ~8,5 s.
+- `POST /api/supabase-proxy/rest/v1/rpc/agrotrack_actividad_flota` con un rango
+  de 7 días → el mismo `57014`.
+
+## Causa raíz (confirmada con `EXPLAIN ANALYZE` sobre la BD real)
+
+1. Las dos RPC eran `language sql` con `security definer` +
+   `set search_path = public, pg_temp`. Eso impide el *inlining*: aparecían como
+   `Function Scan` opaco con plan genérico. Medido: **44,5 s** en eventos del día.
+2. Al quitar `definer`/`search_path` la función ya se inlinaba (1,6 s en SQL
+   Editor), pero **PostgREST pasa las fechas como parámetros bind** y el plan
+   genérico no usaba el índice de fecha: el CTE `ultimo_antes` hacía un
+   `Seq Scan` de ~724.000 filas (**12 s**). `force_custom_plan` no lo resolvió
+   (se revirtió).
+3. `agrotrack_actividad_flota` procesa ~160.000 posiciones en 7 días con
+   funciones de ventana (~9,6 s reales), y su CTE `universo` recorría todo el
+   histórico solo para listar las 44 unidades.
+4. Los roles de la API (`authenticator`, `authenticated`) tenían
+   `statement_timeout = 8s`, por debajo del tiempo real del reporte semanal.
+   El timeout de 8 s de `src/lib/supabase.js` es solo de `checkConnection()`;
+   las RPC van por el proxy `/api/supabase-proxy` de `vercel.json`.
+
+## Corrección aplicada
+
+`scripts/corregir-timeout-reportes-geocerca.sql` (idempotente, autoridad para
+replicar el fix en BD):
+
+- **Eventos**: `agrotrack_eventos_geocerca_flota` reescrita en PL/pgSQL con SQL
+  dinámico que incrusta `p_desde`/`p_hasta` como literales (el resto sigue
+  parametrizado) para forzar el índice sin depender del plan cache. El CTE
+  `ultimo_antes` pasa de `distinct on` sobre todo el histórico a una subconsulta
+  correlacionada por placa+geocerca con `LIMIT 1`.
+- **Actividad**: cuerpo optimizado en `agrotrack_actividad_flota_sql2`
+  (`universo` desde `agrotrack_grupos_unidades`, 44 filas) y wrapper público
+  PL/pgSQL que incrusta las fechas como literales antes de llamarlo.
+- Ambas funciones: `security invoker` y `search_path` sin configurar.
+- `statement_timeout = 20s` para `authenticator` y `authenticated`; se
+  terminaron las conexiones abiertas de `authenticator` para que tomaran el
+  nuevo valor.
+- Se alinearon `scripts/agrotrack-geocercas-reportes.sql` y
+  `scripts/agrotrack-reportes-flota.sql` con esta versión final, para que una
+  futura ejecución no reintroduzca las definiciones lentas.
+
+## Verificación
+
+- `agrotrack_eventos_geocerca_flota` desde la app: **200**, 29 filas, ~1,5-3 s.
+- `agrotrack_actividad_flota` 7 días desde la app: **200**, 40 filas, ~17 s.
+- Ya no aparece `57014` en las llamadas de los reportes.

@@ -209,118 +209,102 @@ alter table if exists public.agrotrack_geocercas
 drop function if exists public.agrotrack_eventos_geocerca_flota(uuid, timestamptz, timestamptz, text, integer);
 drop function if exists public.agrotrack_eventos_geocerca_flota(uuid, timestamptz, timestamptz, text, integer, text[]);
 
-create function public.agrotrack_eventos_geocerca_flota(
+create or replace function public.agrotrack_eventos_geocerca_flota(
   p_empresa_id uuid,
   p_desde      timestamptz default null,
   p_hasta      timestamptz default null,
   p_agrupar    text        default 'geocerca',
   p_limite     integer     default 500,
-  -- Filtro opcional por conjunto de placas (la UI del reporte "Geocercas:
-  -- entradas y salidas" lo usa para "Mostrar: Unidades / Grupos"). null = todas.
   p_placas     text[]      default null
 )
 returns table (
-  grupo_tipo     text,            -- 'geocerca' | 'dia' | 'mes'
-  grupo          text,            -- nombre de la geocerca, 'YYYY-MM-DD' o 'YYYY-MM'
-  entradas       bigint,
-  salidas        bigint,
-  unidades       bigint,          -- placas distintas que entraron
-  ultima_entrada timestamptz
+  grupo_tipo text, grupo text, entradas bigint, salidas bigint,
+  unidades bigint, ultima_entrada timestamptz
 )
-language sql
+language plpgsql
 stable
--- 21/11/2026: SIN `security definer` NI `set search_path`. PostgreSQL solo
--- inlinea SQL functions con security invoker y sin proconfig; con definer el
--- plan es genérico, el índice de fecha no se usa y la RPC daba statement
--- timeout. La membresía ya la valida `onboarding_es_miembro` y la RLS.
-as $$
-  with base_eventos as (
+as $fn$
+declare
+  v_sql text;
+begin
+  v_sql := $sql$
+    with base_eventos as (
+      select p.fecha, p.placa,
+             btrim(p.pt_referencia) as geocerca,
+             (lower(p.evento) like '%entrada%geocerca%') as es_entrada,
+             (lower(p.evento) like '%salida%geocerca%') as es_salida
+      from public.agrotrack_posiciones p
+      where (select public.onboarding_es_miembro($1))
+        and p.empresa_id = $1
+        and ($2 is null or p.placa = any($2))
+        and p.fecha >= coalesce(__DESDE__, '-infinity'::timestamptz)
+        and p.fecha <= coalesce(__HASTA__, 'infinity'::timestamptz)
+        and (lower(p.evento) like '%entrada%geocerca%'
+          or lower(p.evento) like '%salida%geocerca%')
+        and p.pt_referencia is not null
+        and btrim(p.pt_referencia) <> ''
+    ),
+    primero as (
+      select distinct on (f.placa, f.geocerca)
+        f.placa, f.geocerca, f.es_salida
+      from base_eventos f
+      order by f.placa, f.geocerca, f.fecha
+    ),
+    ultimo_antes as (
+      select f.placa, f.geocerca,
+             (
+               select lower(p.evento)
+               from public.agrotrack_posiciones p
+               where p.empresa_id = $1
+                 and p.placa = f.placa
+                 and btrim(p.pt_referencia) = f.geocerca
+                 and p.fecha < __DESDE__
+                 and (lower(p.evento) like '%entrada%geocerca%'
+                   or lower(p.evento) like '%salida%geocerca%')
+               order by p.fecha desc, coalesce(p.secuencia, 0) desc, p.id desc
+               limit 1
+             ) as evento
+      from primero f
+      where f.es_salida
+    ),
+    continuadas as (
+      select u.placa, u.geocerca
+      from ultimo_antes u
+      where u.evento like '%entrada%geocerca%'
+    ),
+    base as (
+      select f.fecha, f.placa, f.geocerca, f.es_entrada, f.es_salida
+      from base_eventos f
+      union all
+      select __DESDE__, c.placa, c.geocerca, true, false
+      from continuadas c
+    )
     select
-      p.fecha,
-      p.placa,
-      btrim(p.pt_referencia)                                 as geocerca,
-      (lower(p.evento) like '%entrada%geocerca%')             as es_entrada,
-      (lower(p.evento) like '%salida%geocerca%')              as es_salida
-    from public.agrotrack_posiciones p
-    -- Misma regla que la RLS, evaluada UNA sola vez: un no-miembro ve 0 filas.
-    where (select public.onboarding_es_miembro(p_empresa_id))
-      and p.empresa_id = p_empresa_id
-      -- Filtro opcional por placas (pantalla "Mostrar: Unidades / Grupos").
-      and (p_placas is null or p.placa = any(p_placas))
-      and p.fecha >= coalesce(p_desde, '-infinity'::timestamptz)
-      and p.fecha <= coalesce(p_hasta, 'infinity'::timestamptz)
-      -- Tolera mayúsculas/minúsculas y tildes distintas (mismo criterio que
-      -- el resto de las RPC: el texto real es "Entrada a Geocerca").
-      and (lower(p.evento) like '%entrada%geocerca%'
-        or lower(p.evento) like '%salida%geocerca%')
-      and p.pt_referencia is not null
-      and btrim(p.pt_referencia) <> ''
-  ),
-  -- Primer evento de cada placa+geocerca dentro del rango.
-  primero as (
-    select distinct on (f.placa, f.geocerca)
-      f.placa, f.geocerca, f.es_salida
-    from base_eventos f
-    order by f.placa, f.geocerca, f.fecha
-  ),
-  -- Último evento de cada par ANTES del rango (índice empresa+fecha recorta).
-  ultimo_antes as (
-    select distinct on (p.placa, btrim(p.pt_referencia))
-      p.placa,
-      btrim(p.pt_referencia) as geocerca,
-      lower(p.evento)        as evento
-    from public.agrotrack_posiciones p
-    where (select public.onboarding_es_miembro(p_empresa_id))
-      and p.empresa_id = p_empresa_id
-      and (p_placas is null or p.placa = any(p_placas))
-      and p_desde is not null
-      and p.fecha < p_desde
-      and (lower(p.evento) like '%entrada%geocerca%'
-        or lower(p.evento) like '%salida%geocerca%')
-      and p.pt_referencia is not null
-      and btrim(p.pt_referencia) <> ''
-    order by p.placa, btrim(p.pt_referencia), p.fecha desc
-  ),
-  -- Entradas continuadas: el par estaba dentro al abrir el rango (su último
-  -- evento previo fue una entrada) y su primer evento dentro es una salida.
-  continuadas as (
-    select u.placa, u.geocerca
-    from ultimo_antes u
-    where u.evento like '%entrada%geocerca%'
-      and exists (
-        select 1 from primero f
-        where f.placa = u.placa and f.geocerca = u.geocerca and f.es_salida
-      )
-  ),
-  base as (
-    select f.fecha, f.placa, f.geocerca, f.es_entrada, f.es_salida
-    from base_eventos f
-    union all
-    -- La entrada continuada cuenta al inicio del rango (p_desde).
-    select p_desde as fecha, c.placa, c.geocerca,
-           true as es_entrada, false as es_salida
-    from continuadas c
-  )
-  select
-    case when p_agrupar in ('dia', 'mes') then p_agrupar else 'geocerca' end as grupo_tipo,
-    case
-      when p_agrupar = 'dia' then to_char(b.fecha at time zone 'America/Lima', 'YYYY-MM-DD')
-      when p_agrupar = 'mes' then to_char(b.fecha at time zone 'America/Lima', 'YYYY-MM')
-      else b.geocerca
-    end                                                       as grupo,
-    count(*) filter (where b.es_entrada)                      as entradas,
-    count(*) filter (where b.es_salida)                       as salidas,
-    count(distinct b.placa) filter (where b.es_entrada)       as unidades,
-    max(b.fecha) filter (where b.es_entrada)                  as ultima_entrada
-  from base b
-  group by 2
-  -- Lo más reciente primero: en 'dia'/'mes' eso es el día/mes más nuevo.
-  order by max(b.fecha) desc nulls last, count(*) desc, grupo
-  limit greatest(coalesce(p_limite, 500), 1);
-$$;
+      case when $3 in ('dia', 'mes') then $3 else 'geocerca' end as grupo_tipo,
+      case
+        when $3 = 'dia' then to_char(b.fecha at time zone 'America/Lima', 'YYYY-MM-DD')
+        when $3 = 'mes' then to_char(b.fecha at time zone 'America/Lima', 'YYYY-MM')
+        else b.geocerca
+      end as grupo,
+      count(*) filter (where b.es_entrada) as entradas,
+      count(*) filter (where b.es_salida) as salidas,
+      count(distinct b.placa) filter (where b.es_entrada) as unidades,
+      max(b.fecha) filter (where b.es_entrada) as ultima_entrada
+    from base b
+    group by 2
+    order by max(b.fecha) desc nulls last, count(*) desc, grupo
+    limit greatest(coalesce($4, 500), 1)
+  $sql$;
+  v_sql := replace(v_sql, '__DESDE__', coalesce(quote_literal(p_desde), 'NULL') || '::timestamptz');
+  v_sql := replace(v_sql, '__HASTA__', coalesce(quote_literal(p_hasta), 'NULL') || '::timestamptz');
+  return query execute v_sql using p_empresa_id, p_placas, p_agrupar, p_limite;
+end
+$fn$;
 
-grant execute on function public.agrotrack_eventos_geocerca_flota(uuid, timestamptz, timestamptz, text, integer, text[])
-  to anon, authenticated, service_role;
+alter function public.agrotrack_eventos_geocerca_flota(uuid,timestamptz,timestamptz,text,integer,text[]) security invoker;
+alter function public.agrotrack_eventos_geocerca_flota(uuid,timestamptz,timestamptz,text,integer,text[]) reset search_path;
+grant execute on function public.agrotrack_eventos_geocerca_flota(uuid,timestamptz,timestamptz,text,integer,text[]) to anon, authenticated, service_role;
+
 
 -- ---------------------------------------------------------------------------
 -- 2) Reporte de tiempo en cada lote (punto dentro del polígono).
