@@ -493,7 +493,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
   // Por defecto gerencia ve el resumen por División. Al elegir una unidad se
   // cambia al detalle plano; al elegir grupo o "Todas las unidades" vuelve a
   // División. El botón sigue permitiendo cambiar la vista manualmente.
-  const [vista, setVista] = useState('dinamica');
+  const [vista, setVista] = useState('division');
   const [columnas, setColumnas] = useState('geocerca');
   const [valor, setValor] = useState('duracion_segundos');
   const [permanencias, setPermanencias] = useState([]);
