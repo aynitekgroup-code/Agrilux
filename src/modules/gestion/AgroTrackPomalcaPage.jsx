@@ -280,7 +280,12 @@ export default function AgroTrackPomalcaPage({ initialSection = 'geocercas' }) {
 
   return (
     <div className="space-y-4 pb-4 min-w-0 overflow-x-hidden">
-      <FleetHeader activeSection={section} onSectionChange={setSection} pendingAlerts={pendientes} />
+      <FleetHeader
+        activeSection={section}
+        onSectionChange={setSection}
+        pendingAlerts={pendientes}
+        fuente={fuentePosiciones}
+      />
 
       {section === 'consola' ? (
         <div className="space-y-4">

@@ -40,7 +40,7 @@ function ContextChip({ icon: Icon, title, subtitle, tone }) {
   );
 }
 
-export default function FleetHeader({ activeSection, onSectionChange, pendingAlerts = 0 }) {
+export default function FleetHeader({ activeSection, onSectionChange, pendingAlerts = 0, fuente = 'demo' }) {
   const { user, empresa_activa_id, empresas_disponibles } = useAuth();
   const listaEmpresas = Array.isArray(empresas_disponibles) ? empresas_disponibles : [];
   const empresaActiva = listaEmpresas.find((e) => e.id === empresa_activa_id) || null;
@@ -49,6 +49,17 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
   const campana = empresaActiva?.campana_activa || DEMO_FUNDO.campana;
   const cuota = user?.telemetria_cuota ?? user?.cuota_telemetria ?? null;
   const inicial = String(user?.nombre || user?.email || 'A').trim().charAt(0).toUpperCase();
+  // La consola puede estar alimentada por agrotrack_posiciones ("real") o por
+  // los mocks ("demo"). La etiqueta debe reflejar la fuente actual, no fijar
+  // "Modo demo" aunque el mapa y los reportes muestren datos reales.
+  const esDemo = fuente === 'demo';
+  const esReal = fuente === 'real';
+  const etiquetaFuente = esReal ? 'Datos reales'
+    : fuente === 'cargando' ? 'Cargando datos'
+      : fuente === 'ninguna' ? 'Sin datos' : 'Modo demo';
+  const tonoFuente = esReal || fuente === 'cargando'
+    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    : 'bg-amber-50 text-amber-700 border-amber-200';
 
   return (
     <section className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -62,8 +73,8 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
               <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
                 Agrilux · {empresaNombre}
               </h1>
-              <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                Modo demo
+              <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${tonoFuente}`}>
+                {etiquetaFuente}
               </span>
             </div>
             <p className="text-sm text-slate-500 mt-0.5">Sistema de Gestión y Monitoreo de Flota Vehicular</p>
@@ -80,12 +91,15 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
           <ContextChip icon={Building2} title="Empresa activa" subtitle={empresaActiva ? empresaNombre : `${empresaNombre} (Demo)`} tone={empresaActiva ? '#22C55E' : '#F59E0B'} />
-          <ContextChip icon={MapPin} title={DEMO_FUNDO.fundo} subtitle={`${ubicacion} · ${campana} · Demo`} />
+          <ContextChip icon={MapPin} title={DEMO_FUNDO.fundo} subtitle={`${ubicacion} · ${campana}${esDemo ? ' · Demo' : ''}`} />
           <ContextChip
             icon={cuota != null ? Wifi : ShieldCheck}
             title="Cuota de telemetría"
-            subtitle={cuota != null ? `${cuota} % de cuota usada` : 'Datos demo · sin consumo real'}
-            tone={cuota != null ? '#3B82F6' : '#F59E0B'}
+            subtitle={cuota != null
+              ? `${cuota} % de cuota usada`
+              : esDemo ? 'Datos demo · sin consumo real'
+                : esReal ? 'Datos reales · sin cuota configurada' : 'Sin consumo registrado'}
+            tone={cuota != null || esReal ? '#3B82F6' : '#F59E0B'}
           />
         </div>
       </div>
