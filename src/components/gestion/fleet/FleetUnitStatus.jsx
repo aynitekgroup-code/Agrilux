@@ -31,13 +31,18 @@ const COLUMNAS = [
   { label: 'Geocerca', clase: 'text-left' },
 ];
 
-/** Auto-refresco del reporte: cada 5 minutos se vuelve a llamar la RPC. */
+/** Auto-refresco del modo HISTÓRICO: cada 5 minutos se vuelve a llamar la RPC. */
 const AUTO_REFRESCO_MS = 5 * 60 * 1000;
 
+/** Respaldo del modo TIEMPO REAL por si Realtime no avisa (cada 60 s). */
+const RESPALDO_VIVO_MS = 60 * 1000;
+
 /**
- * Chip "● En vivo": la hora actual de Perú, que se actualiza cada segundo.
+ * Reloj de Perú que se actualiza cada segundo.
  * Vive en su propio componente para que el reloj NO re-renderice la tabla
  * completa (hasta 500 filas) cada segundo.
+ * OJO: es solo el reloj del navegador, NO indica qué tan fresco es el dato.
+ * La frescura la da el chip "Zonar leído hace X min".
  */
 function RelojEnVivo() {
   const [ahora, setAhora] = useState(() => new Date());
@@ -94,9 +99,9 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
   const [generadoEn, setGeneradoEn] = useState(null);
 
   const [filtroGeocerca, setFiltroGeocerca] = useState('');
-  // 14/11/2026 (observación III): modo TIEMPO REAL con los datos que el
-  // agente trae de Zonar cada 2 minutos (agrotrack_estado_vivo). Activo por
-  // defecto; "Histórico" vuelve al reporte por rango de siempre.
+  // Modo TIEMPO REAL con los datos que el agente trae de Zonar
+  // (agrotrack_estado_vivo). Activo por defecto; "Histórico" vuelve al
+  // reporte por rango de siempre.
   const [tiempoReal, setTiempoReal] = useState(true);
   const [latido, setLatido] = useState(null);
   const [ahoraRef, setAhoraRef] = useState(() => new Date().toISOString());
@@ -152,7 +157,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
       clearTimeout(pendiente);
       pendiente = setTimeout(() => cargarVivo(true), 1500);
     });
-    const reloj = setInterval(() => cargarVivo(true), 60 * 1000);
+    const reloj = setInterval(() => cargarVivo(true), RESPALDO_VIVO_MS);
     return () => {
       cancelado = true;
       clearTimeout(pendiente);
@@ -191,24 +196,26 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
     };
   }, [empresaId, consulta, pendienteDeFecha, intento, tiempoReal]);
 
-  // Auto-refresco cada 5 minutos: reutiliza el mismo mecanismo de recarga
-  // (incrementar `intento` vuelve a disparar el effect de arriba). Los refs
-  // dan acceso al estado actual SIN rearmar el intervalo en cada render, y el
-  // intervalo se limpia al desmontar. Si hay un error en curso (o ya hay una
-  // carga andando) NO se dispara: no se pisa el aviso de "Reintentar".
+  // Auto-refresco cada 5 minutos SOLO en modo histórico. En tiempo real ya
+  // hay Realtime + respaldo de 60 s; si este intervalo siguiera activo,
+  // subiría `intento` y destruiría/recrearía la suscripción Realtime y
+  // mostraría "cargando" cada 5 min (parpadeo de la tabla).
+  // Los refs dan acceso al estado actual SIN rearmar el intervalo en cada
+  // render. Si hay un error en curso (o ya hay una carga andando) NO se
+  // dispara: no se pisa el aviso de "Reintentar".
   const estadoRef = useRef(estado);
   const pendienteRef = useRef(pendienteDeFecha);
   useEffect(() => { estadoRef.current = estado; }, [estado]);
   useEffect(() => { pendienteRef.current = pendienteDeFecha; }, [pendienteDeFecha]);
   useEffect(() => {
-    if (!empresaId) return undefined;
+    if (!empresaId || tiempoReal) return undefined;
     const reloj = setInterval(() => {
       if (pendienteRef.current) return;
       if (estadoRef.current === 'error' || estadoRef.current === 'cargando') return;
       setIntento((n) => n + 1);
     }, AUTO_REFRESCO_MS);
     return () => clearInterval(reloj);
-  }, [empresaId]);
+  }, [empresaId, tiempoReal]);
 
   const unidadesSinTelemetria = useMemo(() => {
     if (placasFiltro == null) return unidadesSinPosicion;
@@ -278,15 +285,22 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
 
   // El XLSX se importa bajo demanda: la librería pesa ~430 kB y solo se
   // necesita cuando el usuario pide el archivo.
+  // Exporta lo que el usuario VE (filtros de unidad/grupo/geocerca aplicados),
+  // sin las filas "sin telemetría" que no tienen datos de posición.
   const descargarExcel = async () => {
     setDescargaError(null);
     try {
       const { exportarEstadoUnidadesExcel } = await import('../../../lib/exportExcel');
-      exportarEstadoUnidadesExcel(filas, { rangoTexto, periodo, filtro: '' });
+      const filasExcel = filasVistas.filter((f) => !f.sin_telemetria);
+      exportarEstadoUnidadesExcel(filasExcel, { rangoTexto, periodo, filtro: filtroTexto });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
     }
   };
+
+  const textoActualizacion = tiempoReal
+    ? 'se actualiza al llegar datos de Zonar'
+    : 'se actualiza cada 5 min';
 
   return (
     <div className="min-w-0">
@@ -304,6 +318,21 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
             <p className="text-xs text-slate-500">
               Última posición de cada unidad · una fila por placa · se actualiza sola cada 5 minutos desde la nube.
             </p>
+            {generadoEn ? (
+              <p className="text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                  title="Reloj de Perú. No indica la antigüedad del dato: para eso mira «Zonar leído hace…»"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
+                  Hora Perú <RelojEnVivo />
+                </span>
+                <span>
+                  Generado: {generadoEn.toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
+                  {' · '}{textoActualizacion}
+                </span>
+              </p>
+            ) : null}
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap">
@@ -313,8 +342,10 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
             <button
               type="button"
               onClick={() => setIntento((n) => n + 1)}
-              disabled={estado === 'cargando' || pendienteDeFecha}
-              title="Recargar el reporte ahora (también se recarga solo cada 5 minutos)"
+              disabled={estado === 'cargando' || (!tiempoReal && pendienteDeFecha)}
+              title={tiempoReal
+                ? 'Volver a leer el estado en vivo ahora (también se actualiza solo)'
+                : 'Recargar el reporte ahora (también se recarga solo cada 5 minutos)'}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-forest hover:text-forest disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <RotateCw size={13} className={estado === 'cargando' ? 'animate-spin' : ''} />
@@ -340,7 +371,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
               className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
                 tiempoReal ? 'bg-forest text-white' : 'text-slate-500 hover:text-forest'
               }`}
-              title="Última posición de cada unidad, enviada por Zonar cada 2 minutos"
+              title="Última posición de cada unidad, tal como la envía Zonar al agente"
             >
               <Radio size={13} className={tiempoReal ? 'animate-pulse' : ''} /> Tiempo real (Zonar)
             </button>
@@ -509,7 +540,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
 
             <BotonVerMas expandido={expandido} onAlternar={alternar} total={total} />
 
-            {filas.length >= LIMITE_ESTADO_UNIDADES ? (
+            {!tiempoReal && filas.length >= LIMITE_ESTADO_UNIDADES ? (
               <p className="px-4 py-2 text-[10px] text-amber-600 border-t border-slate-50">
                 Se alcanzó el tope de {LIMITE_ESTADO_UNIDADES} unidades (límite de PostgREST). Reduce el rango.
               </p>
@@ -521,13 +552,16 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
       <p className="px-4 py-2.5 text-[10px] text-slate-400 border-t border-slate-50 leading-relaxed">
         {fuente === 'real' ? (
           <span className="inline-flex items-center gap-1">
-            <Database size={10} /> Cálculo en SQL con PostGIS sobre public.agrotrack_posiciones + public.agrotrack_geocercas_reportes (agrotrack_estado_unidades_flota).
+            <Database size={10} />
+            {tiempoReal
+              ? ' Estado en vivo: public.agrotrack_estado_vivo_flota (última posición enviada por Zonar) + geocercas PostGIS.'
+              : ' Cálculo en SQL con PostGIS sobre public.agrotrack_posiciones + public.agrotrack_geocercas_reportes (agrotrack_estado_unidades_flota).'}
           </span>
         ) : (
           'Aún no hay datos reales para esta empresa.'
         )}
         <span className="block mt-0.5">
-          Antes: una sola columna con placa + área y filas repetidas. Ahora: Placa y Área separadas, una fila por placa y lectura de Zonar cada 5 minutos.
+          Antes: una sola columna con placa + área y filas repetidas. Ahora: Placa y Área separadas, una fila por placa y lectura de Zonar cada 5 minutos. Última posición del rango · geocerca = polígono (ST_Contains) que la contiene; si está fuera, se muestra la última geocerca de campo en la que estuvo (evento pt_referencia) · «Fuera de geocercas» solo si no hay ninguna · estado contra {tiempoReal ? 'la hora actual' : 'max(fecha) del periodo cargado'} · hora de Perú.
         </span>
       </p>
       </div>
