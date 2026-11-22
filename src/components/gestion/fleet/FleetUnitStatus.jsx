@@ -322,7 +322,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
               <p className="text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span
                   className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-                  title="Reloj de Perú. No indica la antigüedad del dato: para eso mira «Zonar leído hace…»"
+                  title="Reloj de Perú. No indica la antigüedad del dato: para eso mira «leído hace…»"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
                   Hora Perú <RelojEnVivo />

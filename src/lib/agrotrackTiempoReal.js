@@ -121,7 +121,7 @@ export function describirLatido(latido, ahora = new Date()) {
   const min = Math.max(0, Math.floor((ahora.getTime() - Date.parse(latido.ultima_lectura)) / 60000));
   const hace = min < 1 ? 'hace instantes' : min < 60 ? `hace ${min} min` : `hace ${Math.floor(min / 60)} h ${min % 60} min`;
   return {
-    texto: `Zonar leído ${hace}${latido.ok === false ? ' · último intento con error' : ''}`,
+    texto: `leído ${hace}${latido.ok === false ? ' · último intento con error' : ''}`,
     viejo: min >= MINUTOS_LATIDO_VIEJO || latido.ok === false,
   };
 }
