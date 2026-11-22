@@ -168,8 +168,6 @@ function columnasPara(report, agruparGeocerca) {
     case 'limite-velocidad':
     case 'alertas':
       return [['fecha', 'Fecha y hora'], ['unidad', 'Unidad'], ['evento', 'Evento'], ['velocidad', 'Velocidad (km/h)', true], ['direccion', 'Dirección']];
-    case 'alertas':
-      return [['fecha', 'Fecha y hora'], ['unidad', 'Unidad'], ['evento', 'Evento'], ['velocidad', 'Velocidad (km/h)', true], ['direccion', 'Dirección']];
     case 'ralenti':
       return [['unidad', 'Unidad'], ['ralenti_h', 'H. ralentí', true], ['motor_h', 'H. motor', true], ['pct_ralenti', '% ralentí', true]];
     case 'eventos':
