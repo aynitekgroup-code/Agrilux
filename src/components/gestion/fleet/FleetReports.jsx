@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, AlertTriangle, RotateCw, Database, FileChartColumn, ArrowUpDown, CalendarClock, FileSpreadsheet, Sparkles } from 'lucide-react';
+import { Loader2, AlertTriangle, RotateCw, Database, FileChartColumn, ArrowUpDown, CalendarClock, FileSpreadsheet, Sparkles, Radio, History } from 'lucide-react';
 import {
   obtenerActividadFlota,
   rangoLibreLima,
@@ -53,6 +53,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
   const [resumenCargando, setResumenCargando] = useState(false);
   const [resumenError, setResumenError] = useState(null);
   const [orden, setOrden] = useState({ campo: 'unidad', dir: 'asc' });
+  const [modoReporte, setModoReporte] = useState('historico');
 
   // Precarga con el último día (o mes) que trae datos reales.
   useEffect(() => {
@@ -283,6 +284,36 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
           </div>
         </div>
         {descargaError ? <p className="text-[10px] text-red-600">{descargaError}</p> : null}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-lg bg-slate-50 p-0.5" role="group" aria-label="Modo del reporte">
+            <button
+              type="button"
+              onClick={() => setModoReporte('tiempo-real')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
+                modoReporte === 'tiempo-real' ? 'bg-forest text-white' : 'text-slate-500 hover:text-forest'
+              }`}
+              title="Última posición de cada unidad, tal como la envía Zonar"
+            >
+              <Radio size={13} className={modoReporte === 'tiempo-real' ? 'animate-pulse' : ''} /> Tiempo real (Zonar)
+            </button>
+            <button
+              type="button"
+              onClick={() => setModoReporte('historico')}
+              className={`px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
+                modoReporte === 'historico' ? 'bg-forest text-white' : 'text-slate-500 hover:text-forest'
+              }`}
+            >
+              Histórico por rango
+            </button>
+          </div>
+          {modoReporte === 'tiempo-real' ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
+              leído hace instantes
+            </span>
+          ) : null}
+        </div>
 
         <div className="flex flex-wrap items-end gap-3">
           <div>
