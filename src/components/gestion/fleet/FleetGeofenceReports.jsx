@@ -37,6 +37,14 @@ import {
 import { useRango, ControlesRango, CuerpoEstado, numero, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, AvisoUnidadesSinTelemetria } from './reportesComunes';
 import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
 import { agruparPorDivision, aplanarGrupos, nombreDivision, normalizarDivision } from '../../../lib/agrotrackDivisiones';
+import {
+  crearSeleccion,
+  todosMarcados,
+  alternarValor,
+  alternarTodos as alternarTodosFiltro,
+  seleccionAAplicar,
+  pasaFiltro,
+} from '../../../lib/filtrosPivot';
 import { armarContextoReporte } from '../../../lib/reportesIa';
 import { llamarIaGestion } from '../../../lib/agrotrackIa';
 
@@ -445,7 +453,7 @@ function PopoverFiltro({ titulo, opciones, seleccion, onAplicar }) {
       const top = abajo + alto > window.innerHeight - 8 ? Math.max(8, rect.top - alto - 4) : abajo;
       setPos({ top, left: izquierda });
     }
-    setBorrador(Array.isArray(seleccion) ? [...seleccion] : (opciones || []).map((o) => o.valor));
+    setBorrador(crearSeleccion(seleccion, opciones));
     setBusqueda('');
     setAbierto(true);
   };
@@ -477,22 +485,16 @@ function PopoverFiltro({ titulo, opciones, seleccion, onAplicar }) {
     };
   }, [abierto]);
 
-  const total = (opciones || []).length;
-  const todos = total === 0 || borrador.length === total;
+  const todos = todosMarcados(borrador, opciones);
   const texto = busqueda.trim().toLowerCase();
   const visibles = (opciones || []).filter((o) => !texto || String(o.etiqueta).toLowerCase().includes(texto));
 
-  const alternar = (valor) => {
-    setBorrador((prev) => (prev.includes(valor) ? prev.filter((v) => v !== valor) : [...prev, valor]));
-  };
-  const alternarTodos = () => {
-    setBorrador(todos ? [] : (opciones || []).map((o) => o.valor));
-  };
+  const alternar = (valor) => setBorrador((prev) => alternarValor(prev, valor));
+  const alternarTodos = () => setBorrador((prev) => alternarTodosFiltro(prev, opciones));
   const aplicar = () => {
-    const lista = [...new Set(borrador)];
     // Si están todos marcados equivale a no filtrar; si no hay ninguno, la
     // tabla queda vacía como en Excel.
-    onAplicar(lista.length === total ? null : lista);
+    onAplicar(seleccionAAplicar(borrador, opciones));
     setAbierto(false);
   };
   const limpiar = () => {
@@ -650,15 +652,14 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
   // Se filtra antes de construir la tabla para que los totales, los totales
   // por día/mes y el Total general cuadren con lo que se ve.
   const permanenciasFiltradas = useMemo(() => {
-    const pasa = (lista, valor) => lista == null || lista.includes(valor);
     return (permanencias || []).filter((f) => {
       const dia = String(f?.dia || '').trim().slice(0, 10);
       return (
-        pasa(filtros.mes, dia.slice(0, 7)) &&
-        pasa(filtros.fecha, dia) &&
-        pasa(filtros.area, codigoArea(f?.unidad, f?.placa) || '') &&
-        pasa(filtros.placa, String(f?.placa || '').trim()) &&
-        pasa(filtros.columna, columnaDe(f))
+        pasaFiltro(filtros.mes, dia.slice(0, 7)) &&
+        pasaFiltro(filtros.fecha, dia) &&
+        pasaFiltro(filtros.area, codigoArea(f?.unidad, f?.placa) || '') &&
+        pasaFiltro(filtros.placa, String(f?.placa || '').trim()) &&
+        pasaFiltro(filtros.columna, columnaDe(f))
       );
     });
   }, [permanencias, filtros, columnasMode]);

@@ -85,4 +85,27 @@ function reescribirApi(u) {
 
 // Capturar el evento de instalación lo antes posible
 
+// ── Actualización del service worker ──
+// Si un service worker nuevo toma el control, recargar una vez para no seguir
+// viendo el bundle anterior (p. ej. filtros ya corregidos pero cacheados).
+if ('serviceWorker' in navigator) {
+  const yaControlada = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!yaControlada) return;
+    try {
+      const clave = 'agrilux-sw-recarga';
+      const ultima = Number(sessionStorage.getItem(clave) || 0);
+      if (Date.now() - ultima < 10000) return;
+      sessionStorage.setItem(clave, String(Date.now()));
+    } catch {}
+    window.location.reload();
+  });
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .getRegistration()
+      .then((registro) => registro?.update())
+      .catch(() => {});
+  });
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(<App />)
