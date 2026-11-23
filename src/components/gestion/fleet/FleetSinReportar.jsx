@@ -6,8 +6,9 @@ import { formatearFechaHora } from '../../../lib/agrotrackFlota';
 import { codigoArea } from '../../../lib/agrotrackVisitasDia';
 import { armarContextoReporte } from '../../../lib/reportesIa';
 import { llamarIaGestion } from '../../../lib/agrotrackIa';
-import { CuerpoEstado, haceCuanto, useLimiteFilas, BotonVerMas, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, RelojEnVivo } from './reportesComunes';
+import { CuerpoEstado, useLimiteFilas, BotonVerMas, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, RelojEnVivo } from './reportesComunes';
 import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
+import { calcularSinReportar } from '../../../lib/agrotrackReporteFilas.js';
 
 /**
  * Reporte "Unidades sin reportar" (réplica de la captura de Zonar:
@@ -141,21 +142,7 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
   }, [filas, unidadesSinTelemetria]);
 
   const filasVistas = useMemo(() => {
-    const umbralMs = ahora.getTime() - ventana * 3600 * 1000;
-    return filtrarFilasPorPlaca(filasConSinTelemetria, placasFiltro, (fila) => fila.placa)
-      .map((f) => {
-        const t = Date.parse(f.ultima_fecha || '');
-        const tieneFecha = Number.isFinite(t);
-        const antiguedadMs = tieneFecha ? ahora.getTime() - t : Infinity;
-        return {
-          ...f,
-          antiguedadMs,
-          transcurrido: tieneFecha ? haceCuanto(f.ultima_fecha, ahora) : 'sin reporte',
-          sinReportar: !tieneFecha || t < umbralMs,
-        };
-      })
-      .filter((f) => f.sinReportar)
-      .sort((a, b) => (a.antiguedadMs === b.antiguedadMs ? 0 : b.antiguedadMs - a.antiguedadMs));
+    return calcularSinReportar(filtrarFilasPorPlaca(filasConSinTelemetria, placasFiltro), ahora, ventana);
   }, [filasConSinTelemetria, placasFiltro, ahora, ventana]);
 
   // Tabla limitada a 15 filas; Excel e IA usan la lista completa.
@@ -182,7 +169,7 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
 
   const pendienteDeFecha = !empresaId;
   const mensajePendiente = 'Selecciona una empresa activa para consultar las unidades sin reportar.';
-  const puedeExportar = estado === 'ok' && filas.length > 0;
+  const puedeExportar = (estado === 'ok' || estado === 'vacio') && filasVistas.length > 0;
 
   // El XLSX se importa bajo demanda: la librería pesa ~430 kB y solo se
   // necesita cuando el usuario pide el archivo.
@@ -190,7 +177,7 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
     setDescargaError(null);
     try {
       const { exportarSinReportarExcel } = await import('../../../lib/exportExcelReportes');
-      exportarSinReportarExcel(filas, { ventanaHoras: ventana, generado: generadoEn || ahora });
+      exportarSinReportarExcel(filasVistas, { ventanaHoras: ventana, generado: generadoEn || ahora });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
     }

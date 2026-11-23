@@ -265,8 +265,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
     setDescargaError(null);
     try {
       const { exportarEstadoUnidadesExcel } = await import('../../../lib/exportExcel');
-      const filasExcel = filasVistas.filter((f) => !f.sin_telemetria);
-      exportarEstadoUnidadesExcel(filasExcel, { rangoTexto, periodo, filtro: filtroTexto });
+      exportarEstadoUnidadesExcel(filasVistas, { rangoTexto, periodo, filtro: filtroTexto });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
     }

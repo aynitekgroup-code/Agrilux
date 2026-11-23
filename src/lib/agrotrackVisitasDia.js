@@ -110,6 +110,9 @@ async function paginado(nombre, params, contexto) {
     const utiles = corte < 0 ? lotes : lotes.slice(0, corte + 1);
     utiles.forEach((lote) => filas.push(...lote));
     if (corte >= 0) break;
+    if (base + EN_PARALELO >= MAX_PAGINAS) {
+      throw new Error('El reporte alcanzó 50 000 visitas. Reduce el rango; no se exportarán datos truncados.');
+    }
   }
   return filas;
 }
@@ -119,6 +122,8 @@ async function paginado(nombre, params, contexto) {
  * completas por día; con un rango "Desde / hasta" con hora hay que descartar
  * las que quedan fuera. Una visita abierta (sin salida) entra si empezó antes
  * del final del rango.
+ * Solo selecciona filas, NO recorta sus horas. Para reportes/exportaciones
+ * con horas parciales usar leerVisitasDia({ desde, hasta }) y su RPC exacta.
  * @param {Array} filas  visitas de agrotrack_visitas_dia_flota
  * @param {string} desde ISO del inicio del rango (o null)
  * @param {string} hasta ISO del final del rango (o null)
@@ -136,9 +141,52 @@ export function filtrarVisitasPorRango(filas, desde, hasta) {
   });
 }
 
-/** Todas las visitas guardadas del rango (todas las unidades). */
-export async function leerVisitasDia(empresaId, { desdeDia, hastaDia, placa = '', geocerca = '' }) {
-  return paginado(
+/** Recorta días parciales recalculando los estados en SQL, nunca en proporción.
+ * La consulta es por placa/día para no saturar PostGIS ni truncar la flota.
+ * `consultar` se inyecta para probar el contrato sin tocar Supabase.
+ */
+export async function recortarVisitasConSql(filas, desde, hasta, consultar, cancelado = () => false) {
+  const t0 = Date.parse(desde || '');
+  const t1 = Date.parse(hasta || '');
+  if (!Number.isFinite(t0) || !Number.isFinite(t1) || t1 <= t0) {
+    throw new Error('El rango de visitas debe tener inicio y fin válidos, en ese orden.');
+  }
+  const tareas = new Map();
+  const resultado = [];
+  for (const f of filas) {
+    const dia = f.dia || partesLima(f.entrada).fecha;
+    const inicioDia = Date.parse(`${dia}T00:00:00-05:00`);
+    const finDia = inicioDia + 86400000 - 1000;
+    if (t1 < inicioDia || t0 > finDia) continue;
+    if (t0 <= inicioDia && t1 >= finDia) {
+      resultado.push(f);
+      continue;
+    }
+    const clave = `${dia}/${f.placa}`;
+    if (!tareas.has(clave)) tareas.set(clave, { dia, placa: f.placa, metadatos: new Map(),
+      desde: new Date(Math.max(t0, inicioDia)).toISOString(),
+      hasta: new Date(Math.min(t1, finDia)).toISOString() });
+    tareas.get(clave).metadatos.set(f.geocerca, f);
+  }
+  // Secuencial a propósito: el índice empresa/placa/fecha mantiene cada
+  // llamada pequeña. Un fallo aborta el reporte, no muestra horas aproximadas.
+  for (const tarea of tareas.values()) {
+    if (cancelado()) throw new Error('Consulta de visitas cancelada al cambiar el rango.');
+    const exactas = await consultar(tarea);
+    if (exactas.length >= PAGINA) throw new Error('El detalle por placa/día alcanzó 1000 visitas. Reduce el rango; no se exportarán datos truncados.');
+    for (const f of exactas) {
+      const meta = tarea.metadatos.get(f.geocerca) || {};
+      resultado.push({ ...meta, ...f, dia: tarea.dia,
+        continua_dia_anterior: f.continua_dia_anterior ?? meta.continua_dia_anterior ?? false });
+    }
+  }
+  return resultado.sort((a, b) => String(a.entrada).localeCompare(String(b.entrada))
+    || String(a.placa).localeCompare(String(b.placa)));
+}
+
+/** Visitas guardadas para días completos; SQL exacto para bordes horarios. */
+export async function leerVisitasDia(empresaId, { desdeDia, hastaDia, placa = '', geocerca = '', desde = null, hasta = null, cancelado = () => false }) {
+  const filas = await paginado(
     'agrotrack_visitas_dia_flota',
     {
       p_empresa_id: empresaId,
@@ -149,6 +197,21 @@ export async function leerVisitasDia(empresaId, { desdeDia, hastaDia, placa = ''
     },
     'No se pudieron leer las visitas guardadas',
   );
+  if (cancelado()) throw new Error('Consulta de visitas cancelada al cambiar el rango.');
+  if (!desde || !hasta) return filas;
+  // Días completos conservan el respaldo. Solo los bordes horarios requieren
+  // el lector nuevo: tramos GPS indexados, sin recalcular polígonos.
+  return recortarVisitasConSql(filas, desde, hasta, async (tarea) => {
+    try {
+      return await paginado('agrotrack_visitas_rango_flota', {
+        p_empresa_id: empresaId, p_desde: tarea.desde, p_hasta: tarea.hasta,
+        p_placa: tarea.placa, p_geocerca: geocerca || null,
+      }, 'No se pudo leer el corte horario exacto');
+    } catch (e) {
+      if (e.faltaSql) throw new Error('Ejecuta scripts/agrotrack-visitas-rango-exacto.sql en el SQL Editor de Supabase para consultar horas parciales sin timeout.');
+      throw e;
+    }
+  }, cancelado);
 }
 
 /** Horas por placa x geocerca (base de la tabla dinámica). */

@@ -64,6 +64,10 @@ export function calcularEventosResumidos(filas, totalSegundos) {
   const total = Number(totalSegundos);
   const valido = Number.isFinite(total) && total > 0;
   return (filas || []).map((f) => {
+    if (f.sin_datos_rango || f.sin_telemetria) return {
+      ...f, stop: null, idle: null, drive: null, total: null,
+      pct_stop: null, pct_idle: null, pct_drive: null,
+    };
     const drive = Number(f.viaje_segundos || 0);
     const idle = Number(f.ralenti_segundos || 0);
     const encendido = Number(f.encendido_segundos || 0);

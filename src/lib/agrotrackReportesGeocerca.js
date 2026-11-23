@@ -136,9 +136,8 @@ export async function obtenerLotesFlota(
   // 18/11/2026 (observación IV: "tiempo en cada lote no carga"): el cálculo en
   // vivo cruza todas las posiciones con los polígonos y pasa de los 8 s con
   // todas las unidades o varios días. Con días COMPLETOS se lee lo ya
-  // guardado en agrotrack_visitas_dia (instantáneo y exacto). Con horas
-  // parciales se intenta en vivo y, si se corta, se usan las visitas
-  // guardadas recortadas a la hora (reparto proporcional, con aviso).
+  // guardado en agrotrack_visitas_dia (instantáneo). Las horas parciales se
+  // calculan en SQL: nunca se sustituyen por un reparto proporcional.
   const desdeVisitas = () => llamarRpc(
     'agrotrack_lotes_desde_visitas',
     {
@@ -163,14 +162,9 @@ export async function obtenerLotesFlota(
     }
     return enVivo();
   }
-  try {
-    return await enVivo();
-  } catch (e) {
-    if (!desde || !hasta || !/8 s|timeout|tard|cancel/i.test(String(e?.message))) throw e;
-    const filas = await desdeVisitas();
-    filas.aviso = 'El cálculo exacto por hora tardó más de 8 s: se muestran las visitas guardadas recortadas a ese horario (apagado/ralentí/viajando repartidos en proporción). Para cifras exactas usa días completos.';
-    return filas;
-  }
+  // Un timeout no autoriza a repartir estados proporcionalmente: puede
+  // inventar horas de motor. Se muestra el error y se permite reintentar.
+  return enVivo();
 }
 
 /** ¿El rango va de 00:00 a 23:59 (hora de Perú) en días completos? */

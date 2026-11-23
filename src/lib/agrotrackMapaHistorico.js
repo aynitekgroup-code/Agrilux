@@ -64,7 +64,7 @@ export function planearPaginas(desdeIso, hastaIso) {
     const inicio = desdeMs + i * ventanaMs;
     // -1 ms en el "hasta" para que el punto exacto del corte no aparezca en
     // dos páginas seguidas (la RPC filtra fecha >= desde y fecha <= hasta).
-    const fin = Math.min(desdeMs + (i + 1) * ventanaMs - 1, hastaMs);
+    const fin = i === totalPaginas - 1 ? hastaMs : desdeMs + (i + 1) * ventanaMs - 1;
     paginas.push({
       indice: i + 1,
       desdeMs: inicio,

@@ -12,7 +12,7 @@ import {
 } from '../../../lib/agrotrackFlota';
 import { generarResumenFlota } from '../../../lib/agrotrackInsights';
 import { rangoRapido, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, RelojEnVivo } from './reportesComunes';
-import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
+import { completarUnidadesReporte } from '../../../lib/agrotrackReporteFilas.js';
 
 /**
  * Reporte de actividad de flota (FASE 3).
@@ -82,7 +82,6 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
     setOpcionFiltro,
     gruposInfo,
     unidades,
-    unidadesSinPosicion,
     placasFiltro,
     opcionesGrupos,
   } = useFiltroUnidadGrupo({ vehicles, empresaId });
@@ -178,35 +177,13 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
     [filas, placasFiltro],
   );
 
-  const unidadesSinTelemetria = useMemo(() => {
-    if (placasFiltro == null) return unidadesSinPosicion;
-    const placas = new Set(placasFiltro.map(normalizarPlaca));
-    return unidadesSinPosicion.filter((unidad) => placas.has(unidad.placa));
-  }, [placasFiltro, unidadesSinPosicion]);
-
   const periodoPlaceholder = useMemo(() => consulta?.texto || null, [consulta]);
 
-  const filasConSinTelemetria = useMemo(() => {
-    const presentes = new Set(filasFiltradas.map((fila) => normalizarPlaca(fila.placa)).filter(Boolean));
-    return [
-      ...filasFiltradas,
-      ...unidadesSinTelemetria
-        .filter((unidad) => !presentes.has(unidad.placa))
-        .map((unidad) => ({
-          placa: unidad.placa,
-          unidad: unidad.area || unidad.descripcion || unidad.placa,
-          periodo: periodoPlaceholder,
-          km_recorridos: null,
-          prendido_segundos: null,
-          viaje_segundos: null,
-          ralenti_segundos: null,
-          vel_max_kmh: null,
-          alertas: null,
-          posiciones: null,
-          sin_telemetria: true,
-        })),
-    ];
-  }, [filasFiltradas, unidadesSinTelemetria, periodoPlaceholder]);
+  const filasConSinTelemetria = useMemo(() => completarUnidadesReporte(
+    filasFiltradas,
+    filtrarFilasPorPlaca(unidades, placasFiltro),
+    periodoPlaceholder,
+  ), [filasFiltradas, unidades, placasFiltro, periodoPlaceholder]);
 
   // Orden por columna (los encabezados son botones).
   const filasOrdenadas = useMemo(() => {
@@ -230,6 +207,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
   const totales = useMemo(() => {
     const sum = (campo) => filasConSinTelemetria.reduce((s, f) => s + Number(f[campo] || 0), 0);
     return {
+      medidos: filasConSinTelemetria.filter((f) => !f.sin_datos_rango).length,
       km: sum('km_recorridos'),
       prendido: sum('prendido_segundos'),
       viaje: sum('viaje_segundos'),
@@ -243,7 +221,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
 
   const cargando = estado === 'cargando';
   const hayTabla = (estado === 'ok' || estado === 'vacio') && filasConSinTelemetria.length > 0;
-  const puedeExportar = estado === 'ok' && filas.length > 0;
+  const puedeExportar = (estado === 'ok' || estado === 'vacio') && filasOrdenadas.length > 0;
 
   // El XLSX se importa bajo demanda: la librería xlsx pesa ~430 kB y solo se
   // necesita cuando el usuario pide el archivo.
@@ -251,7 +229,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
     setDescargaError(null);
     try {
       const { exportarActividadExcel } = await import('../../../lib/exportExcel');
-      exportarActividadExcel(filas, { modo: 'libre', rangoTexto, placa });
+      exportarActividadExcel(filasOrdenadas, { modo: 'libre', rangoTexto, placa });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
     }
@@ -367,7 +345,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
           {modoReporte === 'tiempo-real' ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
-              leído hace instantes
+              {generadoEn ? 'Consulta actualizada · ver hora de generación' : 'Esperando primera lectura'}
             </span>
           ) : null}
         </div>
@@ -515,14 +493,15 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
                       {fila.unidad && fila.unidad !== fila.placa ? (
                         <span className="block text-[10px] text-slate-400 truncate max-w-[240px]">{fila.unidad}</span>
                       ) : null}
+                      {fila.sin_datos_rango ? <span className="block text-[10px] text-amber-700">Sin datos en el rango · horas no disponibles</span> : null}
                     </td>
                     <td className="px-3 py-2 text-right font-semibold">{numero(fila.km_recorridos, 1)}</td>
-                    <td className="px-3 py-2 text-right font-bold text-slate-800">{formatearDuracion(fila.prendido_segundos)}</td>
-                    <td className="px-3 py-2 text-right">{formatearDuracion(fila.viaje_segundos)}</td>
-                    <td className="px-3 py-2 text-right">{formatearDuracion(fila.ralenti_segundos)}</td>
-                    <td className="px-3 py-2 text-right">{numero(fila.vel_max_kmh, 0)} km/h</td>
+                    <td className="px-3 py-2 text-right font-bold text-slate-800">{fila.sin_datos_rango ? '—' : formatearDuracion(fila.prendido_segundos)}</td>
+                    <td className="px-3 py-2 text-right">{fila.sin_datos_rango ? '—' : formatearDuracion(fila.viaje_segundos)}</td>
+                    <td className="px-3 py-2 text-right">{fila.sin_datos_rango ? '—' : formatearDuracion(fila.ralenti_segundos)}</td>
+                    <td className="px-3 py-2 text-right">{fila.vel_max_kmh == null ? '—' : `${numero(fila.vel_max_kmh, 0)} km/h`}</td>
                     <td className="px-3 py-2 text-right">
-                      {Number(fila.alertas) > 0 ? (
+                      {fila.sin_datos_rango ? '—' : Number(fila.alertas) > 0 ? (
                         <span className="font-bold text-red-600">{fila.alertas}</span>
                       ) : (
                         <span className="text-slate-300">0</span>
@@ -537,11 +516,11 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
                     Totales de {filasConSinTelemetria.length} fila{filasConSinTelemetria.length === 1 ? '' : 's'}
                   </td>
                   <td className="px-3 py-2.5 text-right">{numero(totales.km, 1)}</td>
-                  <td className="px-3 py-2.5 text-right">{formatearDuracion(totales.prendido)}</td>
-                  <td className="px-3 py-2.5 text-right">{formatearDuracion(totales.viaje)}</td>
-                  <td className="px-3 py-2.5 text-right">{formatearDuracion(totales.ralenti)}</td>
+                  <td className="px-3 py-2.5 text-right">{totales.medidos ? formatearDuracion(totales.prendido) : '—'}</td>
+                  <td className="px-3 py-2.5 text-right">{totales.medidos ? formatearDuracion(totales.viaje) : '—'}</td>
+                  <td className="px-3 py-2.5 text-right">{totales.medidos ? formatearDuracion(totales.ralenti) : '—'}</td>
                   <td className="px-3 py-2.5 text-right">—</td>
-                  <td className="px-3 py-2.5 text-right">{totales.alertas}</td>
+                  <td className="px-3 py-2.5 text-right">{totales.medidos ? totales.alertas : '—'}</td>
                 </tr>
               </tfoot>
             </table>

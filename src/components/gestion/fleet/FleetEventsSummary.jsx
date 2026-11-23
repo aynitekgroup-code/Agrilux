@@ -8,7 +8,7 @@ import {
   formatearHMS,
 } from '../../../lib/agrotrackEventosResumidos';
 import { useRango, ControlesRango, CuerpoEstado, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, RelojEnVivo } from './reportesComunes';
-import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
+import { completarUnidadesReporte } from '../../../lib/agrotrackReporteFilas.js';
 
 /**
  * Reporte 15 de Zonar "Eventos resumidos" (FASE 3.6, pedido por el Ing.
@@ -51,7 +51,6 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
     gruposInfo,
     opcionesGrupos,
     unidades,
-    unidadesSinPosicion,
     placasFiltro,
   } = useFiltroUnidadGrupo({ vehicles, empresaId });
   const placa = mostrar === 'unidades' ? opcionFiltro : '';
@@ -139,44 +138,19 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
     [consulta, periodo, modoReporte],
   );
 
-  const filasBaseCalculadas = useMemo(
-    () => calcularEventosResumidos(filasFiltradas, totalSegundos),
-    [filasFiltradas, totalSegundos]
+  const filasCalculadas = useMemo(
+    () => calcularEventosResumidos(completarUnidadesReporte(
+      filasFiltradas, filtrarFilasPorPlaca(unidades, placasFiltro),
+    ), totalSegundos),
+    [filasFiltradas, totalSegundos, unidades, placasFiltro]
   );
-
-  const unidadesSinTelemetria = useMemo(() => {
-    if (placasFiltro == null) return unidadesSinPosicion;
-    const placas = new Set(placasFiltro.map(normalizarPlaca));
-    return unidadesSinPosicion.filter((unidad) => placas.has(unidad.placa));
-  }, [placasFiltro, unidadesSinPosicion]);
-
-  const filasCalculadas = useMemo(() => {
-    const presentes = new Set(filasBaseCalculadas.map((fila) => normalizarPlaca(fila.placa)).filter(Boolean));
-    return [
-      ...filasBaseCalculadas,
-      ...unidadesSinTelemetria
-        .filter((unidad) => !presentes.has(unidad.placa))
-        .map((unidad) => ({
-          placa: unidad.placa,
-          unidad: unidad.area || unidad.descripcion || unidad.placa,
-          stop: null,
-          idle: null,
-          drive: null,
-          total: null,
-          pct_stop: null,
-          pct_idle: null,
-          pct_drive: null,
-          sin_telemetria: true,
-        })),
-    ];
-  }, [filasBaseCalculadas, unidadesSinTelemetria]);
 
   // Tabla limitada a 15 filas; totales, filtros y Excel usan todo.
   const { filasVistas, expandido, alternar, total } = useLimiteFilas(filasCalculadas);
 
   const totales = useMemo(() => totalesEventosResumidos(filasCalculadas), [filasCalculadas]);
 
-  const puedeExportar = estado === 'ok' && filasCalculadas.length > 0 && totalSegundos > 0;
+  const puedeExportar = (estado === 'ok' || estado === 'vacio') && filasCalculadas.length > 0 && totalSegundos > 0;
   const mensajePendiente =
     rango === 'todo' && !periodo?.desde
       ? 'Esta empresa todavía no tiene periodo cargado en agrotrack_posiciones, así que no hay cifras que mostrar.'
@@ -188,7 +162,7 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
     setDescargaError(null);
     try {
       const { exportarEventosResumidosExcel } = await import('../../../lib/exportExcel');
-      exportarEventosResumidosExcel(filas, { totalSegundos, rangoTexto, placa: '' });
+      exportarEventosResumidosExcel(filasCalculadas, { totalSegundos, rangoTexto, placa, calculadas: true });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
     }
@@ -269,7 +243,7 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
           {modoReporte === 'tiempo-real' ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
-              leído hace instantes
+              {generadoEn ? 'Consulta actualizada · ver hora de generación' : 'Esperando primera lectura'}
             </span>
           ) : null}
         </div>
@@ -327,6 +301,7 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
                         {fila.unidad && fila.unidad !== fila.placa ? (
                           <span className="block text-[10px] text-slate-400 truncate max-w-[240px]">{fila.unidad}</span>
                         ) : null}
+                        {fila.sin_datos_rango ? <span className="block text-[10px] text-amber-700">Sin datos en el rango</span> : null}
                       </td>
                       <CeldaTiempo segundos={fila.stop} pct={fila.pct_stop} clase="text-slate-700" />
                       <CeldaTiempo segundos={fila.idle} pct={fila.pct_idle} clase="text-amber-600" />
@@ -341,24 +316,24 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
                       Totales de {filasCalculadas.length} unidad{filasCalculadas.length === 1 ? '' : 'es'}
                     </td>
                     <td className="px-3 py-2.5 text-right">
-                      {formatearHMS(totales.stop)}
+                      {totales.total > 0 ? formatearHMS(totales.stop) : '—'}
                       <span className="block text-[10px] font-normal text-slate-400">
                         {totales.pct_stop != null ? `${totales.pct_stop}%` : '—'}
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-right text-amber-600">
-                      {formatearHMS(totales.idle)}
+                      {totales.total > 0 ? formatearHMS(totales.idle) : '—'}
                       <span className="block text-[10px] font-normal text-slate-400">
                         {totales.pct_idle != null ? `${totales.pct_idle}%` : '—'}
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-right text-emerald-700">
-                      {formatearHMS(totales.drive)}
+                      {totales.total > 0 ? formatearHMS(totales.drive) : '—'}
                       <span className="block text-[10px] font-normal text-slate-400">
                         {totales.pct_drive != null ? `${totales.pct_drive}%` : '—'}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-right">{formatearHMS(totales.total)}</td>
+                    <td className="px-3 py-2.5 text-right">{totales.total > 0 ? formatearHMS(totales.total) : '—'}</td>
                   </tr>
                 </tfoot>
               </table>

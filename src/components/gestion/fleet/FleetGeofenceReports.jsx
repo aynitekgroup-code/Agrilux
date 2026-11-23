@@ -24,7 +24,6 @@ import {
 import {
   asegurarVisitasCalculadas,
   leerVisitasDia,
-  filtrarVisitasPorRango,
   partesLima,
   codigoArea,
 } from '../../../lib/agrotrackVisitasDia';
@@ -926,14 +925,14 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
     leerVisitasDia(empresaId, {
       desdeDia,
       hastaDia,
+      desde: consulta.desde,
+      hasta: consulta.hasta,
+      cancelado: () => cancelado,
       ...(placasFiltro?.length === 1 ? { placa: placasFiltro[0] } : {}),
     })
       .then((filas) => {
         if (cancelado) return;
-        const enRango = filtrarVisitasPorRango(filas, consulta.desde, consulta.hasta);
-        const filasFiltradas = Array.isArray(placasFiltro) && placasFiltro.length > 1
-          ? filtrarFilasPorPlaca(enRango, placasFiltro)
-          : enRango;
+        const filasFiltradas = filtrarFilasPorPlaca(filas, placasFiltro);
         setPermanencias(filasFiltradas);
         setEstadoPivot(filasFiltradas.length ? 'ok' : 'vacio');
       })

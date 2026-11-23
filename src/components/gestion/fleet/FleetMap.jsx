@@ -50,6 +50,8 @@ import {
   ultimoDiaLima,
 } from '../../../lib/agrotrackFlota';
 import { obtenerEstadoUnidadesFlota } from '../../../lib/agrotrackReportesGeocerca';
+import { obtenerEstadoVivo } from '../../../lib/agrotrackTiempoReal';
+import { describirPosicion } from '../../../lib/agrotrackReporteFilas.js';
 import { cargarGruposUnidades, guardarGrupoUnidad, listaGruposConocidos } from '../../../lib/agrotrackGrupos';
 import { cargarPaginaRecorrido, planearPaginas, textoVentana } from '../../../lib/agrotrackMapaHistorico';
 import { STATUS_META } from './fleetTokens';
@@ -515,6 +517,11 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const [estadoUnidades, setEstadoUnidades] = useState([]);
   const [estadoCargando, setEstadoCargando] = useState(false);
   const [estadoAviso, setEstadoAviso] = useState('');
+  const [ahoraPosiciones, setAhoraPosiciones] = useState(() => new Date());
+  useEffect(() => {
+    const reloj = setInterval(() => setAhoraPosiciones(new Date()), 60000);
+    return () => clearInterval(reloj);
+  }, []);
   // VI: grupos editables de las unidades (RPC nueva, con degradación amable).
   const [gruposPorPlaca, setGruposPorPlaca] = useState({});
   const [gruposCargando, setGruposCargando] = useState(false);
@@ -632,8 +639,19 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     estadoUnidades.forEach((fila) => {
       if (fila?.placa) mapa.set(fila.placa, fila);
     });
+    // No mezclar coordenadas nuevas de la consola con una geocerca antigua.
+    vehiclesConPosicion.forEach((v) => {
+      const anterior = mapa.get(v.placa);
+      if (!anterior || Date.parse(v.ultima_fecha || '') > Date.parse(anterior.ultima_fecha || '')) {
+        mapa.set(v.placa, { placa: v.placa, ultima_fecha: v.ultima_fecha,
+          unidad: v.descripcion, latitud: v.lat, longitud: v.lng,
+          direccion: v.ultima_ubicacion, ultimo_evento: v.ultimo_evento,
+          ultima_velocidad: v.velocidad_kmh,
+          geocerca: geocercaDePunto(Number(v.lat), Number(v.lng), geofences) });
+      }
+    });
     return mapa;
-  }, [estadoUnidades]);
+  }, [estadoUnidades, vehiclesConPosicion, geofences]);
 
   const gruposConocidos = useMemo(() => listaGruposConocidos(gruposPorPlaca), [gruposPorPlaca]);
 
@@ -700,9 +718,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const unidadesEnGeocerca = useMemo(() => {
     if (!selectedGeofence?.geometria) return { estado: 'vacio', filas: [], error: '' };
 
-    const desdeEstado = estadoUnidades.length > 0;
+    const desdeEstado = estadoPorPlaca.size > 0;
     const candidatos = (desdeEstado
-      ? estadoUnidades.map((f) => {
+      ? [...estadoPorPlaca.values()].map((f) => {
         const partes = String(f.unidad || '').split('/');
         return {
           placa: f.placa,
@@ -741,13 +759,15 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         descripcion: c.descripcion,
         direccion: c.direccion,
         fechaTexto: c.fecha ? formatearFechaLarga(c.fecha) : '—',
+        posicionAviso: describirPosicion(c.fecha, ahoraPosiciones).texto,
+        posicionReciente: describirPosicion(c.fecha, ahoraPosiciones).reciente,
         velocidadTexto: c.velocidad == null || !Number.isFinite(Number(c.velocidad))
           ? '—'
           : `${Number(c.velocidad)} km/h`,
       })),
       error: '',
     };
-  }, [selectedGeofence, estadoUnidades, vehiclesConPosicion, estadoCargando, estadoAviso, fuentePosiciones]);
+  }, [selectedGeofence, estadoPorPlaca, vehiclesConPosicion, estadoCargando, estadoAviso, fuentePosiciones, ahoraPosiciones]);
   const searchResults = geofenceSearch.trim() ? filteredGeofences.slice(0, 8) : [];
   const showResults = Boolean(geofenceSearch.trim()) && resultsOpen;
 
@@ -880,10 +900,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     }
     setEstadoCargando(true);
     setEstadoAviso('');
-    obtenerEstadoUnidadesFlota(empresaId, {
-      desde: periodo?.desde || null,
-      hasta: periodo?.hasta || null,
-    })
+    obtenerEstadoVivo(empresaId)
+      .catch(() => obtenerEstadoUnidadesFlota(empresaId, { desde: null, hasta: null }))
       .then((filas) => {
         if (!cancelado) setEstadoUnidades(filas || []);
       })
@@ -1217,9 +1235,10 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const geocercaActualUnidad = (vehicle) => {
     if (!vehicle) return '';
     const fila = estadoPorPlaca.get(vehicle.placa) || null;
-    if (fila?.geocerca) return fila.geocerca;
-    if (fila?.geocerca_ultima) return `${fila.geocerca_ultima} (últ. vez)`;
-    return geocercaDePunto(Number(vehicle.lat), Number(vehicle.lng), geofences) || 'Sin geocerca';
+    const actual = fila?.geocerca
+      || geocercaDePunto(Number(vehicle.lat), Number(vehicle.lng), geofences) || 'Sin geocerca';
+    return describirPosicion(fila?.ultima_fecha || vehicle.ultima_fecha, ahoraPosiciones).reciente
+      ? actual : `${actual} (última posición conocida; sin reporte reciente)`;
   };
 
   const filaCoordenadaPorPlaca = useMemo(
@@ -1255,6 +1274,10 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const aplicarVozUnidad = (transcript) => {
     const query = normalizarVozPlaca(stripVoiceCommand(transcript));
     const queryTexto = normalizeText(stripVoiceCommand(transcript));
+    if (!query || !queryTexto) {
+      setVoiceUnitMessage('No se reconoció una placa. Intenta decir solo la placa o escríbela.');
+      return;
+    }
     const candidatos = vehiclesConPosicion.filter((vehicle) => {
       const campos = [vehicle.placa, vehicle.descripcion, vehicle.modelo, vehicle.conductor_nombre, vehicle.ultimo_evento];
       return campos.filter(Boolean).some((campo) => (
@@ -2176,7 +2199,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const contenidoPanelFlota = (() => {
     const seccion = SECCIONES_FLOTA.find((s) => s.id === seccionFlota) || SECCIONES_FLOTA[0];
     const IconoSeccion = seccion.Icon;
-    const listo = ['localizador', 'coordenadas', 'zonas', 'configuracion', 'geocercas'].includes(seccionFlota);
+    const listo = ['localizador', 'coordenadas', 'historicas', 'zonas', 'configuracion', 'geocercas'].includes(seccionFlota);
     const cuerpo = seccionFlota === 'localizador'
       ? localizadorNodo
       : seccionFlota === 'coordenadas'
@@ -2650,9 +2673,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               : (fuentePosiciones === 'real' && vehicle.ultima_fecha
                 ? formatearFechaHora(vehicle.ultima_fecha)
                 : '');
-            const geocercaPopup = estadoPlaca?.geocerca
-              || (estadoPlaca?.geocerca_ultima ? `${estadoPlaca.geocerca_ultima} (últ. vez)` : '')
-              || '—';
+            const geocercaPopup = geocercaActualUnidad(vehicle);
             return (
               <Marker
                 key={vehicle.id}
@@ -2665,10 +2686,11 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                 zIndexOffset={selectedId === vehicle.id ? 1000 : 0}
                 eventHandlers={onSelect ? { click: () => onSelect(vehicle.id) } : undefined}
               >
-                <Tooltip direction="top" opacity={1} className="fleet-unit-tooltip">
+                <Tooltip permanent direction="top" opacity={1} className="fleet-unit-tooltip">
                   <div className="text-[11px] leading-snug space-y-0.5">
                     <p className="font-bold text-slate-900">{vehicle.placa}</p>
                     <p className="text-slate-600">{vehicle.descripcion || vehicle.modelo || '—'}</p>
+                    {!describirPosicion(vehicle.ultima_fecha, ahoraPosiciones).reciente && fuentePosiciones === 'real' ? <p className="text-amber-700">Posición antigua</p> : null}
                     <p className="text-slate-700">
                       {meta.label}
                       {Number.isFinite(velocidad) && velocidad > 0 ? ` · ${velocidad} km/h` : ''}
@@ -2799,6 +2821,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           ) : null}
         </div>
       ) : null}
+
+      <div id="coordenadas-unidades" className="scroll-mt-4 px-4 sm:px-5 pb-3">{coordenadasNodo}</div>
 
       {/* Configuración: debajo del mapa, arriba de la consola Principal. Solo al elegirla en el menú. */}
       {consolaVisible && mostrarConfiguracion ? (

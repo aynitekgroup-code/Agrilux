@@ -93,13 +93,14 @@ export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', p
       'Recorrido (km)': Number(f.km_recorridos || 0),
       // "Encendido" se quitó (7:47 a. m.): duplicaba "Horas prendido"
       // (encendido = viaje + ralentí, criterio único del reporte).
-      'Horas prendido (h)': horas(Number(f.viaje_segundos || 0) + Number(f.ralenti_segundos || 0)),
-      'Hora de viaje (h)': horas(f.viaje_segundos),
-      'Ralentí (h)': horas(ralenti),
-      '% ralentí': encendido > 0 ? Math.round((ralenti / encendido) * 1000) / 10 : 0,
+      'Horas prendido (h)': f.sin_datos_rango ? '' : horas(Number(f.viaje_segundos || 0) + Number(f.ralenti_segundos || 0)),
+      'Hora de viaje (h)': f.sin_datos_rango ? '' : horas(f.viaje_segundos),
+      'Ralentí (h)': f.sin_datos_rango ? '' : horas(ralenti),
+      '% ralentí': f.sin_datos_rango ? '' : encendido > 0 ? Math.round((ralenti / encendido) * 1000) / 10 : 0,
       'Vel. máx. (km/h)': f.vel_max_kmh == null ? '' : Number(f.vel_max_kmh),
-      'Alertas': Number(f.alertas || 0),
+      'Alertas': f.sin_datos_rango ? '' : Number(f.alertas || 0),
       'Posiciones': Number(f.posiciones || 0),
+      'Observación': f.sin_datos_rango ? 'Sin datos en el rango; horas no disponibles' : '',
     };
   });
 
@@ -107,14 +108,15 @@ export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', p
   const suma = (campo) => (filas || []).reduce((s, f) => s + Number(f[campo] || 0), 0);
   const totalEncendido = suma('encendido_segundos');
   const totalRalenti = suma('ralenti_segundos');
+  const hayMedidos = filas.some((f) => !f.sin_datos_rango);
   datos.push({
     'Período': 'TOTALES',
     'Placa': '',
     'Unidad': `${filas.length} fila(s)`,
     'Recorrido (km)': Number(suma('km_recorridos').toFixed(2)),
-    'Horas prendido (h)': horas(suma('viaje_segundos') + suma('ralenti_segundos')),
-    'Hora de viaje (h)': horas(suma('viaje_segundos')),
-    'Ralentí (h)': horas(totalRalenti),
+    'Horas prendido (h)': hayMedidos ? horas(suma('viaje_segundos') + suma('ralenti_segundos')) : '',
+    'Hora de viaje (h)': hayMedidos ? horas(suma('viaje_segundos')) : '',
+    'Ralentí (h)': hayMedidos ? horas(totalRalenti) : '',
     '% ralentí': totalEncendido > 0 ? Math.round((totalRalenti / totalEncendido) * 1000) / 10 : 0,
     'Vel. máx. (km/h)': '',
     'Alertas': suma('alertas'),
@@ -275,10 +277,10 @@ export const exportarLotesExcel = exportarPermanenciasLotesExcel;
  * @param {Array} filas  filas de agrotrack_actividad_flota (agrupar 'unidad')
  * @param {{totalSegundos?: number|null, rangoTexto?: string, placa?: string}} opciones
  */
-export function exportarEventosResumidosExcel(filas, { totalSegundos = null, rangoTexto = '', placa = '' } = {}) {
+export function exportarEventosResumidosExcel(filas, { totalSegundos = null, rangoTexto = '', placa = '', calculadas: yaCalculadas = false } = {}) {
   const wb = XLSX.utils.book_new();
 
-  const calculadas = calcularEventosResumidos(filas, totalSegundos);
+  const calculadas = yaCalculadas ? filas : calcularEventosResumidos(filas, totalSegundos);
   const datos = calculadas.map((f) => ({
     'Placa': f.placa,
     'Unidad': f.unidad,
@@ -289,6 +291,7 @@ export function exportarEventosResumidosExcel(filas, { totalSegundos = null, ran
     'Total Drive': f.total == null ? '' : formatearHMS(f.drive),
     'Drive %': f.pct_drive,
     'Total': f.total == null ? '' : formatearHMS(f.total),
+    'Observación': f.sin_datos_rango ? 'Sin datos en el rango; tiempos no disponibles' : '',
   }));
 
   // Totales al pie (la flota completa), igual que en la consola.
@@ -296,13 +299,13 @@ export function exportarEventosResumidosExcel(filas, { totalSegundos = null, ran
   datos.push({
     'Placa': 'TOTALES',
     'Unidad': `${calculadas.length} unidad(es)`,
-    'Total Stop': formatearHMS(totales.stop),
+    'Total Stop': totales.total > 0 ? formatearHMS(totales.stop) : '',
     'Stop %': totales.pct_stop,
-    'Total Idle': formatearHMS(totales.idle),
+    'Total Idle': totales.total > 0 ? formatearHMS(totales.idle) : '',
     'Idle %': totales.pct_idle,
-    'Total Drive': formatearHMS(totales.drive),
+    'Total Drive': totales.total > 0 ? formatearHMS(totales.drive) : '',
     'Drive %': totales.pct_drive,
-    'Total': formatearHMS(totales.total),
+    'Total': totales.total > 0 ? formatearHMS(totales.total) : '',
   });
 
   const ws = XLSX.utils.json_to_sheet(datos);
@@ -349,7 +352,7 @@ export function exportarEstadoUnidadesExcel(filas, { rangoTexto = '', periodo = 
       'Placa': f.placa,
       'Unidad': f.unidad || f.placa,
       'Últ. fecha': f.ultima_fecha ? formatearFechaLarga(f.ultima_fecha) : '—',
-      'Estado': STATUS_META[estado]?.label || estado,
+      'Estado': f.sin_telemetria ? 'Sin telemetría' : STATUS_META[estado]?.label || estado,
       'Dirección': f.direccion || '—',
       'Últ. evento': f.ultimo_evento || '—',
       'Vel. (km/h)': f.ultima_velocidad == null ? '' : Number(f.ultima_velocidad),

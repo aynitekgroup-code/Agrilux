@@ -5,9 +5,8 @@ import {
 import { ultimoDiaLima } from '../../../lib/agrotrackFlota';
 import { cargarGruposUnidades } from '../../../lib/agrotrackGrupos';
 import {
-  asegurarVisitasCalculadas, leerVisitasDia, leerTablaGeocercasDia,
+  asegurarVisitasCalculadas, pendientesVisitasDia, leerVisitasDia, leerTablaGeocercasDia,
   armarMatriz, METRICAS, partesLima, duracionTexto, horasDecimal, codigoArea,
-  filtrarVisitasPorRango,
 } from '../../../lib/agrotrackVisitasDia';
 import { hoyLima, rangoRapido, useLimiteFilas, BotonVerMas } from './reportesComunes';
 
@@ -53,9 +52,9 @@ function fechaHoraCorta(iso) {
   return `${fechaCorta(fecha)} ${hora}`;
 }
 
-function aIsoLima(iso) {
+function aIsoLima(iso, final = false) {
   const [fecha, hora = '00:00'] = String(iso || '').split('T');
-  return `${fecha || ''}T${hora || '00:00'}:00-05:00`;
+  return `${fecha || ''}T${hora || '00:00'}:${final ? '59' : '00'}-05:00`;
 }
 
 function rangoDiaCompleto(desde, hasta) {
@@ -103,6 +102,7 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
   const [progreso, setProgreso] = useState(null);
   const [error, setError] = useState('');
   const [avisos, setAvisos] = useState([]);
+  const [respaldoCompleto, setRespaldoCompleto] = useState(false);
   const [visitas, setVisitas] = useState([]);
   const [tabla, setTabla] = useState([]);
   const [grupos, setGrupos] = useState({});
@@ -139,6 +139,7 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
   const cargar = useCallback(async (cancelado) => {
     setError('');
     setAvisos([]);
+    setRespaldoCompleto(false);
     setEstado('calculando');
     setProgreso(null);
     try {
@@ -149,14 +150,18 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
       if (errores.length) setAvisos(errores.slice(0, 5));
       setEstado('cargando');
       const rangoCompleto = rangoDiaCompleto(desde, hasta);
-      const v = await leerVisitasDia(empresaId, { desdeDia, hastaDia });
-      const visitasEnRango = filtrarVisitasPorRango(v, aIsoLima(desde), aIsoLima(hasta));
+      const visitasEnRango = await leerVisitasDia(empresaId, {
+        desdeDia, hastaDia, desde: aIsoLima(desde), hasta: aIsoLima(hasta, true), cancelado,
+      });
       const t = rangoCompleto
         ? await leerTablaGeocercasDia(empresaId, { desdeDia, hastaDia })
         : visitasComoTabla(visitasEnRango);
+      const pendientes = await pendientesVisitasDia(empresaId, desdeDia, hastaDia);
       if (cancelado()) return;
       setVisitas(visitasEnRango);
       setTabla(t);
+      setRespaldoCompleto(errores.length === 0 && pendientes.length === 0);
+      if (pendientes.length) setAvisos((prev) => [...prev, `${pendientes.length} unidades/días pendientes; pulsa Actualizar.`]);
       setPaginaDetalle(1);
       setEstado(visitasEnRango.length || t.length ? 'ok' : 'vacio');
     } catch (e) {
@@ -245,6 +250,7 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
   };
 
   const descargarExcel = async () => {
+    if (!respaldoCompleto || estado !== 'ok') return;
     setExportError('');
     try {
       const { exportarTablaDinamicaGeocercasExcel } = await import('../../../lib/exportExcelReportes');
@@ -285,7 +291,7 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
             <button
               type="button"
               onClick={descargarExcel}
-              disabled={estado !== 'ok'}
+              disabled={estado !== 'ok' || !respaldoCompleto}
               className="inline-flex items-center gap-1.5 rounded-lg bg-forest px-2.5 py-1.5 text-[11px] font-semibold text-white hover:opacity-90 disabled:opacity-40 transition-colors"
             >
               <FileSpreadsheet size={13} /> Descargar Excel (Data + Resumen)
@@ -395,6 +401,9 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
 
       {estado === 'ok' ? (
         <>
+          {estado === 'ok' ? <p className={`text-xs font-semibold ${respaldoCompleto ? 'text-emerald-700' : 'text-amber-700'}`} role="status">
+            {respaldoCompleto ? 'Respaldo calculado para los datos cargados · listo para Excel' : 'Respaldo incompleto · exportación bloqueada hasta completar el cálculo'}
+          </p> : null}
           {avisos.length ? (
             <div className="mx-4 mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-800">
               Algunas unidades no se pudieron calcular (se reintentará solo): {avisos.join(' · ')}

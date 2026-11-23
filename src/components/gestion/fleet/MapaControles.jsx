@@ -1049,8 +1049,11 @@ export function PanelUnidadesGeocerca({
         {geocerca.nombre || '(sin nombre)'} – Unidades: {estado === 'cargando' ? '…' : unidades.length}
       </h3>
       <p className="text-xs text-slate-500">
-        Unidades cuya última posición cae dentro del polígono seleccionado.
+        Últimas posiciones dentro del polígono; una posición antigua no confirma presencia actual.
       </p>
+      {unidades.length ? <p className="mt-1 text-[11px] text-slate-600">
+        {unidades.filter((u) => u.posicionReciente).length} con reporte reciente · {unidades.filter((u) => !u.posicionReciente).length} con posición antigua o sin fecha
+      </p> : null}
     </div>
   );
 
@@ -1099,7 +1102,10 @@ export function PanelUnidadesGeocerca({
                   <td className="max-w-[220px] truncate px-3 py-2 text-slate-600" title={unidad.direccion || ''}>
                     {unidad.direccion || '—'}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-slate-600">{unidad.fechaTexto || '—'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-slate-600">
+                    {unidad.fechaTexto || '—'}
+                    {unidad.posicionAviso ? <span className="block text-[10px] text-amber-700">{unidad.posicionAviso}</span> : null}
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">{unidad.velocidadTexto}</td>
                 </tr>
               ))}

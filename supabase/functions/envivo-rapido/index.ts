@@ -27,8 +27,6 @@ import { filasDesdeLocalizador } from "../../../agentes/zonar/lib/localizador.js
 
 const EMPRESA_ID = Deno.env.get("EMPRESA_ID") ?? "";
 const LIMITE_MS = 45_000; // presupuesto: el cron vuelve en 60 s
-const INICIO = Date.now();
-const queda = () => LIMITE_MS - (Date.now() - INICIO);
 
 const admin = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -61,7 +59,7 @@ async function clienteUsuario() {
   }
   sesionCache = {
     token: data.session.access_token,
-    exp: Date.parse(data.session.expires_at ?? "") || ahora + 55 * 60_000,
+    exp: data.session.expires_at ? data.session.expires_at * 1000 : ahora + 55 * 60_000,
   };
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -87,6 +85,8 @@ async function latido(sb: ReturnType<typeof createClient>, ok: boolean, unidades
 }
 
 Deno.serve(async (req) => {
+  const inicio = Date.now();
+  const queda = () => LIMITE_MS - (Date.now() - inicio);
   const secreto = Deno.env.get("CRON_SECRET");
   if (secreto && req.headers.get("x-cron-secret") !== secreto) {
     return json({ ok: false, error: "no autorizado" }, 401);
@@ -144,13 +144,13 @@ Deno.serve(async (req) => {
       ok: true,
       unidades: marcas.length,
       nuevas,
-      ms: Date.now() - INICIO,
+      ms: Date.now() - inicio,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("envivo-rapido:", msg);
     await latido(sb, false, null, null, msg).catch(() => {});
-    return json({ ok: false, error: msg, ms: Date.now() - INICIO }, 500);
+    return json({ ok: false, error: msg, ms: Date.now() - inicio }, 500);
   }
 });
 

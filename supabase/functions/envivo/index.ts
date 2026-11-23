@@ -33,17 +33,12 @@ const DELAY_MS = 200; // cortesía con Zonar entre unidades
 const LIMITE_MS = 135_000; // presupuesto total (el plan gratuito corta a 150 s)
 const HIST_MIN_MS = 35_000; // deja al menos esto para subir + latido
 
-const INICIO = Date.now();
-const queda = () => LIMITE_MS - (Date.now() - INICIO);
-
 const admin = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   { auth: { persistSession: false, autoRefreshToken: false } },
 );
-// Cliente de la corrida actual: arranca como service role (por si el login de
-// usuario falla) y se reemplaza por el de usuario en Deno.serve.
-let sb = admin;
+type Cliente = ReturnType<typeof createClient>;
 
 /**
  * Sesión como el usuario de Agrilux: el latido (agrotrack_registrar_latido)
@@ -77,7 +72,7 @@ function cfgZonar() {
 }
 
 /** Upsert deduplicado por (empresa_id, source_key) — igual que el agente. */
-async function subirPosiciones(filas: Record<string, unknown>[]): Promise<number> {
+async function subirPosiciones(filas: Record<string, unknown>[], sb: Cliente): Promise<number> {
   let nuevas = 0;
   for (let i = 0; i < filas.length; i += 1000) {
     const lote = filas.slice(i, i + 1000);
@@ -92,7 +87,7 @@ async function subirPosiciones(filas: Record<string, unknown>[]): Promise<number
 }
 
 /** Latido para la web ("Zonar leído hace N min"). */
-async function latido(ok: boolean, unidades: number | null, nuevas: number | null, mensaje: string | null) {
+async function latido(ok: boolean, unidades: number | null, nuevas: number | null, mensaje: string | null, sb: Cliente) {
   const { error } = await sb.rpc("agrotrack_registrar_latido", {
     p_empresa_id: EMPRESA_ID,
     p_modo: "envivo",
@@ -112,20 +107,21 @@ async function latido(ok: boolean, unidades: number | null, nuevas: number | nul
  * (límite de 8 s de Supabase) hasta agotar el presupuesto; la próxima vuelta
  * continúa con las que falten.
  */
-async function visitasConPresupuesto(hoy: string): Promise<number> {
+async function visitasConPresupuesto(hoy: string, sb: Cliente, queda: () => number, soloAyer = false): Promise<number> {
   if (queda() < 25_000) return 0;
   const { data: pendientes, error } = await sb.rpc("agrotrack_visitas_dia_pendientes", {
     p_empresa_id: EMPRESA_ID,
     p_desde_dia: restarDias(hoy, 1),
-    p_hasta_dia: hoy,
+    p_hasta_dia: soloAyer ? restarDias(hoy, 1) : hoy,
   });
   if (error) {
     if (/could not find|schema cache/i.test(error.message || "")) return 0;
     throw new Error(`visitas pendientes: ${error.message}`);
   }
   let hechas = 0;
-  for (const p of pendientes || []) {
-    if (queda() < 12_000) break;
+  const inicioVisitas = Date.now();
+  for (const p of (pendientes || []).sort((a: { dia: string }, b: { dia: string }) => a.dia.localeCompare(b.dia))) {
+    if (queda() < 12_000 || (soloAyer && Date.now() - inicioVisitas > 20_000)) break;
     const { error: e2 } = await sb.rpc("agrotrack_calcular_visitas_dia", {
       p_empresa_id: EMPRESA_ID,
       p_dia: p.dia,
@@ -138,6 +134,12 @@ async function visitasConPresupuesto(hoy: string): Promise<number> {
 }
 
 Deno.serve(async (req) => {
+  // Cada solicitud tiene su propio presupuesto y cliente. Un isolate se
+  // reutiliza: medir desde la carga del módulo agotaba todas las vueltas
+  // posteriores, y compartir `sb` mezclaba sesiones de corridas concurrentes.
+  const inicio = Date.now();
+  const queda = () => LIMITE_MS - (Date.now() - inicio);
+  let sb = admin;
   // Solo el cron autorizado puede invocarla (la URL es conocible desde la web).
   const secreto = Deno.env.get("CRON_SECRET");
   if (secreto && req.headers.get("x-cron-secret") !== secreto) {
@@ -154,6 +156,15 @@ Deno.serve(async (req) => {
   try {
     // 0) Sesión de Agrilux como usuario (RLS + membresía del latido).
     sb = await clienteUsuario();
+    const hoy = hoyPeru();
+    // El respaldo de AYER tiene prioridad sobre descargar más puntos de HOY,
+    // especialmente antes de la entrega de las 6:30. Se continúa cada 5 min.
+    let visitas = 0;
+    try {
+      visitas += await visitasConPresupuesto(hoy, sb, queda, true);
+    } catch (e) {
+      console.warn('respaldo de ayer:', e instanceof Error ? e.message : e);
+    }
 
     // 1) Sesión de Zonar.
     const sesion = await loginZonar(z);
@@ -169,18 +180,27 @@ Deno.serve(async (req) => {
     }
     unidadesLeidas = marcas.length;
     const { filas } = filasDesdeLocalizador(marcas, EMPRESA_ID, null, { fechaModo: FECHA_MODO });
-    if (filas.length) nuevas += await subirPosiciones(filas);
+    if (filas.length) nuevas += await subirPosiciones(filas, sb);
     console.log(`Locator: ${marcas.length} unidades · ${filas.length} posiciones · ${nuevas} nuevas.`);
 
     // 3) Historial de HOY por unidad, hasta agotar el presupuesto.
-    const hoy = hoyPeru();
     const unidades = await listarUnidades(z, sesion.token);
+    // Hasta las 6:30 se alterna HOY con AYER para recuperar el cierre del
+    // día anterior (los últimos puntos pueden llegar después de medianoche).
+    const peru = new Date(inicio - 5 * 3600000);
+    const antesDelCorte = peru.getUTCHours() * 60 + peru.getUTCMinutes() <= 390;
+    const diaHistorial = antesDelCorte && Math.floor(inicio / 300000) % 2 === 0
+      ? restarDias(hoy, 1) : hoy;
+    // Rotar el inicio evita que, si el presupuesto no alcanza, siempre se
+    // descarguen las primeras unidades y las últimas queden sin historial.
+    const desplazamiento = unidades.length ? Math.floor(inicio / 300000) % unidades.length : 0;
+    const ordenUnidades = [...unidades.slice(desplazamiento), ...unidades.slice(0, desplazamiento)];
     const filasHist: Record<string, unknown>[] = [];
     let unidadesHist = 0;
-    for (const u of unidades) {
+    for (const u of ordenUnidades) {
       if (queda() < HIST_MIN_MS) break; // la próxima vuelta sigue (dedup evita duplicos)
       try {
-        const hist = await historialUnidad(z, sesion.token, { unitId: u.unitId, desde: hoy, hasta: hoy });
+        const hist = await historialUnidad(z, sesion.token, { unitId: u.unitId, desde: diaHistorial, hasta: diaHistorial });
         for (const m of hist) {
           const { row } = armarFilaZonar(m, EMPRESA_ID, null, { fechaModo: FECHA_MODO });
           if (row) filasHist.push(row);
@@ -192,25 +212,24 @@ Deno.serve(async (req) => {
       if (DELAY_MS > 0) await new Promise((r) => setTimeout(r, DELAY_MS));
     }
     const unicas = [...new Map(filasHist.map((f) => [f["source_key"], f])).values()];
-    if (unicas.length) nuevas += await subirPosiciones(unicas);
-    console.log(`Historial de hoy: ${unidadesHist}/${unidades.length} unidades · ${unicas.length} puntos · total nuevas ${nuevas}.`);
+    if (unicas.length) nuevas += await subirPosiciones(unicas, sb);
+    console.log(`Historial ${diaHistorial}: ${unidadesHist}/${unidades.length} unidades · ${unicas.length} puntos · total nuevas ${nuevas}.`);
 
     // 4) Visitas a geocercas pendientes (si queda tiempo).
-    let visitas = 0;
     try {
-      visitas = await visitasConPresupuesto(hoy);
+      visitas += await visitasConPresupuesto(hoy, sb, queda);
     } catch (e) {
       console.warn("visitas:", e instanceof Error ? e.message : e);
     }
 
     // 5) Latido verde.
-    await latido(true, unidadesLeidas, nuevas, null);
-    return json({ ok: true, unidades: unidadesLeidas, nuevas, historial_unidades: unidadesHist, visitas, ms: Date.now() - INICIO });
+    await latido(true, unidadesLeidas, nuevas, null, sb);
+    return json({ ok: true, unidades: unidadesLeidas, nuevas, historial_unidades: unidadesHist, visitas, ms: Date.now() - inicio });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("envivo:", msg);
-    await latido(false, unidadesLeidas, nuevas, msg).catch(() => {});
-    return json({ ok: false, error: msg, ms: Date.now() - INICIO }, 500);
+    await latido(false, unidadesLeidas, nuevas, msg, sb).catch(() => {});
+    return json({ ok: false, error: msg, ms: Date.now() - inicio }, 500);
   }
 });
 
