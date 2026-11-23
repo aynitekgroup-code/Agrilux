@@ -33,7 +33,7 @@ import {
 } from '../../../lib/agrotrackFlota';
 import { useRango, ControlesRango, CuerpoEstado, numero, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, AvisoUnidadesSinTelemetria } from './reportesComunes';
 import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
-import { agruparPorDivision, aplanarGrupos, nombreDivision } from '../../../lib/agrotrackDivisiones';
+import { agruparPorDivision, aplanarGrupos, nombreDivision, normalizarDivision } from '../../../lib/agrotrackDivisiones';
 import { armarContextoReporte } from '../../../lib/reportesIa';
 import { llamarIaGestion } from '../../../lib/agrotrackIa';
 
