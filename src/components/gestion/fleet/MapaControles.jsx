@@ -325,9 +325,8 @@ export function PanelGruposUnidades({
 }) {
   const [busqueda, setBusqueda] = useState('');
   const [colapsados, setColapsados] = useState({});
-  // Contraído por defecto: al entrar a una pestaña, el panel muestra solo el
-  // buscador (la lista se abre con el botón de desglose).
-  const [desgloseAbierto, setDesgloseAbierto] = useState(false);
+  // Desglose visible por defecto: el panel muestra directamente la información.
+  const [desgloseAbierto] = useState(true);
   const [escuchandoVoz, setEscuchandoVoz] = useState(false);
   const [vozAviso, setVozAviso] = useState('');
   const vozRecognitionRef = React.useRef(null);
@@ -525,16 +524,6 @@ export function PanelGruposUnidades({
           >
             {Capacitor.isNativePlatform() || SpeechRecognitionCtor ? <Mic size={15} /> : <MicOff size={15} />}
           </button>
-          <button
-            type="button"
-            onClick={() => setDesgloseAbierto((abierto) => !abierto)}
-            aria-expanded={desgloseAbierto}
-            title={desgloseAbierto ? 'Ocultar desglose' : 'Ver desglose'}
-            aria-label={desgloseAbierto ? 'Ocultar desglose' : 'Ver desglose'}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-forest focus:outline-none focus:ring-2 focus:ring-emerald-100"
-          >
-            <ChevronDown size={18} className={`transition-transform ${desgloseAbierto ? '' : '-rotate-90'}`} />
-          </button>
         </div>
 
         {vozAviso ? (
@@ -670,10 +659,9 @@ export function TablaCoordenadas({
   const muchas = filas.length > 100;
   // Tabla limitada a 15 filas; el pie y el Excel usan el total completo.
   const { filasVistas, expandido, alternar, total } = useLimiteFilas(filas);
-  // Contraída por defecto: al entrar a una pestaña solo se ve la cabecera con
-  // el botón de Excel (la tabla se abre con el botón de desglose).
+  // Desglose visible por defecto: el panel muestra directamente la información.
   const [busqueda, setBusqueda] = useState('');
-  const [desgloseAbierto, setDesgloseAbierto] = useState(false);
+  const [desgloseAbierto] = useState(true);
   const resultados = useMemo(() => {
     const term = busqueda.trim().toLowerCase();
     if (!term) return [];
@@ -713,16 +701,6 @@ export function TablaCoordenadas({
         >
           {exportando ? <LoaderCircle size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />}
           Descargar Excel
-        </button>
-        <button
-          type="button"
-          onClick={() => setDesgloseAbierto((abierto) => !abierto)}
-          aria-expanded={desgloseAbierto}
-          title={desgloseAbierto ? 'Ocultar desglose' : 'Ver desglose'}
-          aria-label={desgloseAbierto ? 'Ocultar desglose' : 'Ver desglose'}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-forest focus:outline-none focus:ring-2 focus:ring-emerald-100"
-        >
-          <ChevronDown size={18} className={`transition-transform ${desgloseAbierto ? '' : '-rotate-90'}`} />
         </button>
         </div>
 

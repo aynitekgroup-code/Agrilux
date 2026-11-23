@@ -372,22 +372,24 @@ export default function AgroTrackPomalcaPage({ initialSection = 'geocercas' }) {
           />
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
             <div className="xl:col-span-12 min-w-0">
-              <FleetMap
-                empresaId={empresa_activa_id}
-                actualizarMapaCada={actualizarMapaCada}
-                onActualizarMapaCada={setActualizarMapaCada}
-                userId={user?.id}
-                canImport={puedeImportarGeocercas}
-                canDelete={puedeEliminarGeocercas}
-                vehicles={vehiclesFuente}
-                selectedId={selectedVehicleId}
-                onSelect={setSelectedVehicleId}
-                fuentePosiciones={fuentePosiciones}
-                periodo={conDatosReales ? panel.periodo : null}
-                errorUnidades={hayErrorPanel ? panel.error : null}
-                onReintentarUnidades={recargarPanel}
-                onIrAMapas={() => setSection('mapas')}
-              />
+              <ErrorBoundary mensaje="No se pudo dibujar el mapa de la consola. Prueba a recargar o pulsa Reintentar.">
+                <FleetMap
+                  empresaId={empresa_activa_id}
+                  actualizarMapaCada={actualizarMapaCada}
+                  onActualizarMapaCada={setActualizarMapaCada}
+                  userId={user?.id}
+                  canImport={puedeImportarGeocercas}
+                  canDelete={puedeEliminarGeocercas}
+                  vehicles={vehiclesFuente}
+                  selectedId={selectedVehicleId}
+                  onSelect={setSelectedVehicleId}
+                  fuentePosiciones={fuentePosiciones}
+                  periodo={conDatosReales ? panel.periodo : null}
+                  errorUnidades={hayErrorPanel ? panel.error : null}
+                  onReintentarUnidades={recargarPanel}
+                  onIrAMapas={() => setSection('mapas')}
+                />
+              </ErrorBoundary>
             </div>
             <div className="xl:col-span-12 min-w-0" id="alertas-operacion">
               <FleetAlerts
@@ -448,23 +450,25 @@ export default function AgroTrackPomalcaPage({ initialSection = 'geocercas' }) {
               </span>
             ) : null}
           </SectionHeading>
-          <FleetMap
-            empresaId={empresa_activa_id}
-            actualizarMapaCada={actualizarMapaCada}
-            onActualizarMapaCada={setActualizarMapaCada}
-            userId={user?.id}
-            canImport={puedeImportarGeocercas}
-            canDelete={puedeEliminarGeocercas}
-            vehicles={vehiclesFuente}
-            selectedId={selectedVehicleId}
-            onSelect={setSelectedVehicleId}
-            fuentePosiciones={fuentePosiciones}
-            periodo={conDatosReales ? panel.periodo : null}
-            consolaVisible
-            mostrarTablasAlFinal={false}
-            errorUnidades={hayErrorPanel ? panel.error : null}
-            onReintentarUnidades={recargarPanel}
-          />
+          <ErrorBoundary mensaje="No se pudo dibujar el mapa. Revisa la sección y pulsa Reintentar.">
+            <FleetMap
+              empresaId={empresa_activa_id}
+              actualizarMapaCada={actualizarMapaCada}
+              onActualizarMapaCada={setActualizarMapaCada}
+              userId={user?.id}
+              canImport={puedeImportarGeocercas}
+              canDelete={puedeEliminarGeocercas}
+              vehicles={vehiclesFuente}
+              selectedId={selectedVehicleId}
+              onSelect={setSelectedVehicleId}
+              fuentePosiciones={fuentePosiciones}
+              periodo={conDatosReales ? panel.periodo : null}
+              consolaVisible
+              mostrarTablasAlFinal={false}
+              errorUnidades={hayErrorPanel ? panel.error : null}
+              onReintentarUnidades={recargarPanel}
+            />
+          </ErrorBoundary>
         </div>
       ) : null}
 

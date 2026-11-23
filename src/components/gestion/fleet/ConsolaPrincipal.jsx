@@ -6,6 +6,7 @@ import ConfiguracionPrincipal from './ConfiguracionPrincipal';
 import {
   ChevronDown,
   ChevronUp,
+  Clock,
   History,
   MapPin,
   MapPinned,
@@ -25,6 +26,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
+  ChevronRight,
 } from 'lucide-react';
 
 const SpeechRecognitionCtor =
@@ -51,7 +53,7 @@ function normalizarPlacaBusqueda(valor) {
     .replace(/[^A-Z0-9]/g, '');
 }
 
-const SECCIONES = [
+export const SECCIONES = [
   { id: 'localizador', label: 'Localizador de Unidades', group: 'Flota', Icon: Search },
   { id: 'coordenadas', label: 'Coordenadas de Unidades', group: 'Flota', Icon: Table },
   { id: 'historicas', label: 'Ubicaciones Históricas', group: 'Flota', Icon: History },
@@ -66,6 +68,46 @@ const SECCIONES = [
   { id: 'geocercas', label: 'Geocercas', group: 'Geocercas', Icon: Shapes },
   { id: 'configuracion', label: 'Configuración', group: 'Sistema', Icon: Settings },
 ];
+
+/** Menú de secciones reutilizable (Consola principal y panel Flota del mapa). */
+export function MenuSecciones({ seccionId, onSeleccionar, compacto = false }) {
+  const grupos = useMemo(() => SECCIONES.reduce((acc, item) => {
+    (acc[item.group] = acc[item.group] || []).push(item);
+    return acc;
+  }, {}), []);
+  return (
+    <div className={`space-y-3 ${compacto ? '' : 'max-h-[560px] overflow-y-auto'}`}>
+      {Object.entries(grupos).map(([group, items]) => (
+        <div key={group}>
+          <h4 className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">{group}</h4>
+          <div className="space-y-0.5">
+            {items.map((item) => {
+              const Icon = item.Icon;
+              const activa = seccionId === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onSeleccionar?.(item.id)}
+                  aria-current={activa ? 'page' : undefined}
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-forest/20 ${
+                    activa
+                      ? 'bg-forest text-white font-semibold shadow-sm'
+                      : 'text-slate-600 hover:bg-emerald-50 hover:text-forest'
+                  }`}
+                >
+                  <Icon size={14} className={`shrink-0 ${activa ? 'text-white' : 'text-forest'}`} aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  <ChevronRight size={13} className={`shrink-0 ${activa ? 'text-white/80' : 'text-slate-300'}`} aria-hidden="true" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function pad(valor) {
   return String(valor).padStart(2, '0');
@@ -91,6 +133,21 @@ function Placeholder({ texto }) {
   );
 }
 
+/** Aviso para secciones que aún no están configuradas en el mapa. */
+export function Proximamente({ etiqueta }) {
+  return (
+    <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-emerald-200 bg-emerald-50/50 px-4 py-8 text-center">
+      <span className="grid h-11 w-11 place-items-center rounded-full bg-emerald-100 text-emerald-600">
+        <Clock size={20} aria-hidden="true" />
+      </span>
+      <p className="text-sm font-bold text-slate-800">Próximamente</p>
+      <p className="max-w-xs text-[11px] leading-snug text-slate-500">
+        La sección <b>{etiqueta}</b> estará disponible en breve, con el mismo estilo de consola Agrilux.
+      </p>
+    </div>
+  );
+}
+
 // La sección Configuración usa ConfiguracionPrincipal: CRUD real sobre las
 // tablas y RPC existentes en Supabase (máquinas, geocercas, choferes y grupos).
 
@@ -103,7 +160,7 @@ function normTexto(valor) {
 }
 
 /** Zonas: lista de geocercas (multiselección estilo Zonar) + unidades dentro. */
-function ZonasPanel({ geofences = [], selectedId, onSeleccionar, unidadesEnGeocerca, mostrarUnidades = true, onToggleMostrarUnidades, actualizarMapaCada = 30 * 1000, onActualizarMapaCada }) {
+export function ZonasPanel({ geofences = [], selectedId, onSeleccionar, unidadesEnGeocerca, mostrarUnidades = true, onToggleMostrarUnidades, actualizarMapaCada = 30 * 1000, onActualizarMapaCada, compacto = false }) {
   const [busqueda, setBusqueda] = useState('');
 
   const grupos = useMemo(() => {
@@ -131,7 +188,7 @@ function ZonasPanel({ geofences = [], selectedId, onSeleccionar, unidadesEnGeoce
   };
 
   return (
-    <div className="grid gap-3 xl:grid-cols-[minmax(0,240px)_minmax(0,1fr)]">
+    <div className={compacto ? 'grid gap-3' : 'grid gap-3 xl:grid-cols-[minmax(0,240px)_minmax(0,1fr)]'}>
       <div className="min-w-0">
         <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">Zonas · {geofences.length}</p>
         <label className="relative mb-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 focus-within:border-forest">
@@ -382,9 +439,8 @@ function ContenidoSeccion({
       />
     );
   }
-  return (
-    <Placeholder texto="Se ampliará en la siguiente iteración con las funciones de esta sección, manteniendo el mismo estilo de consola Agrilux." />
-  );
+  const etiqueta = SECCIONES.find((s) => s.id === id)?.label || 'Esta sección';
+  return <Proximamente etiqueta={etiqueta} />;
 }
 
 export default function ConsolaPrincipal({

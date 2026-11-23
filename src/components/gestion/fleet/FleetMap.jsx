@@ -3,9 +3,12 @@ import { CircleMarker, GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer
 import L from 'leaflet';
 import {
   AlertCircle,
+  Check,
+  ChevronLeft,
   Info,
   LoaderCircle,
   MapPin,
+  MapPinned,
   Mic,
   MicOff,
   PanelLeftClose,
@@ -34,7 +37,8 @@ import {
 } from '../../../lib/geocercasGeometria';
 import { GeocercaVertexLayer } from './GeocercaEditor';
 import AsistenteMapa from './AsistenteMapa';
-import ConsolaPrincipal from './ConsolaPrincipal';
+import { MenuSecciones, SECCIONES as SECCIONES_FLOTA, ZonasPanel, Proximamente } from './ConsolaPrincipal';
+import ConfiguracionPrincipal from './ConfiguracionPrincipal';
 import { cargarVehiculosMaestro } from '../../../lib/agrotrackVehiculos';
 import { ControlVistaSatelite, FichaGeocerca, LeyendaGrupos, PanelGruposUnidades, TablaCoordenadas, TablaRecorrido } from './MapaControles';
 import { COLORES_GRUPO, ETIQUETAS_GRUPO, resumenGeocercasParaIA } from '../../../lib/asistenteMapa';
@@ -280,8 +284,12 @@ function FitMapToGeofences({ geoJson, vehicles = [], focusRequest, fitToken = 0 
   // asistente JARVIS pide "ajustar todo": fitToken cambia y re-encuadra).
   useEffect(() => {
     const bounds = L.latLngBounds([]);
-    const geoBounds = L.geoJSON(geoJson).getBounds();
-    if (geoBounds.isValid()) bounds.extend(geoBounds);
+    try {
+      const geoBounds = L.geoJSON(geoJson).getBounds();
+      if (geoBounds.isValid()) bounds.extend(geoBounds);
+    } catch {
+      // Una geometría inválida no debe tumbar el encuadre del mapa.
+    }
     vehicles.forEach((v) => {
       const lat = Number(v?.lat);
       const lng = Number(v?.lng);
@@ -301,9 +309,13 @@ function FitMapToGeofences({ geoJson, vehicles = [], focusRequest, fitToken = 0 
   // (aunque sea la misma que ya estaba seleccionada).
   useEffect(() => {
     if (!focusRequest?.geometry) return;
-    const bounds = L.geoJSON(focusRequest.geometry).getBounds();
-    if (bounds.isValid()) {
-      map.fitBounds(bounds.pad(0.2), { maxZoom: 16, animate: true });
+    try {
+      const bounds = L.geoJSON(focusRequest.geometry).getBounds();
+      if (bounds.isValid()) {
+        map.fitBounds(bounds.pad(0.2), { maxZoom: 16, animate: true });
+      }
+    } catch {
+      // Geometría inválida: no hacer zoom, pero no tumbar el render del mapa.
     }
   }, [map, focusRequest]);
 
@@ -445,6 +457,13 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // Panel de unidades junto al mapa: se puede contraer a una franja de iconos
   // para que el mapa gane todo el ancho disponible.
   const [panelUnidadesContraido, setPanelUnidadesContraido] = useState(false);
+  // Panel Flota del mapa: menú de secciones (mismo catálogo que la Consola Principal).
+  const [seccionFlota, setSeccionFlota] = useState('localizador');
+  const [mostrandoContenidoFlota, setMostrandoContenidoFlota] = useState(false);
+  // El panel de Configuración solo se muestra cuando se elige desde el menú lateral.
+  const [mostrarConfiguracion, setMostrarConfiguracion] = useState(false);
+  // Buscador de geocercas del panel: lista desplegable con chevron (estilo Select).
+  const [buscadorGeocercasAbierto, setBuscadorGeocercasAbierto] = useState(false);
   // Consola Principal: sección activa y aviso de apertura externa.
   const [consolaSeccion, setConsolaSeccion] = useState('localizador');
   const [consolaApertura, setConsolaApertura] = useState(0);
@@ -1841,8 +1860,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
 
   const verRecorridoDetallado = () => {
     if (consolaVisible) {
-      setConsolaSeccion('historicas');
-      setConsolaApertura((n) => n + 1);
+      requestAnimationFrame(() => {
+        document.getElementById('recorrido-detallado')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
       return;
     }
     if (onIrAMapas && selectedId) {
@@ -1880,7 +1900,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             <Search size={13} className="shrink-0 text-slate-400" aria-hidden="true" />
             <input
               type="search"
-              value={busquedaRuta}
+              value={busquedaRuta || selectedId || ''}
               onChange={(event) => {
                 setBusquedaRuta(event.target.value);
                 setVoiceUnitMessage('');
@@ -1888,11 +1908,21 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               placeholder="1639-1K, SEGURIDAD…"
               autoComplete="off"
               aria-label="Buscar unidad para el recorrido"
-              className="w-full bg-transparent text-xs font-normal text-slate-700 outline-none placeholder:text-slate-400"
+              className="w-full bg-transparent text-xs font-semibold text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400"
             />
-            {busquedaRuta ? (
-              <button type="button" onClick={() => { setBusquedaRuta(''); setVoiceUnitMessage(''); }} aria-label="Limpiar búsqueda" className="shrink-0 text-slate-400 hover:text-slate-600">
-                <X size={13} />
+            {busquedaRuta || selectedId ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setBusquedaRuta('');
+                  setVoiceUnitMessage('');
+                  if (onSelect) onSelect('');
+                }}
+                aria-label="Limpiar unidad y buscar otra"
+                title="Quitar la unidad y buscar otra"
+                className="shrink-0 text-slate-500 hover:text-slate-800"
+              >
+                <X size={14} />
               </button>
             ) : null}
             <button
@@ -2027,6 +2057,159 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     </div>
   ) : null;
 
+  // Buscador simple de geocercas para el panel Flota (solo input + voz).
+  const resultadosGeocerca = filteredGeofences.slice(0, 12);
+  const buscadorGeocercasNodo = (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-100">
+        <Search size={17} className="shrink-0 text-slate-400" aria-hidden="true" />
+        <input
+          type="text"
+          value={geofenceSearch}
+          onChange={(event) => {
+            setGeofenceSearch(event.target.value);
+            setBuscadorGeocercasAbierto(true);
+            setVoiceMessage('');
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && resultadosGeocerca[0]) {
+              event.preventDefault();
+              handleSelectGeofence(resultadosGeocerca[0]);
+              setBuscadorGeocercasAbierto(false);
+            }
+            if (event.key === 'Escape') setBuscadorGeocercasAbierto(false);
+          }}
+          placeholder="Buscar geocerca por nombre o decirlo con voz…"
+          aria-label="Buscar geocerca por nombre"
+          autoComplete="off"
+          className="w-full min-w-0 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+        />
+        {geofenceSearch || selectedGeofenceId ? (
+          <button type="button" onClick={clearSelection} aria-label="Limpiar búsqueda" className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+            <X size={15} />
+          </button>
+        ) : (
+          <span className="shrink-0 text-[11px] text-slate-400">{geofences.length} geocercas</span>
+        )}
+        <button
+          type="button"
+          onClick={toggleVoiceSearch}
+          aria-label={listening ? 'Detener búsqueda por voz' : 'Buscar geocerca por voz'}
+          aria-pressed={listening}
+          title={SpeechRecognitionCtor ? 'Buscar por voz' : 'Tu navegador no soporta voz'}
+          className={`relative grid h-9 w-9 shrink-0 place-items-center rounded-full transition-all hover:scale-105 focus:outline-none focus:ring-4 ${
+            listening
+              ? 'animate-pulse bg-gradient-to-br from-red-400 to-red-600 text-white shadow-[0_0_18px_rgba(239,68,68,0.6)] focus:ring-red-200'
+              : 'bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 text-white shadow-[0_4px_16px_rgba(16,185,129,0.5)] focus:ring-emerald-200'
+          }`}
+        >
+          {SpeechRecognitionCtor ? <Mic size={18} /> : <MicOff size={18} />}
+          {!listening && SpeechRecognitionCtor ? (
+            <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/30" aria-hidden="true" />
+          ) : null}
+        </button>
+      </div>
+
+      {voiceMessage ? (
+        <p className="text-[10px] leading-snug text-slate-500" role="status" aria-live="polite">{voiceMessage}</p>
+      ) : null}
+
+      {buscadorGeocercasAbierto && geofenceSearch.trim() ? (
+        <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+          {resultadosGeocerca.length ? (
+            resultadosGeocerca.map((geofence) => (
+              <button
+                key={geofence.id}
+                type="button"
+                onClick={() => {
+                  handleSelectGeofence(geofence);
+                  setBuscadorGeocercasAbierto(false);
+                }}
+                className={`flex w-full items-start gap-2.5 px-3 py-2.5 text-left text-xs transition-colors hover:bg-emerald-50 ${
+                  selectedGeofenceId === geofence.id ? 'bg-emerald-50' : ''
+                }`}
+              >
+                <MapPinned size={14} className="mt-0.5 shrink-0 text-emerald-700" aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-semibold text-slate-800">{geofence.nombre}</span>
+                  {[geofence.division, geofence.anexo, geofence.distrito].filter(Boolean).length ? (
+                    <span className="block truncate text-[10px] text-slate-500">
+                      {[geofence.division, geofence.anexo, geofence.distrito].filter(Boolean).join(' · ')}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            ))
+          ) : (
+            <p className="px-3 py-3 text-center text-[11px] text-slate-500">Sin geocercas con «{geofenceSearch.trim()}».</p>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+
+  // Panel Zonas (estilo Zonar) reutilizado del Consola principal.
+  const zonasPanelNodo = (
+    <ZonasPanel
+      geofences={geofences}
+      selectedId={selectedGeofenceId}
+      onSeleccionar={(id) => {
+        if (!id) {
+          clearSelection();
+          return;
+        }
+        const g = geofences.find((f) => f.id === id);
+        if (!g) return;
+        document.getElementById('mapa-flota')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        focusGeofence(g);
+        setGeofenceSearch(g.nombre || '');
+      }}
+      unidadesEnGeocerca={unidadesEnGeocerca}
+      mostrarUnidades={mostrarUnidadesEnMapa}
+      onToggleMostrarUnidades={setMostrarUnidadesEnMapa}
+      actualizarMapaCada={actualizarMapaCada}
+      onActualizarMapaCada={onActualizarMapaCada}
+      compacto
+    />
+  );
+
+  const contenidoPanelFlota = (() => {
+    const seccion = SECCIONES_FLOTA.find((s) => s.id === seccionFlota) || SECCIONES_FLOTA[0];
+    const IconoSeccion = seccion.Icon;
+    const listo = ['localizador', 'coordenadas', 'zonas', 'configuracion', 'geocercas'].includes(seccionFlota);
+    const cuerpo = seccionFlota === 'localizador'
+      ? localizadorNodo
+      : seccionFlota === 'coordenadas'
+        ? coordenadasNodo
+        : seccionFlota === 'historicas'
+          ? ubicacionesHistoricasNodo
+          : seccionFlota === 'geocercas'
+            ? buscadorGeocercasNodo
+            : seccionFlota === 'zonas'
+              ? zonasPanelNodo
+              : null;
+    return (
+      <div className="min-w-0 space-y-3 rounded-xl border border-slate-100 bg-white p-3">
+        <header className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{seccion.group}</p>
+            <h4 className="mt-0.5 text-sm font-bold text-slate-900">{seccion.label}</h4>
+          </div>
+          <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+            <IconoSeccion size={12} className="mr-1.5" />
+            {listo ? <Check size={11} className="mr-1" strokeWidth={3} /> : null}
+            {listo ? 'Listo' : 'En preparación'}
+          </span>
+        </header>
+        {cuerpo ? (
+          <div className="space-y-3">{cuerpo}</div>
+        ) : (
+          <Proximamente etiqueta={seccion.label} />
+        )}
+      </div>
+    );
+  })();
+
   const nodoRecorrido = rutaPlan ? (
     <TablaRecorrido
       puntos={rutaValidos}
@@ -2109,25 +2292,23 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             ) : (
               <span className="shrink-0 text-[11px] text-slate-400">{geofences.length} geocercas</span>
             )}
-            {!consolaVisible ? (
-              <button
-                type="button"
-                onClick={toggleVoiceSearch}
-                className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full transition-all hover:scale-105 focus:outline-none focus:ring-4 ${
-                  listening
-                    ? 'animate-pulse bg-gradient-to-br from-red-400 to-red-600 text-white shadow-[0_0_18px_rgba(239,68,68,0.6)] focus:ring-red-200'
-                    : 'bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 text-white shadow-[0_4px_16px_rgba(16,185,129,0.5)] focus:ring-emerald-200'
-                }`}
-                aria-label={listening ? 'Detener búsqueda por voz' : 'Buscar geocerca por voz'}
-                aria-pressed={listening}
-                title={SpeechRecognitionCtor ? 'Buscar por voz' : 'Tu navegador no soporta voz'}
-              >
-                {SpeechRecognitionCtor ? <Mic size={21} /> : <MicOff size={21} />}
-                {!listening && SpeechRecognitionCtor ? (
-                  <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/30" aria-hidden="true" />
-                ) : null}
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={toggleVoiceSearch}
+              className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full transition-all hover:scale-105 focus:outline-none focus:ring-4 ${
+                listening
+                  ? 'animate-pulse bg-gradient-to-br from-red-400 to-red-600 text-white shadow-[0_0_18px_rgba(239,68,68,0.6)] focus:ring-red-200'
+                  : 'bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 text-white shadow-[0_4px_16px_rgba(16,185,129,0.5)] focus:ring-emerald-200'
+              }`}
+              aria-label={listening ? 'Detener búsqueda por voz' : 'Buscar geocerca por voz'}
+              aria-pressed={listening}
+              title={SpeechRecognitionCtor ? 'Buscar por voz' : 'Tu navegador no soporta voz'}
+            >
+              {SpeechRecognitionCtor ? <Mic size={21} /> : <MicOff size={21} />}
+              {!listening && SpeechRecognitionCtor ? (
+                <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/30" aria-hidden="true" />
+              ) : null}
+            </button>
           </div>
 
           {voiceMessage ? (
@@ -2232,9 +2413,21 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               aria-label="Panel de unidades"
             >
               <div className="sticky top-0 z-10 flex items-center justify-between gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-2 shadow-sm">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Flota
-                </span>
+                {mostrandoContenidoFlota ? (
+                  <button
+                    type="button"
+                    onClick={() => setMostrandoContenidoFlota(false)}
+                    title="Volver a secciones"
+                    aria-label="Volver a secciones"
+                    className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-forest"
+                  >
+                    <ChevronLeft size={14} /> Secciones
+                  </button>
+                ) : (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Secciones
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => setPanelUnidadesContraido(true)}
@@ -2247,9 +2440,30 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                 </button>
               </div>
               {estadoAvisoNodo ? <div>{estadoAvisoNodo}</div> : null}
-              {localizadorNodo}
-              {coordenadasNodo}
-              {ubicacionesHistoricasNodo}
+              {mostrandoContenidoFlota ? (
+                contenidoPanelFlota
+              ) : (
+                <div className="rounded-xl border border-slate-100 bg-white p-2">
+                  <MenuSecciones
+                    seccionId={seccionFlota}
+                    onSeleccionar={(id) => {
+                      if (id === 'configuracion') {
+                        setSeccionFlota(id);
+                        setMostrandoContenidoFlota(false);
+                        setMostrarConfiguracion(true);
+                        requestAnimationFrame(() => {
+                          document.getElementById('configuracion-flota')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        });
+                        return;
+                      }
+                      setSeccionFlota(id);
+                      setMostrandoContenidoFlota(true);
+                      setMostrarConfiguracion(false);
+                    }}
+                    compacto
+                  />
+                </div>
+              )}
             </aside>
           )
         ) : null}
@@ -2586,51 +2800,19 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </div>
       ) : null}
 
-      {/* VI: consola Principal dentro de Mapas. */}
-      {consolaVisible ? (
-        <div className="px-4 sm:px-5 pb-3">
-          <ConsolaPrincipal
-            localizador={localizadorConAviso}
-            coordenadas={coordenadasNodo}
-            buscarUnidades={buscarUnidadesConsola}
-            elegirUnidad={elegirUnidadConsola}
-            unidadExterna={selectedId || ''}
-            rutaDesde={rutaDesde}
-            rutaHasta={rutaHasta}
-            onRutaDesde={setRutaDesde}
-            onRutaHasta={setRutaHasta}
-            recorrido={nodoRecorrido}
-            seccionActiva={consolaSeccion}
-            onSeccionActiva={setConsolaSeccion}
-            apertura={consolaApertura}
-            configuracion={{ empresaId, userId, puedePosiciones: canImport }}
-            zonas={{
-              geofences,
-              selectedId: selectedGeofenceId,
-              onSeleccionar: (id) => {
-                if (!id) {
-                  clearSelection();
-                  return;
-                }
-                const g = geofences.find((f) => f.id === id);
-                if (!g) return;
-                if (typeof document !== 'undefined') {
-                  document.getElementById('mapa-flota')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-                focusGeofence(g);
-                setGeofenceSearch(g.nombre || '');
-              },
-              unidadesEnGeocerca,
-              mostrarUnidades: mostrarUnidadesEnMapa,
-              onToggleMostrarUnidades: setMostrarUnidadesEnMapa,
-              actualizarMapaCada,
-              onActualizarMapaCada,
-            }}
+      {/* Configuración: debajo del mapa, arriba de la consola Principal. Solo al elegirla en el menú. */}
+      {consolaVisible && mostrarConfiguracion ? (
+        <div id="configuracion-flota" className="scroll-mt-4 px-4 sm:px-5 pb-3">
+          <ConfiguracionPrincipal
+            empresaId={empresaId}
+            userId={userId}
+            puedePosiciones={canImport}
           />
         </div>
       ) : null}
 
-      {!consolaVisible && nodoRecorrido ? (
+      {/* Coordenadas del recorrido: debajo del mapa, arriba de la consola Principal. */}
+      {nodoRecorrido ? (
         <div id="recorrido-detallado" className="scroll-mt-4 px-4 sm:px-5 pb-3">{nodoRecorrido}</div>
       ) : null}
 
