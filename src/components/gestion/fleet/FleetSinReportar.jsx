@@ -5,7 +5,7 @@ import { obtenerEstadoVivo } from '../../../lib/agrotrackTiempoReal';
 import { formatearFechaHora } from '../../../lib/agrotrackFlota';
 import { armarContextoReporte } from '../../../lib/reportesIa';
 import { llamarIaGestion } from '../../../lib/agrotrackIa';
-import { CuerpoEstado, haceCuanto, useLimiteFilas, BotonVerMas, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca } from './reportesComunes';
+import { CuerpoEstado, haceCuanto, useLimiteFilas, BotonVerMas, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, RelojEnVivo } from './reportesComunes';
 import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
 
 /**
@@ -231,28 +231,42 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
+    <div className="min-w-0">
+      <h3 className="text-sm font-bold uppercase tracking-wide text-emerald-800 mb-3">
+        Punto 4 · Unidades sin reportar (Zonar: Unidades - Sin Reportar)
+      </h3>
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
       <div className="p-4 sm:p-5 border-b border-slate-50 space-y-3">
         <div className="flex items-center gap-2">
           <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
             <Clock size={17} />
           </div>
           <div className="min-w-0">
-            <h2 className="text-base font-bold text-slate-900">Unidades sin reportar (Zonar: Unidades - Sin Reportar)</h2>
+            <h2 className="text-base font-bold text-slate-900">Unidades sin reportar</h2>
             <p className="text-xs text-slate-500">
-              Unidades cuya última comunicación GPRS es anterior a la ventana elegida, de la más antigua a la más reciente.
+              Última comunicación GPRS de cada unidad · una fila por placa · de la más antigua a la más reciente (Zonar: Unidades - Sin Reportar).
             </p>
             {generadoEn ? (
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Generado: {generadoEn.toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
-                {' · '}ventana de {ventana} h
+              <p className="text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                  title="Reloj de Perú. No indica la antigüedad del dato: para eso mira el tiempo transcurrido."
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
+                  Hora Perú <RelojEnVivo />
+                </span>
+                <span>
+                  Generado: {generadoEn.toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
+                  {' · '}ventana de {ventana} h
+                </span>
               </p>
             ) : null}
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             {fuente === 'real' ? (
-              <span className="hidden lg:inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <Database size={12} /> Última posición conocida
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                Última posición conocida
               </span>
             ) : null}
             <button
@@ -281,7 +295,7 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
               disabled={!puedeExportar}
               className="inline-flex items-center gap-1.5 rounded-lg border border-forest bg-forest px-2.5 py-1.5 text-[11px] font-semibold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              <FileSpreadsheet size={13} /> Descargar Excel
+              <FileSpreadsheet size={13} /> Excel
             </button>
           </div>
         </div>
@@ -345,22 +359,34 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
           </label>
         </div>
 
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">VENTANA SIN REPORTAR</p>
-          <div className="flex flex-wrap gap-1.5">
-            {VENTANAS_RAPIDO.map((h) => (
-              <button
-                key={h}
-                type="button"
-                onClick={() => { setVentana(h); setVentanaDraft(String(h)); setExplicacion(null); setErrorExplicacion(null); }}
-                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
-                  ventana === h ? 'bg-forest text-white' : 'bg-slate-50 text-slate-500 hover:text-forest'
-                }`}
-              >
-                {h} h
-              </button>
-            ))}
+        <div className="flex flex-wrap items-center">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">VENTANA SIN REPORTAR</p>
+            <div className="inline-flex flex-wrap rounded-lg bg-slate-50 p-0.5">
+              {VENTANAS_RAPIDO.map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => { setVentana(h); setVentanaDraft(String(h)); setExplicacion(null); setErrorExplicacion(null); }}
+                  className={`px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
+                    ventana === h ? 'bg-forest text-white' : 'text-slate-500 hover:text-forest'
+                  }`}
+                >
+                  {h} h
+                </button>
+              ))}
+            </div>
           </div>
+          {opcionFiltro ? (
+            <button
+              type="button"
+              onClick={() => setOpcionFiltro('')}
+              className="ml-2 mt-4 px-2 py-1.5 rounded-lg text-[10px] font-semibold text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+              title="Quitar filtro de máquina o grupo"
+            >
+              Quitar filtros
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -388,15 +414,9 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
                 </thead>
                 <tbody>
                   {filasTabla.map((fila, i) => (
-                    <tr
-                      key={fila.placa || `sin-placa-${i}`}
-                      className={`border-b border-slate-50 hover:bg-slate-50/60 ${fila.sinReportar ? 'bg-red-50/40' : ''}`}
-                    >
+                    <tr key={fila.placa || `sin-placa-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
                       <td className="px-3 py-2">
-                        <span className="font-bold text-slate-800">{fila.placa || '—'}</span>
-                        {fila.unidad && fila.unidad !== fila.placa ? (
-                          <span className="block text-[10px] text-slate-400 truncate max-w-[240px]">{fila.unidad}</span>
-                        ) : null}
+                        <span className="font-bold text-slate-800">{fila.unidad || fila.placa || '—'}</span>
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-600">{fila.placa || '—'}</td>
                       <td className="px-3 py-2 text-slate-500 max-w-[260px]">
@@ -476,6 +496,7 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
           el tiempo se calcula contra el momento de la carga · hora de Perú.
         </span>
       </p>
+      </div>
     </div>
   );
 }

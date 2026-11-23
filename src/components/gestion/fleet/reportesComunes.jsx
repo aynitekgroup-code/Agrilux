@@ -24,6 +24,30 @@ import {
 export const FILAS_INICIALES_TABLA = 15;
 
 /**
+ * Reloj de Perú que se actualiza cada segundo. Vive aparte para que no
+ * re-renderice la tabla completa. Es solo la hora del navegador: la frescura
+ * del dato la indica el chip «leído hace…».
+ */
+export function RelojEnVivo() {
+  const [ahora, setAhora] = useState(() => new Date());
+  useEffect(() => {
+    const reloj = setInterval(() => setAhora(new Date()), 1000);
+    return () => clearInterval(reloj);
+  }, []);
+  return (
+    <>
+      {ahora.toLocaleTimeString('es-PE', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+        timeZone: 'America/Lima',
+      })}
+    </>
+  );
+}
+
+/**
  * Limita a 15 filas la parte visible de una tabla: el usuario puede abrir
  * todo con el botón "Ver más" (tipo flecha). `filasVistas` es la sección a
  * renderizar; el resto de la pantalla y los exports deben seguir usando la

@@ -4,7 +4,7 @@ import { obtenerEstadoVivo, obtenerLatidos, suscribirEstadoVivo, describirLatido
 import { obtenerEstadoUnidadesFlota, LIMITE_ESTADO_UNIDADES } from '../../../lib/agrotrackReportesGeocerca';
 import { formatearFechaHora, clasificarEstado } from '../../../lib/agrotrackFlota';
 import { codigoArea } from '../../../lib/agrotrackVisitasDia';
-import { useRango, ControlesRango, CuerpoEstado, numero, useLimiteFilas, BotonVerMas, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca } from './reportesComunes';
+import { useRango, ControlesRango, CuerpoEstado, numero, useLimiteFilas, BotonVerMas, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, RelojEnVivo } from './reportesComunes';
 import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
 
 /**
@@ -36,32 +36,6 @@ const AUTO_REFRESCO_MS = 5 * 60 * 1000;
 
 /** Respaldo del modo TIEMPO REAL por si Realtime no avisa (cada 60 s). */
 const RESPALDO_VIVO_MS = 60 * 1000;
-
-/**
- * Reloj de Perú que se actualiza cada segundo.
- * Vive en su propio componente para que el reloj NO re-renderice la tabla
- * completa (hasta 500 filas) cada segundo.
- * OJO: es solo el reloj del navegador, NO indica qué tan fresco es el dato.
- * La frescura la da el chip "Zonar leído hace X min".
- */
-function RelojEnVivo() {
-  const [ahora, setAhora] = useState(() => new Date());
-  useEffect(() => {
-    const reloj = setInterval(() => setAhora(new Date()), 1000);
-    return () => clearInterval(reloj);
-  }, []);
-  return (
-    <>
-      {ahora.toLocaleTimeString('es-PE', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-        timeZone: 'America/Lima',
-      })}
-    </>
-  );
-}
 
 /** Estado de la máquina con las etiquetas del ejemplo: En movimiento / Ralentí / Apagado. */
 function EstadoMaquinaria({ fila, ahoraRef, periodo, tiempoReal }) {
