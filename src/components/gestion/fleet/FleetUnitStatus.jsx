@@ -457,12 +457,7 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
                   <tr className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400">
                     {COLUMNAS.map((col) => (
                       <th key={col.label} className={`px-3 py-2.5 font-bold ${col.clase}`}>
-                        <span className="inline-flex items-center gap-1.5">
-                          {col.label}
-                          {col.nuevo ? (
-                            <span className="rounded bg-orange-500 px-1 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">Nuevo</span>
-                          ) : null}
-                        </span>
+                        {col.label}
                       </th>
                     ))}
                   </tr>
