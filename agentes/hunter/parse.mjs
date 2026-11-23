@@ -5,6 +5,11 @@ export function prepararRecorrido(captura) {
   if (captura?.fuente !== 'hunter360' || !captura.equipo || !Array.isArray(captura.recorrido?.data)) {
     throw new Error('Captura Hunter inválida: faltan fuente, equipo o puntos del recorrido.');
   }
+  const inicio = Date.parse(captura.desde || '');
+  const fin = Date.parse(captura.hasta || '');
+  if (!Number.isFinite(inicio) || !Number.isFinite(fin) || fin <= inicio) {
+    throw new Error('La captura debe tener un rango válido con zona horaria.');
+  }
   const puntos = [];
   const ids = new Set();
   const descartes = { paradas_agrupadas: 0, invalidos: 0, duplicados: 0 };
@@ -23,8 +28,7 @@ export function prepararRecorrido(captura) {
     const ms = Date.parse(instante);
     // Comprobar calendario, no aceptar fechas que JS normaliza silenciosamente.
     const peru = Number.isFinite(ms) ? new Date(ms - 5 * 3600000).toISOString().slice(0, 19) : '';
-    if (peru !== `${fecha}T${hora}` || (captura.desde && ms < Date.parse(captura.desde))
-      || (captura.hasta && ms > Date.parse(captura.hasta))) { descartes.invalidos++; continue; }
+    if (peru !== `${fecha}T${hora}` || ms < inicio || ms > fin) { descartes.invalidos++; continue; }
     const id = String(p.id);
     if (ids.has(id)) { descartes.duplicados++; continue; }
     ids.add(id);
@@ -41,8 +45,15 @@ export function prepararRecorrido(captura) {
   }
   puntos.sort((a, b) => Date.parse(a.fecha) - Date.parse(b.fecha) || a.punto_id.localeCompare(b.punto_id));
   const r = captura.recorrido;
+  const viajes = Array.isArray(r.data_trips) ? r.data_trips.map((v) => ({
+    tipo: v.type === 'stop' ? 'Parada' : v.type === 'trip' ? 'Viaje' : 'Desconocido',
+    inicio: v.start ?? null, fin: v.end ?? null, duracion: v.time ?? null,
+    distancia: v.distance ?? null, velocidad_maxima: v.max_speed ?? null,
+    direccion_inicio: v.addr_start ?? null, direccion_fin: v.addr_end ?? null,
+  })) : [];
   return { fuente: 'hunter360', equipo_id: String(captura.equipo), desde: captura.desde || null,
     hasta: captura.hasta || null, total_original: r.data.length, descartes, puntos,
+    viajes, viajes_disponibles: Array.isArray(r.data_trips),
     resumen_hunter: { distancia: r.distance ?? null, distancia_recta: null,
       velocidad_maxima: r.maximum_speed ?? null, velocidad_promedio: r.average_speed ?? null,
       detenido: r.time_stop ?? null, movimiento: r.time_mov ?? null, estacionado: r.time_estacionado ?? null,

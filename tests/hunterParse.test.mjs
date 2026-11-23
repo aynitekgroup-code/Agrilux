@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { prepararRecorrido } from '../agentes/hunter/parse.mjs';
+import { generarReportesCsv } from '../agentes/hunter/reportes.mjs';
 
 const punto = { id: '1', fecha: '2026-11-20', hora: '18:41:39', velocidad: '9', ignicion: '1',
   latitud: '-6.773954', longitud: '-79.774499', nombre_vehiculo: 'CASE 2', name_tipo_dato_gps: 'Reporte Por Tiempo Móvil Encendido' };
@@ -26,4 +27,22 @@ test('Hunter: rechaza fechas inválidas y conserva ignición desconocida', () =>
 });
 test('Hunter: exige origen y estructura, no acepta un informe inventado', () => {
   assert.throws(() => prepararRecorrido({}), /Captura Hunter inválida/);
+});
+test('Hunter: conserva viajes y paradas del proveedor sin inventar datos', () => {
+  const c = captura([punto]);
+  c.recorrido.data_trips = [{ type: 'stop', start: '2026-11-20 10:00:00', end: '2026-11-20 11:00:00', time: '01:00:00' }, { type: 'trip', time: '00:20:00' }];
+  const r = prepararRecorrido(c);
+  assert.equal(r.viajes_disponibles, true);
+  assert.deepEqual(r.viajes.map((x) => x.tipo), ['Parada', 'Viaje']);
+  assert.equal(r.viajes[0].duracion, '01:00:00');
+});
+test('Hunter: el reporte CSV neutraliza fórmulas sin alterar coordenadas', () => {
+  const r = prepararRecorrido(captura([{ ...punto, domicilio: '=CMD()' }]));
+  const archivos = generarReportesCsv(r);
+  assert.match(archivos['hunter-puntos.csv'], /"'=CMD\(\)"/);
+  assert.match(archivos['hunter-puntos.csv'], /"-6\.773954"/);
+  assert.ok(archivos['hunter-resumen.csv'].startsWith('\ufeff'));
+});
+test('Hunter: rechaza un rango con fecha inválida', () => {
+  assert.throws(() => prepararRecorrido({ ...captura([punto]), desde: 'invalido' }), /rango válido/);
 });

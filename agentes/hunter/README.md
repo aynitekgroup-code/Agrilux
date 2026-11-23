@@ -1,12 +1,19 @@
 # Hunter 360 → Agrilux: diagnóstico inicial
 
-El comando actual **solo valida una captura privada**; no inicia sesión en
+El comando actual **solo procesa una captura privada**; no inicia sesión en
 Hunter, no consulta Agrilux ni sube datos. No es todavía una sincronización
 automática ni un agente operativo. Nunca colocar capturas ni contraseñas en Git.
 
 ```powershell
 node agentes/hunter/agente.mjs "RUTA_A_LA_CAPTURA_PRIVADA.json"
 ```
+
+Para generar reportes compatibles con Excel (CSV) en una carpeta privada ya
+existente, añadir `--salida "RUTA_A_CARPETA"`. Se crean tres archivos para
+resumen oficial, puntos y viajes/paradas. No se sobrescriben archivos.
+Los reportes reproducen valores de Hunter: no calculan ni garantizan igualdad
+con Zonar. Si falta `data_trips`, la salida indica que los viajes no estaban
+disponibles en la captura; un CSV vacío no demuestra que no hubo viajes.
 
 El formato de captura es `{fuente:"hunter360", equipo, desde, hasta,
 recorrido:{data:[...]}}`. Se basa en una respuesta real observada de Hunter
