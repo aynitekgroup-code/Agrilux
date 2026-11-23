@@ -298,46 +298,51 @@ function CardEventos({ empresaId, periodo, fuente, vehicles = [] }) {
 const MESES_CORTO = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
 const VALORES_PIVOT = [
-  { id: 'duracion_segundos', label: 'Duración total' },
+  { id: 'duracion_segundos', label: 'Duración' },
   { id: 'apagado_segundos', label: 'Apagado' },
   { id: 'ralenti_segundos', label: 'Ralentí' },
   { id: 'viaje_segundos', label: 'Viajando' },
 ];
 
 /**
- * Arma la estructura de la tabla dinámica "Suma de Duración (h)":
- * filas = placa/máquina, columnas = geocerca (o división), agrupado por mes y día.
+ * Arma la estructura de la tabla dinámica "Suma de Duración (h)" con la
+ * jerarquía del Excel de referencia: Meses → Fecha de entrada → Area Cod →
+ * Placa. Las columnas son las geocercas (o divisiones) y se agrega la
+ * columna final "Total general".
  */
 function construirTablaDinamica(permanencias, columnasMode, valor) {
   const columnaDe = (f) =>
     columnasMode === 'division'
       ? normalizarDivision(f?.division, f?.geocerca) || 'Sin división'
       : String(f?.geocerca || f?.nombre || '').trim() || 'Sin geocerca';
-  const filaDe = (f) => codigoArea(f?.unidad, f?.placa) || String(f?.placa || '').trim() || 'Sin placa';
+  const areaDe = (f) => codigoArea(f?.unidad, f?.placa) || '';
+  const placaDe = (f) => String(f?.placa || '').trim() || 'Sin placa';
   const valorDe = (f) => Number(f?.[valor] || 0) / 3600;
-  const fechaDe = (f) => String(f?.dia || '').trim();
+  const fechaDe = (f) => String(f?.dia || '').trim().slice(0, 10);
 
   const columnasSet = new Set();
-  const filasSet = new Set();
-  const porDia = new Map();
+  const porDia = new Map(); // fecha -> área -> placa -> columna -> horas
 
   for (const f of permanencias || []) {
     const fecha = fechaDe(f);
     const col = columnaDe(f);
-    const fila = filaDe(f);
-    if (!fecha || !col || !fila) continue;
+    const area = areaDe(f);
+    const placa = placaDe(f);
+    if (!fecha || !col) continue;
     columnasSet.add(col);
-    filasSet.add(fila);
     if (!porDia.has(fecha)) porDia.set(fecha, new Map());
-    const mapaDia = porDia.get(fecha);
-    if (!mapaDia.has(fila)) mapaDia.set(fila, new Map());
-    const mapaFila = mapaDia.get(fila);
-    mapaFila.set(col, (mapaFila.get(col) || 0) + valorDe(f));
+    const areas = porDia.get(fecha);
+    if (!areas.has(area)) areas.set(area, new Map());
+    const placas = areas.get(area);
+    if (!placas.has(placa)) placas.set(placa, new Map());
+    const celdas = placas.get(placa);
+    celdas.set(col, (celdas.get(col) || 0) + valorDe(f));
   }
 
   const columnas = [...columnasSet].sort((a, b) => a.localeCompare(b, 'es'));
-  const filas = [...filasSet].sort((a, b) => a.localeCompare(b, 'es'));
   const grupos = [];
+  const totalesGenerales = new Map();
+  let total = 0;
 
   for (const fecha of [...porDia.keys()].sort()) {
     const [anio, mes, dia] = fecha.split('-');
@@ -346,115 +351,172 @@ function construirTablaDinamica(permanencias, columnasMode, valor) {
     const etiquetaDia = `${Number(dia)}-${MESES_CORTO[indiceMes] || mes}`;
     let grupo = grupos.find((g) => g.etiqueta === etiquetaMes);
     if (!grupo) {
-      grupo = { etiqueta: etiquetaMes, dias: [] };
+      grupo = { etiqueta: etiquetaMes, dias: [], totalesCol: new Map(), totalMes: 0 };
       grupos.push(grupo);
     }
 
-    const celdas = new Map();
+    const areas = [];
     const totalesCol = new Map();
     let totalDia = 0;
-    for (const fila of filas) {
-      const valores = porDia.get(fecha)?.get(fila);
-      if (!valores) continue;
-      celdas.set(fila, valores);
-      for (const [col, valor] of valores) {
-        totalesCol.set(col, (totalesCol.get(col) || 0) + valor);
-        totalDia += valor;
+    const areasDia = porDia.get(fecha);
+    for (const area of [...areasDia.keys()].sort((a, b) => a.localeCompare(b, 'es'))) {
+      const placasDia = areasDia.get(area);
+      const filas = [];
+      for (const placa of [...placasDia.keys()].sort((a, b) => a.localeCompare(b, 'es'))) {
+        const celdas = placasDia.get(placa);
+        let totalFila = 0;
+        for (const [col, v] of celdas) {
+          totalesCol.set(col, (totalesCol.get(col) || 0) + v);
+          totalFila += v;
+        }
+        totalDia += totalFila;
+        filas.push({ placa, celdas, totalFila });
       }
+      areas.push({ area: area || '—', filas });
     }
-    grupo.dias.push({ fecha, etiqueta: etiquetaDia, celdas, totalesCol, totalDia });
+
+    for (const [col, v] of totalesCol) {
+      grupo.totalesCol.set(col, (grupo.totalesCol.get(col) || 0) + v);
+      totalesGenerales.set(col, (totalesGenerales.get(col) || 0) + v);
+    }
+    grupo.totalMes += totalDia;
+    total += totalDia;
+
+    grupo.dias.push({ fecha, etiqueta: etiquetaDia, areas, totalesCol, totalDia });
   }
 
-  const totalesGenerales = new Map();
-  for (const dia of grupos.flatMap((g) => g.dias)) {
-    for (const [col, valor] of dia.totalesCol) {
-      totalesGenerales.set(col, (totalesGenerales.get(col) || 0) + valor);
-    }
-  }
-
-  return { columnas, filas, grupos, totalesGenerales, total: [...totalesGenerales.values()].reduce((s, v) => s + v, 0) };
+  return { columnas, grupos, totalesGenerales, total };
 }
 
-/** Tabla dinámica estilo Excel: una columna por geocerca, suma de duración en horas. */
+const LABEL_COLS = [
+  { label: 'Meses', width: 64 },
+  { label: 'Fecha de entrada', width: 96 },
+  { label: 'Area Cod', width: 104 },
+  { label: 'Placa', width: 92 },
+];
+const LABEL_OFFSETS = LABEL_COLS.reduce((acc, col, i) => {
+  acc.push(i === 0 ? 0 : acc[i - 1] + LABEL_COLS[i - 1].width);
+  return acc;
+}, []);
+
+/** Tabla dinámica estilo Excel: Meses → Fecha → Area Cod → Placa, con Total general. */
 function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
-  const { columnas, filas, grupos, totalesGenerales, total } = useMemo(
+  const { columnas, grupos, totalesGenerales, total } = useMemo(
     () => construirTablaDinamica(permanencias, columnasMode, valor),
     [permanencias, columnasMode, valor],
   );
   if (!columnas.length) {
     return <p className="p-8 text-center text-xs text-slate-400">Sin permanencias para mostrar en la tabla dinámica.</p>;
   }
-  const etiquetaValor = VALORES_PIVOT.find((v) => v.id === valor)?.label || 'Duración total';
+  const etiquetaValor = VALORES_PIVOT.find((v) => v.id === valor)?.label || 'Duración';
   const celda = (valorCelda) => (valorCelda ? <span className="tabular-nums">{numero(valorCelda, 2)}</span> : null);
+  const sticky = (i, z = 10) => ({
+    position: 'sticky',
+    left: `${LABEL_OFFSETS[i]}px`,
+    zIndex: z,
+    width: `${LABEL_COLS[i].width}px`,
+    minWidth: `${LABEL_COLS[i].width}px`,
+    maxWidth: `${LABEL_COLS[i].width}px`,
+  });
+  const totalColumnas = LABEL_COLS.length + columnas.length + 1;
 
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs text-slate-700 border-collapse">
         <thead>
-          <tr className="bg-emerald-700 text-white">
-            <th className="sticky left-0 z-10 bg-emerald-700 px-3 py-2.5 text-left font-bold whitespace-nowrap border-r border-emerald-600">
+          <tr className="bg-emerald-800 text-white">
+            <th colSpan={LABEL_COLS.length} className="px-2 py-2 text-left font-bold">
               Suma de {etiquetaValor} (h)
             </th>
+            <th colSpan={columnas.length + 1} className="px-3 py-2 text-left font-bold border-l border-emerald-700">
+              Geocerca
+            </th>
+          </tr>
+          <tr className="bg-emerald-700 text-white">
+            {LABEL_COLS.map((col, i) => (
+              <th
+                key={col.label}
+                style={sticky(i, 30)}
+                className="bg-emerald-700 px-2 py-2.5 text-left font-bold whitespace-nowrap border-r border-emerald-600"
+              >
+                {col.label}
+              </th>
+            ))}
             {columnas.map((col) => (
               <th key={col} className="px-3 py-2.5 text-center font-bold whitespace-nowrap border-r border-emerald-600/60">
                 {col}
               </th>
             ))}
+            <th className="px-3 py-2.5 text-center font-bold whitespace-nowrap">Total general</th>
           </tr>
         </thead>
         <tbody>
           {grupos.map((grupo) => (
             <React.Fragment key={grupo.etiqueta}>
-              <tr className="bg-slate-100">
-                <td colSpan={columnas.length + 1} className="px-3 py-1.5 font-bold text-slate-700">
-                  {grupo.etiqueta}
-                </td>
+              <tr className="bg-slate-100 text-slate-700 font-bold">
+                <td style={sticky(0)} className="bg-slate-100 px-2 py-1.5">{grupo.etiqueta}</td>
+                <td colSpan={totalColumnas - 1} className="px-2 py-1.5" />
               </tr>
               {grupo.dias.map((dia) => (
                 <React.Fragment key={dia.fecha}>
-                  <tr className="bg-slate-50/80">
-                    <td className="px-3 py-1.5 font-bold text-slate-600 sticky left-0 z-10 bg-slate-50/95 border-r border-slate-100">
-                      {dia.etiqueta}
-                    </td>
-                    {columnas.map((col) => (
-                      <td key={col} className="px-3 py-1.5" />
-                    ))}
+                  <tr className="bg-slate-50/80 text-slate-600 font-semibold">
+                    <td style={sticky(0)} className="bg-slate-50 px-2 py-1.5" />
+                    <td style={sticky(1)} className="bg-slate-50 px-2 py-1.5">{dia.etiqueta}</td>
+                    <td colSpan={totalColumnas - 2} className="px-2 py-1.5" />
                   </tr>
-                  {filas
-                    .filter((fila) => dia.celdas.has(fila))
-                    .map((fila) => (
-                      <tr key={fila} className="border-b border-slate-50 hover:bg-slate-50/60">
-                        <td className="px-3 py-1.5 font-medium text-slate-700 sticky left-0 z-10 bg-white border-r border-slate-100">
-                          {fila}
-                        </td>
-                        {columnas.map((col) => (
-                          <td key={col} className="px-3 py-1.5 text-center">
-                            {celda(dia.celdas.get(fila)?.get(col))}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
+                  {dia.areas.map((area) => (
+                    <React.Fragment key={`${dia.fecha}-${area.area}`}>
+                      {area.filas.map((fila, idx) => (
+                        <tr key={`${dia.fecha}-${area.area}-${fila.placa}`} className="border-b border-slate-50 hover:bg-slate-50/60">
+                          <td style={sticky(0)} className="bg-white px-2 py-1.5" />
+                          <td style={sticky(1)} className="bg-white px-2 py-1.5" />
+                          <td style={sticky(2)} className="bg-white px-2 py-1.5 text-slate-500 truncate">{idx === 0 ? area.area : ''}</td>
+                          <td style={sticky(3)} className="bg-white px-2 py-1.5 font-bold text-slate-800 whitespace-nowrap">{fila.placa}</td>
+                          {columnas.map((col) => (
+                            <td key={col} className="px-3 py-1.5 text-center">
+                              {celda(fila.celdas.get(col))}
+                            </td>
+                          ))}
+                          <td className="px-3 py-1.5 text-right font-semibold">{celda(fila.totalFila)}</td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  ))}
                   <tr className="bg-emerald-50 text-emerald-900 font-semibold border-y border-emerald-200">
-                    <td className="px-3 py-1.5 sticky left-0 z-10 bg-emerald-50 border-r border-emerald-200">Total {dia.etiqueta}</td>
+                    <td style={sticky(0)} className="bg-emerald-50 px-2 py-1.5" />
+                    <td style={sticky(1)} className="bg-emerald-50 px-2 py-1.5" />
+                    <td style={sticky(2)} className="bg-emerald-50 px-2 py-1.5" />
+                    <td style={sticky(3)} className="bg-emerald-50 px-2 py-1.5 whitespace-nowrap">Total {dia.etiqueta}</td>
                     {columnas.map((col) => (
                       <td key={col} className="px-3 py-1.5 text-center tabular-nums">
                         {dia.totalesCol.get(col) ? numero(dia.totalesCol.get(col), 2) : null}
                       </td>
                     ))}
+                    <td className="px-3 py-1.5 text-right tabular-nums">{celda(dia.totalDia)}</td>
                   </tr>
                 </React.Fragment>
               ))}
+              <tr className="bg-emerald-100 text-emerald-900 font-bold">
+                <td colSpan={LABEL_COLS.length} className="px-2 py-2">Total {grupo.etiqueta}</td>
+                {columnas.map((col) => (
+                  <td key={col} className="px-3 py-2 text-center tabular-nums">
+                    {grupo.totalesCol.get(col) ? numero(grupo.totalesCol.get(col), 2) : null}
+                  </td>
+                ))}
+                <td className="px-3 py-2 text-right tabular-nums">{celda(grupo.totalMes)}</td>
+              </tr>
             </React.Fragment>
           ))}
         </tbody>
         <tfoot>
           <tr className="bg-emerald-100 text-emerald-900 font-bold">
-            <td className="px-3 py-2.5 sticky left-0 z-10 bg-emerald-100 border-r border-emerald-200">Total general</td>
+            <td colSpan={LABEL_COLS.length} className="px-2 py-2.5">Total general</td>
             {columnas.map((col) => (
               <td key={col} className="px-3 py-2.5 text-center tabular-nums">
                 {totalesGenerales.get(col) ? numero(totalesGenerales.get(col), 2) : null}
               </td>
             ))}
+            <td className="px-3 py-2.5 text-right tabular-nums">{celda(total)}</td>
           </tr>
         </tfoot>
       </table>
@@ -494,7 +556,7 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
   // cambia al detalle plano; al elegir grupo o "Todas las unidades" vuelve a
   // División. El botón sigue permitiendo cambiar la vista manualmente.
   const [vista, setVista] = useState('division');
-  const [columnas, setColumnas] = useState('geocerca');
+  const [columnas, setColumnas] = useState('division');
   const [valor, setValor] = useState('duracion_segundos');
   const [permanencias, setPermanencias] = useState([]);
   const [estadoPivot, setEstadoPivot] = useState('inactivo');
@@ -772,8 +834,8 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
               <span className="ml-2 font-semibold text-slate-500">Columnas:</span>
               <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5" role="group" aria-label="Columnas de la tabla dinámica">
                 {[
-                  { id: 'geocerca', label: 'Cada geocerca' },
                   { id: 'division', label: 'Por división' },
+                  { id: 'geocerca', label: 'Cada geocerca' },
                 ].map((opcion) => (
                   <button
                     key={opcion.id}
