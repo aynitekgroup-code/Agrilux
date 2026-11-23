@@ -340,7 +340,7 @@ export default function WebLayout({ children }) {
         </header>
 
         {/* Área de contenido */}
-        <main className="flex-1 px-6 py-5 overflow-y-auto overflow-x-hidden">
+        <main className={`flex-1 py-5 overflow-y-auto overflow-x-hidden ${location.pathname.startsWith('/gestion/vehiculos-flota') ? 'px-2 sm:px-3' : 'px-6'}`}>
           <div className="w-full max-w-none min-w-0">
             <div className="mb-4">
               <AgentStatus />

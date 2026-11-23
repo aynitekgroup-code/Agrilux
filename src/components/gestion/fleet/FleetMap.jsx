@@ -2185,9 +2185,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       <div
         className={vehicles.length
           ? panelUnidadesContraido
-            ? 'grid grid-cols-[minmax(0,56px)_minmax(0,1fr)] gap-3 px-3 sm:px-5 pb-2'
-            : 'grid grid-cols-1 gap-3 px-3 sm:px-5 pb-2 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]'
-          : 'px-3 sm:px-5 pb-2'}
+            ? 'grid grid-cols-[minmax(0,56px)_minmax(0,1fr)] gap-2 px-1 sm:px-2 pb-2'
+            : 'grid grid-cols-1 gap-2 px-1 sm:px-2 pb-2 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]'
+          : 'px-1 sm:px-2 pb-2'}
       >
         {vehicles.length ? (
           panelUnidadesContraido ? (
@@ -2233,7 +2233,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             >
               <div className="sticky top-0 z-10 flex items-center justify-between gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-2 shadow-sm">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Panel de unidades
+                  Flota
                 </span>
                 <button
                   type="button"
