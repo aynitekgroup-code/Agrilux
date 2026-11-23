@@ -391,12 +391,12 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
     <div className="overflow-x-auto">
       <table className="w-full text-xs text-slate-700 border-collapse">
         <thead>
-          <tr className="bg-amber-600 text-white">
-            <th className="sticky left-0 z-10 bg-amber-600 px-3 py-2.5 text-left font-bold whitespace-nowrap border-r border-amber-500">
+          <tr className="bg-emerald-700 text-white">
+            <th className="sticky left-0 z-10 bg-emerald-700 px-3 py-2.5 text-left font-bold whitespace-nowrap border-r border-emerald-600">
               Suma de {etiquetaValor} (h)
             </th>
             {columnas.map((col) => (
-              <th key={col} className="px-3 py-2.5 text-center font-bold whitespace-nowrap border-r border-amber-500/60">
+              <th key={col} className="px-3 py-2.5 text-center font-bold whitespace-nowrap border-r border-emerald-600/60">
                 {col}
               </th>
             ))}
@@ -434,8 +434,8 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
                         ))}
                       </tr>
                     ))}
-                  <tr className="bg-amber-50 text-amber-900 font-semibold border-y border-amber-200">
-                    <td className="px-3 py-1.5 sticky left-0 z-10 bg-amber-50 border-r border-amber-200">Total {dia.etiqueta}</td>
+                  <tr className="bg-emerald-50 text-emerald-900 font-semibold border-y border-emerald-200">
+                    <td className="px-3 py-1.5 sticky left-0 z-10 bg-emerald-50 border-r border-emerald-200">Total {dia.etiqueta}</td>
                     {columnas.map((col) => (
                       <td key={col} className="px-3 py-1.5 text-center tabular-nums">
                         {dia.totalesCol.get(col) ? numero(dia.totalesCol.get(col), 2) : null}
@@ -448,8 +448,8 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
           ))}
         </tbody>
         <tfoot>
-          <tr className="bg-amber-100 text-amber-900 font-bold">
-            <td className="px-3 py-2.5 sticky left-0 z-10 bg-amber-100 border-r border-amber-200">Total general</td>
+          <tr className="bg-emerald-100 text-emerald-900 font-bold">
+            <td className="px-3 py-2.5 sticky left-0 z-10 bg-emerald-100 border-r border-emerald-200">Total general</td>
             {columnas.map((col) => (
               <td key={col} className="px-3 py-2.5 text-center tabular-nums">
                 {totalesGenerales.get(col) ? numero(totalesGenerales.get(col), 2) : null}
@@ -462,7 +462,7 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
         <span>
           {permanencias.length} visitas · {columnas.length} columnas · columnas por {columnasMode === 'division' ? 'división' : 'geocerca'}.
         </span>
-        <span className="font-semibold text-amber-700">Total general: {numero(total, 2)} h · {etiquetaValor}</span>
+        <span className="font-semibold text-emerald-700">Total general: {numero(total, 2)} h · {etiquetaValor}</span>
       </div>
     </div>
   );
@@ -782,8 +782,8 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
                     aria-pressed={columnas === opcion.id}
                     className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${
                       columnas === opcion.id
-                        ? 'bg-amber-500 text-white shadow-sm'
-                        : 'text-slate-600 hover:bg-white hover:text-amber-700'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:bg-white hover:text-emerald-700'
                     }`}
                   >
                     {opcion.label}
@@ -795,13 +795,13 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
                 value={valor}
                 onChange={(e) => setValor(e.target.value)}
                 aria-label="Valor de la tabla dinámica"
-                className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-800 outline-none focus:ring-2 focus:ring-amber-200"
+                className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-800 outline-none focus:ring-2 focus:ring-emerald-200"
               >
                 {VALORES_PIVOT.map((opcion) => (
                   <option key={opcion.id} value={opcion.id}>{opcion.label} (h)</option>
                 ))}
               </select>
-              <span className="ml-auto font-semibold text-amber-700">
+              <span className="ml-auto font-semibold text-emerald-700">
                 Una columna por {columnas === 'division' ? 'división' : 'geocerca'}.
               </span>
             </>
