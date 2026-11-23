@@ -365,17 +365,21 @@ function construirTablaDinamica(permanencias, columnasMode, valor) {
     for (const area of [...areasDia.keys()].sort((a, b) => a.localeCompare(b, 'es'))) {
       const placasDia = areasDia.get(area);
       const filas = [];
+      const totalesArea = new Map();
+      let totalArea = 0;
       for (const placa of [...placasDia.keys()].sort((a, b) => a.localeCompare(b, 'es'))) {
         const celdas = placasDia.get(placa);
         let totalFila = 0;
         for (const [col, v] of celdas) {
           totalesCol.set(col, (totalesCol.get(col) || 0) + v);
+          totalesArea.set(col, (totalesArea.get(col) || 0) + v);
           totalFila += v;
         }
         totalDia += totalFila;
+        totalArea += totalFila;
         filas.push({ placa, celdas, totalFila });
       }
-      areas.push({ area: area || '—', filas });
+      areas.push({ area: area || '—', filas, totalesCol: totalesArea, totalArea });
     }
 
     for (const [col, v] of totalesCol) {
@@ -428,7 +432,8 @@ function PopoverFiltro({ titulo, opciones, seleccion, onAplicar }) {
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const botonRef = useRef(null);
   const panelRef = useRef(null);
-  const activo = (seleccion || []).length > 0;
+  // null = sin filtro; un arreglo (aunque esté vacío) = filtro aplicado.
+  const activo = Array.isArray(seleccion);
 
   const abrir = () => {
     const rect = botonRef.current?.getBoundingClientRect();
@@ -440,7 +445,7 @@ function PopoverFiltro({ titulo, opciones, seleccion, onAplicar }) {
       const top = abajo + alto > window.innerHeight - 8 ? Math.max(8, rect.top - alto - 4) : abajo;
       setPos({ top, left: izquierda });
     }
-    setBorrador(seleccion || []);
+    setBorrador(Array.isArray(seleccion) ? [...seleccion] : (opciones || []).map((o) => o.valor));
     setBusqueda('');
     setAbierto(true);
   };
@@ -472,24 +477,26 @@ function PopoverFiltro({ titulo, opciones, seleccion, onAplicar }) {
     };
   }, [abierto]);
 
-  const todos = borrador.length === 0;
+  const total = (opciones || []).length;
+  const todos = total === 0 || borrador.length === total;
   const texto = busqueda.trim().toLowerCase();
   const visibles = (opciones || []).filter((o) => !texto || String(o.etiqueta).toLowerCase().includes(texto));
 
   const alternar = (valor) => {
-    setBorrador((prev) => {
-      const base = prev.length === 0 ? (opciones || []).map((o) => o.valor) : prev;
-      return base.includes(valor) ? base.filter((v) => v !== valor) : [...base, valor];
-    });
+    setBorrador((prev) => (prev.includes(valor) ? prev.filter((v) => v !== valor) : [...prev, valor]));
+  };
+  const alternarTodos = () => {
+    setBorrador(todos ? [] : (opciones || []).map((o) => o.valor));
   };
   const aplicar = () => {
     const lista = [...new Set(borrador)];
-    onAplicar(lista.length === (opciones || []).length ? [] : lista);
+    // Si están todos marcados equivale a no filtrar; si no hay ninguno, la
+    // tabla queda vacía como en Excel.
+    onAplicar(lista.length === total ? null : lista);
     setAbierto(false);
   };
   const limpiar = () => {
-    setBorrador([]);
-    onAplicar([]);
+    onAplicar(null);
     setAbierto(false);
   };
 
@@ -505,7 +512,7 @@ function PopoverFiltro({ titulo, opciones, seleccion, onAplicar }) {
         className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded transition-colors ${
           activo
             ? 'bg-white text-emerald-700 shadow-sm'
-            : 'text-emerald-100 hover:bg-emerald-600 hover:text-white'
+            : 'text-emerald-800 hover:bg-emerald-400/50 hover:text-emerald-950'
         }`}
       >
         <Filter size={10} strokeWidth={3} />
@@ -542,7 +549,7 @@ function PopoverFiltro({ titulo, opciones, seleccion, onAplicar }) {
                 <input
                   type="checkbox"
                   checked={todos}
-                  onChange={() => setBorrador([])}
+                  onChange={alternarTodos}
                   className="h-3 w-3 accent-emerald-600"
                 />
                 (Todos)
@@ -558,7 +565,7 @@ function PopoverFiltro({ titulo, opciones, seleccion, onAplicar }) {
                     >
                       <input
                         type="checkbox"
-                        checked={todos || borrador.includes(o.valor)}
+                        checked={borrador.includes(o.valor)}
                         onChange={() => alternar(o.valor)}
                         className="h-3 w-3 accent-emerald-600"
                       />
@@ -592,7 +599,8 @@ function PopoverFiltro({ titulo, opciones, seleccion, onAplicar }) {
 }
 
 /** Tabla dinámica estilo Excel: Meses → Fecha → Area Cod → Placa, con Total general. */
-const FILTROS_VACIOS = { mes: [], fecha: [], area: [], placa: [], columna: [] };
+// null = sin filtro; un arreglo = filtro aplicado (vacío = ninguno marcado).
+const FILTROS_VACIOS = { mes: null, fecha: null, area: null, placa: null, columna: null };
 
 function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
   const [filtros, setFiltros] = useState(FILTROS_VACIOS);
@@ -600,7 +608,7 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
   // La columna del filtro depende del modo (división o geocerca): al cambiarlo
   // se descarta la selección de columnas para no dejar el reporte vacío.
   useEffect(() => {
-    setFiltros((prev) => (prev.columna.length ? { ...prev, columna: [] } : prev));
+    setFiltros((prev) => (Array.isArray(prev.columna) ? { ...prev, columna: null } : prev));
   }, [columnasMode]);
 
   const columnaDe = (f) =>
@@ -642,7 +650,7 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
   // Se filtra antes de construir la tabla para que los totales, los totales
   // por día/mes y el Total general cuadren con lo que se ve.
   const permanenciasFiltradas = useMemo(() => {
-    const pasa = (lista, valor) => !lista.length || lista.includes(valor);
+    const pasa = (lista, valor) => lista == null || lista.includes(valor);
     return (permanencias || []).filter((f) => {
       const dia = String(f?.dia || '').trim().slice(0, 10);
       return (
@@ -673,7 +681,7 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
 
   const aplicarFiltro = (campo) => (lista) => setFiltros((prev) => ({ ...prev, [campo]: lista }));
   const limpiarTodo = () => setFiltros(FILTROS_VACIOS);
-  const hayFiltros = Object.values(filtros).some((lista) => lista.length > 0);
+  const hayFiltros = Object.values(filtros).some((lista) => lista != null);
 
   const etiquetaValor = VALORES_PIVOT.find((v) => v.id === valor)?.label || 'Duración';
   const celda = (valorCelda) => (valorCelda ? <span className="tabular-nums">{numero(valorCelda, 2)}</span> : null);
@@ -713,8 +721,8 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
     <div className="overflow-x-auto">
       <table className="w-full text-xs text-slate-700 border-collapse">
         <thead>
-          <tr className="bg-emerald-800 text-white">
-            <th colSpan={LABEL_COLS.length} className="px-2 py-2 text-left font-bold">
+          <tr className="bg-emerald-300 text-emerald-950">
+            <th colSpan={LABEL_COLS.length} className="border-b border-emerald-400/50 px-2 py-2 text-left font-bold">
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate">Suma de {etiquetaValor} (h)</span>
                 {hayFiltros ? (
@@ -722,14 +730,14 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
                     type="button"
                     onClick={limpiarTodo}
                     title="Quitar todos los filtros"
-                    className="inline-flex shrink-0 items-center gap-1 rounded bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold text-white hover:bg-white/25"
+                    className="inline-flex shrink-0 items-center gap-1 rounded bg-emerald-900/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-900 hover:bg-emerald-900/20"
                   >
                     <X size={10} /> Limpiar filtros
                   </button>
                 ) : null}
               </div>
             </th>
-            <th colSpan={columnas.length + 1} className="border-l border-emerald-700 px-2 py-2 text-left font-bold">
+            <th colSpan={columnas.length + 1} className="border-b border-l border-emerald-400/50 px-2 py-2 text-left font-bold">
               <div className="flex items-center gap-1.5">
                 <span className="truncate">{tituloColumnas}</span>
                 <PopoverFiltro
@@ -741,12 +749,12 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
               </div>
             </th>
           </tr>
-          <tr className="bg-emerald-700 text-white">
+          <tr className="bg-emerald-200 text-emerald-950">
             {LABEL_COLS.map((col, i) => (
               <th
                 key={col.label}
                 style={sticky(i, 30)}
-                className="overflow-hidden border-r border-emerald-600 bg-emerald-700 px-1.5 py-2.5 text-left font-bold whitespace-nowrap"
+                className="overflow-hidden border-r border-emerald-300 bg-emerald-200 px-1.5 py-2.5 text-left font-bold whitespace-nowrap"
               >
                 <div className="flex items-center justify-between gap-1">
                   <span className="truncate">{col.label}</span>
@@ -760,41 +768,58 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
               </th>
             ))}
             {columnas.map((col) => (
-              <th key={col} className="px-3 py-2.5 text-center font-bold whitespace-nowrap border-r border-emerald-600/60">
+              <th
+                key={col}
+                className="min-w-[84px] max-w-[112px] border-r border-emerald-300/70 px-2 py-2 text-center align-bottom text-[11px] font-bold leading-tight whitespace-normal"
+              >
                 {col}
               </th>
             ))}
-            <th className="px-3 py-2.5 text-center font-bold whitespace-nowrap">Total general</th>
+            <th className="min-w-[84px] px-2 py-2 text-center align-bottom text-[11px] font-bold leading-tight whitespace-normal">
+              Total general
+            </th>
           </tr>
         </thead>
         <tbody>
           {grupos.map((grupo) => (
             <React.Fragment key={grupo.etiqueta}>
-              <tr className="bg-slate-100 text-slate-700 font-bold">
-                <td style={sticky(0)} className="bg-slate-100 px-2 py-1.5">{grupo.etiqueta}</td>
+              <tr className="border-b border-slate-100 bg-white font-bold text-slate-900">
+                <td style={sticky(0)} className="bg-white px-2 py-1.5">{grupo.etiqueta}</td>
                 <td colSpan={totalColumnas - 1} className="px-2 py-1.5" />
               </tr>
               {grupo.dias.map((dia) => (
                 <React.Fragment key={dia.fecha}>
-                  <tr className="bg-slate-50/80 text-slate-600 font-semibold">
-                    <td style={sticky(0)} className="bg-slate-50 px-2 py-1.5" />
-                    <td style={sticky(1)} className="bg-slate-50 px-2 py-1.5">{dia.etiqueta}</td>
+                  <tr className="border-b border-slate-100 bg-white font-semibold text-slate-600">
+                    <td style={sticky(0)} className="bg-white px-2 py-1.5" />
+                    <td style={sticky(1)} className="bg-white px-2 py-1.5">{dia.etiqueta}</td>
                     <td colSpan={totalColumnas - 2} className="px-2 py-1.5" />
                   </tr>
                   {dia.areas.map((area) => (
                     <React.Fragment key={`${dia.fecha}-${area.area}`}>
-                      {area.filas.map((fila, idx) => (
-                        <tr key={`${dia.fecha}-${area.area}-${fila.placa}`} className="border-b border-slate-50 hover:bg-slate-50/60">
+                      <tr className="border-b border-slate-100 bg-slate-50/70 font-semibold text-slate-800">
+                        <td style={sticky(0)} className="bg-slate-50 px-2 py-1.5" />
+                        <td style={sticky(1)} className="bg-slate-50 px-2 py-1.5" />
+                        <td style={sticky(2)} className="bg-slate-50 px-2 py-1.5 truncate">{area.area}</td>
+                        <td style={sticky(3)} className="bg-slate-50 px-2 py-1.5" />
+                        {columnas.map((col) => (
+                          <td key={col} className="border-r border-slate-100 px-2 py-1.5 text-center tabular-nums">
+                            {celda(area.totalesCol.get(col))}
+                          </td>
+                        ))}
+                        <td className="px-2 py-1.5 text-right tabular-nums">{celda(area.totalArea)}</td>
+                      </tr>
+                      {area.filas.map((fila) => (
+                        <tr key={`${dia.fecha}-${area.area}-${fila.placa}`} className="border-b border-slate-50 hover:bg-emerald-50/40">
                           <td style={sticky(0)} className="bg-white px-2 py-1.5" />
                           <td style={sticky(1)} className="bg-white px-2 py-1.5" />
-                          <td style={sticky(2)} className="bg-white px-2 py-1.5 text-slate-500 truncate">{idx === 0 ? area.area : ''}</td>
-                          <td style={sticky(3)} className="bg-white px-2 py-1.5 font-bold text-slate-800 whitespace-nowrap">{fila.placa}</td>
+                          <td style={sticky(2)} className="bg-white px-2 py-1.5" />
+                          <td style={sticky(3)} className="bg-white px-2 py-1.5 whitespace-nowrap font-medium text-slate-700">{fila.placa}</td>
                           {columnas.map((col) => (
-                            <td key={col} className="px-3 py-1.5 text-center">
+                            <td key={col} className="border-r border-slate-100 px-2 py-1.5 text-center">
                               {celda(fila.celdas.get(col))}
                             </td>
                           ))}
-                          <td className="px-3 py-1.5 text-right font-semibold">{celda(fila.totalFila)}</td>
+                          <td className="px-2 py-1.5 text-right font-semibold">{celda(fila.totalFila)}</td>
                         </tr>
                       ))}
                     </React.Fragment>
@@ -805,22 +830,22 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
                     <td style={sticky(2)} className="bg-emerald-50 px-2 py-1.5" />
                     <td style={sticky(3)} className="bg-emerald-50 px-2 py-1.5 whitespace-nowrap">Total {dia.etiqueta}</td>
                     {columnas.map((col) => (
-                      <td key={col} className="px-3 py-1.5 text-center tabular-nums">
+                      <td key={col} className="border-r border-emerald-100 px-2 py-1.5 text-center tabular-nums">
                         {dia.totalesCol.get(col) ? numero(dia.totalesCol.get(col), 2) : null}
                       </td>
                     ))}
-                    <td className="px-3 py-1.5 text-right tabular-nums">{celda(dia.totalDia)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{celda(dia.totalDia)}</td>
                   </tr>
                 </React.Fragment>
               ))}
               <tr className="bg-emerald-100 text-emerald-900 font-bold">
                 <td colSpan={LABEL_COLS.length} className="px-2 py-2">Total {grupo.etiqueta}</td>
                 {columnas.map((col) => (
-                  <td key={col} className="px-3 py-2 text-center tabular-nums">
+                  <td key={col} className="border-r border-emerald-200/70 px-2 py-2 text-center tabular-nums">
                     {grupo.totalesCol.get(col) ? numero(grupo.totalesCol.get(col), 2) : null}
                   </td>
                 ))}
-                <td className="px-3 py-2 text-right tabular-nums">{celda(grupo.totalMes)}</td>
+                <td className="px-2 py-2 text-right tabular-nums">{celda(grupo.totalMes)}</td>
               </tr>
             </React.Fragment>
           ))}
@@ -829,18 +854,21 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
           <tr className="bg-emerald-100 text-emerald-900 font-bold">
             <td colSpan={LABEL_COLS.length} className="px-2 py-2.5">Total general</td>
             {columnas.map((col) => (
-              <td key={col} className="px-3 py-2.5 text-center tabular-nums">
+              <td key={col} className="border-r border-emerald-200/70 px-2 py-2.5 text-center tabular-nums">
                 {totalesGenerales.get(col) ? numero(totalesGenerales.get(col), 2) : null}
               </td>
             ))}
-            <td className="px-3 py-2.5 text-right tabular-nums">{celda(total)}</td>
+            <td className="px-2 py-2.5 text-right tabular-nums">{celda(total)}</td>
           </tr>
         </tfoot>
       </table>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-50 px-4 py-2.5 text-[10px] text-slate-400">
         <span>
-          {hayFiltros ? `${permanenciasFiltradas.length} de ${permanencias.length}` : permanencias.length} visitas ·{' '}
-          {columnas.length} columnas · columnas por {columnasMode === 'division' ? 'división' : 'geocerca'}.
+          {hayFiltros ? `${permanenciasFiltradas.length} de ${permanencias.length}` : permanencias.length} permanencias ·{' '}
+          {columnas.length} columnas · columnas por{' '}
+          {columnasMode === 'division'
+            ? 'División (campos agrupados; distritos u oficinas con su nombre)'
+            : 'geocerca'}.
         </span>
         <span className="font-semibold text-emerald-700">Total general: {numero(total, 2)} h · {etiquetaValor}</span>
       </div>
