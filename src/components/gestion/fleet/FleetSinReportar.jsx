@@ -3,6 +3,7 @@ import { Clock, Database, FileSpreadsheet, Loader2, RotateCw, Sparkles, Check } 
 import { obtenerEstadoUnidadesFlota, LIMITE_ESTADO_UNIDADES } from '../../../lib/agrotrackReportesGeocerca';
 import { obtenerEstadoVivo } from '../../../lib/agrotrackTiempoReal';
 import { formatearFechaHora } from '../../../lib/agrotrackFlota';
+import { codigoArea } from '../../../lib/agrotrackVisitasDia';
 import { armarContextoReporte } from '../../../lib/reportesIa';
 import { llamarIaGestion } from '../../../lib/agrotrackIa';
 import { CuerpoEstado, haceCuanto, useLimiteFilas, BotonVerMas, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, RelojEnVivo } from './reportesComunes';
@@ -26,7 +27,7 @@ import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
 const VENTANAS_RAPIDO = [4, 8, 16, 24, 48];
 
 const COLUMNAS = [
-  { label: 'Unidad', clase: 'text-left' },
+  { label: 'Área / Unidad', clase: 'text-left' },
   { label: 'Placa', clase: 'text-left' },
   { label: 'Últ. dirección', clase: 'text-left' },
   { label: 'Últ. evento', clase: 'text-left' },
@@ -415,10 +416,12 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
                 <tbody>
                   {filasTabla.map((fila, i) => (
                     <tr key={fila.placa || `sin-placa-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
-                      <td className="px-3 py-2">
-                        <span className="font-bold text-slate-800">{fila.unidad || fila.placa || '—'}</span>
+                      <td className="px-3 py-2 text-slate-600">
+                        {codigoArea(fila.unidad, fila.placa) || (fila.descripcion && fila.descripcion !== fila.placa ? fila.descripcion : '—')}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-600">{fila.placa || '—'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className="font-bold text-slate-800">{fila.placa || '—'}</span>
+                      </td>
                       <td className="px-3 py-2 text-slate-500 max-w-[260px]">
                         <span className="block truncate" title={fila.direccion || ''}>
                           {fila.direccion || '—'}
