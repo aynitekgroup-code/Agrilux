@@ -8,7 +8,7 @@ import OnlineStatus from './OnlineStatus';
 import AgentStatus from './AgentStatus';
 
 const navItems = [
-  { path: '/',        icon: Camera,  label: 'Diagnóstico' },
+  { path: '/diagnostico', icon: Camera,  label: 'Diagnóstico' },
   { path: '/ciclo',   icon: Calendar, label: 'Ciclo' },
   { path: '/parcela', icon: Leaf,    label: 'Parcela' },
   { path: '/gestion', icon: ClipboardList, label: 'Gestión' },

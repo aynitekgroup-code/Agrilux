@@ -36,7 +36,7 @@ import AgentStatus from '../AgentStatus';
 import { AdminAccessModal, ChangePasswordModal, EmpresaSelectorModal, LocationSelectorModal, UserProfileModal } from './SharedModals';
 
 const navItems = [
-  { path: '/', icon: Camera, label: 'Diagnóstico' },
+  { path: '/diagnostico', icon: Camera, label: 'Diagnóstico' },
   { path: '/ciclo', icon: Calendar, label: 'Ciclo' },
   { path: '/parcela', icon: Leaf, label: 'Parcela' },
   { path: '/gestion', icon: ClipboardList, label: 'Gestión' },

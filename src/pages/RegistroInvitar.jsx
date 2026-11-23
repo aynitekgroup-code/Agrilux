@@ -74,7 +74,7 @@ export default function RegistroInvitar() {
         coords: null
       });
 
-      navigate('/');
+      navigate('/diagnostico');
     } catch (err) {
       setError(err.message || 'Error al aceptar la invitación');
     } finally {

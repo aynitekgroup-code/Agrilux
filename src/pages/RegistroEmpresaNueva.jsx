@@ -189,7 +189,7 @@ export default function RegistroEmpresaNueva() {
       });
 
       // Redirigir al dashboard principal
-      navigate('/');
+      navigate('/diagnostico');
     } catch (err) {
       const msg = String(err?.message || '');
       if (/already registered|already exists|email-already-in-use|user_already_exists|email_already_registered/i.test(msg) || err?.code === 'email_already_registered') {

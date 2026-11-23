@@ -12,6 +12,7 @@ import RegistroUnirse from './pages/RegistroUnirse';
 import RegistroInvitar from './pages/RegistroInvitar';
 import RegistroSolicitudEnviada from './pages/RegistroSolicitudEnviada';
 import EmpresaMiembros from './pages/EmpresaMiembros';
+import Bienvenida from './pages/Bienvenida';
 import { Clock, Mail, LogOut, Building } from 'lucide-react';
 
 /**
@@ -159,6 +160,8 @@ function AppRoutes() {
     }
   }, [user, ubicacionGuardada, selectorMostrado]);
 
+  if (location.pathname === '/') return <Bienvenida />;
+
   if (loading) return (
     <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-green-50 to-green-200">
       <div className="text-center">
@@ -218,7 +221,7 @@ function AppRoutes() {
         <ExperienceLayout>
           <Routes>
             {/* Diagnóstico — siempre accesible */}
-            <Route path="/" element={<Diagnostico onPlagaDetectada={setPlagaDetectada} />} />
+            <Route path="/diagnostico" element={<Diagnostico onPlagaDetectada={setPlagaDetectada} />} />
 
             {/* Parcela — requiere login + aprobación */}
             <Route path="/parcela" element={
