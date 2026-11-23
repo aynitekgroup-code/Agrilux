@@ -1,14 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CalendarDays,
   Database,
   FileSpreadsheet,
+  Filter,
   Loader2,
   LogIn,
   LogOut,
   MapPinned,
   Save,
   Sparkles,
+  X,
 } from 'lucide-react';
 import {
   obtenerEventosGeocerca,
@@ -389,25 +392,289 @@ function construirTablaDinamica(permanencias, columnasMode, valor) {
 }
 
 const LABEL_COLS = [
-  { label: 'Meses', width: 64 },
-  { label: 'Fecha de entrada', width: 96 },
-  { label: 'Area Cod', width: 104 },
-  { label: 'Placa', width: 92 },
+  { label: 'Meses', width: 76, campo: 'mes' },
+  { label: 'Fecha de entrada', width: 108, campo: 'fecha' },
+  { label: 'Area Cod', width: 106, campo: 'area' },
+  { label: 'Placa', width: 98, campo: 'placa' },
 ];
 const LABEL_OFFSETS = LABEL_COLS.reduce((acc, col, i) => {
   acc.push(i === 0 ? 0 : acc[i - 1] + LABEL_COLS[i - 1].width);
   return acc;
 }, []);
 
-/** Tabla dinámica estilo Excel: Meses → Fecha → Area Cod → Placa, con Total general. */
-function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
-  const { columnas, grupos, totalesGenerales, total } = useMemo(
-    () => construirTablaDinamica(permanencias, columnasMode, valor),
-    [permanencias, columnasMode, valor],
+/** "2026-11" -> "Nov 2026" (encabezado de mes). */
+function etiquetaMesClave(clave) {
+  const [anio, mes] = String(clave || '').split('-');
+  const indice = Number(mes) - 1;
+  return `${MESES_CORTO[indice] || mes || ''} ${anio || ''}`.trim();
+}
+
+/** "2026-11-22" -> "22-Nov" (encabezado de día). */
+function etiquetaFechaClave(clave) {
+  const [, mes, dia] = String(clave || '').split('-');
+  const indice = Number(mes) - 1;
+  return `${Number(dia)}-${MESES_CORTO[indice] || mes || ''}`;
+}
+
+/**
+ * Filtro desplegable tipo Excel para un encabezado de la tabla dinámica.
+ * El panel va por portal para que el `overflow-x-auto` de la tabla no lo
+ * recorte, y se cierra al hacer clic fuera o con Escape.
+ */
+function PopoverFiltro({ titulo, opciones, seleccion, onAplicar }) {
+  const [abierto, setAbierto] = useState(false);
+  const [borrador, setBorrador] = useState(seleccion || []);
+  const [busqueda, setBusqueda] = useState('');
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const botonRef = useRef(null);
+  const panelRef = useRef(null);
+  const activo = (seleccion || []).length > 0;
+
+  const abrir = () => {
+    const rect = botonRef.current?.getBoundingClientRect();
+    if (rect) {
+      const ancho = 248;
+      const alto = 320;
+      const izquierda = Math.min(Math.max(8, rect.right - ancho), Math.max(8, window.innerWidth - ancho - 8));
+      const abajo = rect.bottom + 4;
+      const top = abajo + alto > window.innerHeight - 8 ? Math.max(8, rect.top - alto - 4) : abajo;
+      setPos({ top, left: izquierda });
+    }
+    setBorrador(seleccion || []);
+    setBusqueda('');
+    setAbierto(true);
+  };
+
+  useEffect(() => {
+    if (!abierto) return undefined;
+    const alClicFuera = (e) => {
+      if (panelRef.current?.contains(e.target)) return;
+      if (botonRef.current?.contains(e.target)) return;
+      setAbierto(false);
+    };
+    const alTecla = (e) => {
+      if (e.key === 'Escape') setAbierto(false);
+    };
+    const alScroll = (e) => {
+      if (panelRef.current?.contains(e.target)) return;
+      setAbierto(false);
+    };
+    const alRedimensionar = () => setAbierto(false);
+    document.addEventListener('mousedown', alClicFuera);
+    document.addEventListener('keydown', alTecla);
+    window.addEventListener('scroll', alScroll, true);
+    window.addEventListener('resize', alRedimensionar);
+    return () => {
+      document.removeEventListener('mousedown', alClicFuera);
+      document.removeEventListener('keydown', alTecla);
+      window.removeEventListener('scroll', alScroll, true);
+      window.removeEventListener('resize', alRedimensionar);
+    };
+  }, [abierto]);
+
+  const todos = borrador.length === 0;
+  const texto = busqueda.trim().toLowerCase();
+  const visibles = (opciones || []).filter((o) => !texto || String(o.etiqueta).toLowerCase().includes(texto));
+
+  const alternar = (valor) => {
+    setBorrador((prev) => {
+      const base = prev.length === 0 ? (opciones || []).map((o) => o.valor) : prev;
+      return base.includes(valor) ? base.filter((v) => v !== valor) : [...base, valor];
+    });
+  };
+  const aplicar = () => {
+    const lista = [...new Set(borrador)];
+    onAplicar(lista.length === (opciones || []).length ? [] : lista);
+    setAbierto(false);
+  };
+  const limpiar = () => {
+    setBorrador([]);
+    onAplicar([]);
+    setAbierto(false);
+  };
+
+  return (
+    <>
+      <button
+        ref={botonRef}
+        type="button"
+        onClick={() => (abierto ? setAbierto(false) : abrir())}
+        title={`Filtrar ${titulo}`}
+        aria-label={`Filtrar ${titulo}`}
+        aria-pressed={activo}
+        className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded transition-colors ${
+          activo
+            ? 'bg-white text-emerald-700 shadow-sm'
+            : 'text-emerald-100 hover:bg-emerald-600 hover:text-white'
+        }`}
+      >
+        <Filter size={10} strokeWidth={3} />
+      </button>
+      {abierto
+        ? createPortal(
+            <div
+              ref={panelRef}
+              role="dialog"
+              aria-label={`Filtro de ${titulo}`}
+              className="fixed z-[80] w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
+              style={{ top: pos.top, left: pos.left }}
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+                <span className="text-[11px] font-bold text-slate-700">Filtrar: {titulo}</span>
+                <button
+                  type="button"
+                  onClick={() => setAbierto(false)}
+                  className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  aria-label="Cerrar filtro"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+              <div className="p-2">
+                <input
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder="Buscar…"
+                  className="w-full rounded-md border border-slate-200 px-2 py-1 text-[11px] text-slate-700 outline-none focus:ring-2 focus:ring-emerald-200"
+                />
+              </div>
+              <label className="flex cursor-pointer items-center gap-2 border-b border-slate-100 px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">
+                <input
+                  type="checkbox"
+                  checked={todos}
+                  onChange={() => setBorrador([])}
+                  className="h-3 w-3 accent-emerald-600"
+                />
+                (Todos)
+              </label>
+              <div className="max-h-56 overflow-y-auto py-1">
+                {visibles.length === 0 ? (
+                  <p className="px-3 py-2 text-[11px] text-slate-400">Sin coincidencias.</p>
+                ) : (
+                  visibles.map((o) => (
+                    <label
+                      key={o.valor}
+                      className="flex cursor-pointer items-center gap-2 px-3 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={todos || borrador.includes(o.valor)}
+                        onChange={() => alternar(o.valor)}
+                        className="h-3 w-3 accent-emerald-600"
+                      />
+                      <span className="truncate">{o.etiqueta}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-2 py-2">
+                <button
+                  type="button"
+                  onClick={limpiar}
+                  className="rounded-md px-2 py-1 text-[11px] font-semibold text-slate-500 hover:bg-slate-100"
+                >
+                  Limpiar
+                </button>
+                <button
+                  type="button"
+                  onClick={aplicar}
+                  className="rounded-md bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700"
+                >
+                  Aplicar
+                </button>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
-  if (!columnas.length) {
-    return <p className="p-8 text-center text-xs text-slate-400">Sin permanencias para mostrar en la tabla dinámica.</p>;
-  }
+}
+
+/** Tabla dinámica estilo Excel: Meses → Fecha → Area Cod → Placa, con Total general. */
+const FILTROS_VACIOS = { mes: [], fecha: [], area: [], placa: [], columna: [] };
+
+function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
+  const [filtros, setFiltros] = useState(FILTROS_VACIOS);
+
+  // La columna del filtro depende del modo (división o geocerca): al cambiarlo
+  // se descarta la selección de columnas para no dejar el reporte vacío.
+  useEffect(() => {
+    setFiltros((prev) => (prev.columna.length ? { ...prev, columna: [] } : prev));
+  }, [columnasMode]);
+
+  const columnaDe = (f) =>
+    columnasMode === 'division'
+      ? normalizarDivision(f?.division, f?.geocerca) || 'Sin división'
+      : String(f?.geocerca || f?.nombre || '').trim() || 'Sin geocerca';
+
+  // Opciones de los filtros: se calculan sobre TODAS las permanencias para que
+  // nunca desaparezcan valores por haber aplicado otro filtro antes.
+  const opciones = useMemo(() => {
+    const mes = new Set();
+    const fecha = new Set();
+    const area = new Set();
+    const placa = new Set();
+    const columna = new Set();
+    for (const f of permanencias || []) {
+      const dia = String(f?.dia || '').trim().slice(0, 10);
+      if (dia) {
+        mes.add(dia.slice(0, 7));
+        fecha.add(dia);
+      }
+      const a = codigoArea(f?.unidad, f?.placa);
+      if (a) area.add(a);
+      const p = String(f?.placa || '').trim();
+      if (p) placa.add(p);
+      const c = columnaDe(f);
+      if (c) columna.add(c);
+    }
+    const ordenar = (conjunto) => [...conjunto].sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+    return {
+      mes: ordenar(mes),
+      fecha: ordenar(fecha),
+      area: ordenar(area),
+      placa: ordenar(placa),
+      columna: ordenar(columna),
+    };
+  }, [permanencias, columnasMode]);
+
+  // Se filtra antes de construir la tabla para que los totales, los totales
+  // por día/mes y el Total general cuadren con lo que se ve.
+  const permanenciasFiltradas = useMemo(() => {
+    const pasa = (lista, valor) => !lista.length || lista.includes(valor);
+    return (permanencias || []).filter((f) => {
+      const dia = String(f?.dia || '').trim().slice(0, 10);
+      return (
+        pasa(filtros.mes, dia.slice(0, 7)) &&
+        pasa(filtros.fecha, dia) &&
+        pasa(filtros.area, codigoArea(f?.unidad, f?.placa) || '') &&
+        pasa(filtros.placa, String(f?.placa || '').trim()) &&
+        pasa(filtros.columna, columnaDe(f))
+      );
+    });
+  }, [permanencias, filtros, columnasMode]);
+
+  const { columnas, grupos, totalesGenerales, total } = useMemo(
+    () => construirTablaDinamica(permanenciasFiltradas, columnasMode, valor),
+    [permanenciasFiltradas, columnasMode, valor],
+  );
+
+  const opcionesPopover = useMemo(
+    () => ({
+      mes: opciones.mes.map((v) => ({ valor: v, etiqueta: etiquetaMesClave(v) })),
+      fecha: opciones.fecha.map((v) => ({ valor: v, etiqueta: etiquetaFechaClave(v) })),
+      area: opciones.area.map((v) => ({ valor: v, etiqueta: v })),
+      placa: opciones.placa.map((v) => ({ valor: v, etiqueta: v })),
+      columna: opciones.columna.map((v) => ({ valor: v, etiqueta: v })),
+    }),
+    [opciones],
+  );
+
+  const aplicarFiltro = (campo) => (lista) => setFiltros((prev) => ({ ...prev, [campo]: lista }));
+  const limpiarTodo = () => setFiltros(FILTROS_VACIOS);
+  const hayFiltros = Object.values(filtros).some((lista) => lista.length > 0);
+
   const etiquetaValor = VALORES_PIVOT.find((v) => v.id === valor)?.label || 'Duración';
   const celda = (valorCelda) => (valorCelda ? <span className="tabular-nums">{numero(valorCelda, 2)}</span> : null);
   const sticky = (i, z = 10) => ({
@@ -419,6 +686,28 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
     maxWidth: `${LABEL_COLS[i].width}px`,
   });
   const totalColumnas = LABEL_COLS.length + columnas.length + 1;
+  const tituloColumnas = columnasMode === 'division' ? 'División' : 'Geocerca';
+
+  if (!columnas.length) {
+    return (
+      <div className="space-y-3 p-8 text-center">
+        <p className="text-xs text-slate-400">
+          {hayFiltros
+            ? 'Sin resultados con los filtros aplicados.'
+            : 'Sin permanencias para mostrar en la tabla dinámica.'}
+        </p>
+        {hayFiltros ? (
+          <button
+            type="button"
+            onClick={limpiarTodo}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
+          >
+            <X size={12} /> Limpiar filtros
+          </button>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-x-auto">
@@ -426,10 +715,30 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
         <thead>
           <tr className="bg-emerald-800 text-white">
             <th colSpan={LABEL_COLS.length} className="px-2 py-2 text-left font-bold">
-              Suma de {etiquetaValor} (h)
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate">Suma de {etiquetaValor} (h)</span>
+                {hayFiltros ? (
+                  <button
+                    type="button"
+                    onClick={limpiarTodo}
+                    title="Quitar todos los filtros"
+                    className="inline-flex shrink-0 items-center gap-1 rounded bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold text-white hover:bg-white/25"
+                  >
+                    <X size={10} /> Limpiar filtros
+                  </button>
+                ) : null}
+              </div>
             </th>
-            <th colSpan={columnas.length + 1} className="px-3 py-2 text-left font-bold border-l border-emerald-700">
-              Geocerca
+            <th colSpan={columnas.length + 1} className="border-l border-emerald-700 px-2 py-2 text-left font-bold">
+              <div className="flex items-center gap-1.5">
+                <span className="truncate">{tituloColumnas}</span>
+                <PopoverFiltro
+                  titulo={tituloColumnas}
+                  opciones={opcionesPopover.columna}
+                  seleccion={filtros.columna}
+                  onAplicar={aplicarFiltro('columna')}
+                />
+              </div>
             </th>
           </tr>
           <tr className="bg-emerald-700 text-white">
@@ -437,9 +746,17 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
               <th
                 key={col.label}
                 style={sticky(i, 30)}
-                className="bg-emerald-700 px-2 py-2.5 text-left font-bold whitespace-nowrap border-r border-emerald-600"
+                className="overflow-hidden border-r border-emerald-600 bg-emerald-700 px-1.5 py-2.5 text-left font-bold whitespace-nowrap"
               >
-                {col.label}
+                <div className="flex items-center justify-between gap-1">
+                  <span className="truncate">{col.label}</span>
+                  <PopoverFiltro
+                    titulo={col.label}
+                    opciones={opcionesPopover[col.campo]}
+                    seleccion={filtros[col.campo]}
+                    onAplicar={aplicarFiltro(col.campo)}
+                  />
+                </div>
               </th>
             ))}
             {columnas.map((col) => (
@@ -520,9 +837,10 @@ function TablaDinamicaLotes({ permanencias, columnasMode, valor }) {
           </tr>
         </tfoot>
       </table>
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-[10px] text-slate-400 border-t border-slate-50">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-50 px-4 py-2.5 text-[10px] text-slate-400">
         <span>
-          {permanencias.length} visitas · {columnas.length} columnas · columnas por {columnasMode === 'division' ? 'división' : 'geocerca'}.
+          {hayFiltros ? `${permanenciasFiltradas.length} de ${permanencias.length}` : permanencias.length} visitas ·{' '}
+          {columnas.length} columnas · columnas por {columnasMode === 'division' ? 'división' : 'geocerca'}.
         </span>
         <span className="font-semibold text-emerald-700">Total general: {numero(total, 2)} h · {etiquetaValor}</span>
       </div>
