@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { prepararRecorrido } from '../agentes/hunter/parse.mjs';
 import { generarReportesCsv } from '../agentes/hunter/reportes.mjs';
+import { prepararRecorrido as prepararWeb } from '../agentes/hunter/parse-core.mjs';
 
 const punto = { id: '1', fecha: '2026-11-20', hora: '18:41:39', velocidad: '9', ignicion: '1',
   latitud: '-6.773954', longitud: '-79.774499', nombre_vehiculo: 'CASE 2', name_tipo_dato_gps: 'Reporte Por Tiempo Móvil Encendido' };
@@ -45,4 +46,12 @@ test('Hunter: el reporte CSV neutraliza fórmulas sin alterar coordenadas', () =
 });
 test('Hunter: rechaza un rango con fecha inválida', () => {
   assert.throws(() => prepararRecorrido({ ...captura([punto]), desde: 'invalido' }), /rango válido/);
+});
+test('Hunter: web y agente coinciden salvo la clave de persistencia', () => {
+  const c = captura([punto]);
+  const web = prepararWeb(c);
+  const agente = prepararRecorrido(c);
+  assert.equal(web.puntos[0].clave_fuente, null);
+  web.puntos[0].clave_fuente = agente.puntos[0].clave_fuente;
+  assert.deepEqual(web, agente);
 });

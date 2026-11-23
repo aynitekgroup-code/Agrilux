@@ -22,6 +22,11 @@ incluyendo paradas agrupadas. El parser separa estas últimas, valida coordenada
 fecha Perú, velocidad e ID y usa una clave independiente `hunter:`. La
 ignición desconocida permanece como `null`, nunca se inventa apagado.
 
+En AgroTrack → Reportes, la sección Hunter permite abrir ese JSON y descargar
+los tres CSV. La captura es un formato de diagnóstico, no un archivo exportado
+estándar de Hunter. Se procesa solo en el navegador y desaparece al salir;
+no hay almacenamiento compartido ni sincronización automática.
+
 Antes de ingerir en Agrilux falta validar la fuente oficial/autorizada, cómo
 obtener posiciones completas (incluidas paradas), identidad de activos que
 no tienen placa, límites, y una separación de fuente en base de datos y RPC.

@@ -16,6 +16,7 @@ import FleetKpis from '../../components/gestion/fleet/FleetKpis';
 import FleetMap from '../../components/gestion/fleet/FleetMap';
 import VehicleList from '../../components/gestion/fleet/VehicleList';
 import FleetReports from '../../components/gestion/fleet/FleetReports';
+import HunterReports from '../../components/gestion/fleet/HunterReports';
 import FleetEventsSummary from '../../components/gestion/fleet/FleetEventsSummary';
 import FleetUnitStatus from '../../components/gestion/fleet/FleetUnitStatus';
 import FleetSinReportar from '../../components/gestion/fleet/FleetSinReportar';
@@ -478,6 +479,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'geocercas' }) {
             title="Reportes de flota"
             description="Los reportes pedidos por el Ing. Carlos Perez: Actividad por día/mes (recorrido, horas prendido, hora de viaje y ralentí), Eventos resumidos Stop/Idle/Drive, Status de maquinaria (estado de unidades con su geocerca actual), reportes de geocercas (con detalle de visitas y respaldo del rango) y Unidades sin reportar (Zonar: Unidades - Sin Reportar), todos con datos reales y exportables a Excel."
           />
+          <HunterReports />
           <FleetReports
             empresaId={empresa_activa_id}
             empresaNombre={empresaActiva?.nombre || ''}
