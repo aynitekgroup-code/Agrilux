@@ -204,6 +204,9 @@ async function ejecutarRpc(nombre, params, contexto) {
   } finally {
     clearTimeout(reloj);
   }
+  if (error && controller.signal.aborted) {
+    error = { message: `La consulta excedió ${TIMEOUT_RPC_MS / 1000} s; reintenta o reduce el rango.` };
+  }
   if (error) throw new Error(mensajeDeError(error, contexto));
   return data || [];
 }

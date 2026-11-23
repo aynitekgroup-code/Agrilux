@@ -9,6 +9,7 @@ import {
 } from '../../../lib/agrotrackEventosResumidos';
 import { useRango, ControlesRango, CuerpoEstado, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, RelojEnVivo } from './reportesComunes';
 import { completarUnidadesReporte } from '../../../lib/agrotrackReporteFilas.js';
+import { codigoArea } from '../../../lib/agrotrackVisitasDia';
 
 /**
  * Reporte 15 de Zonar "Eventos resumidos" (FASE 3.6, pedido por el Ing.
@@ -279,7 +280,8 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
               <table className="w-full text-xs text-slate-700">
                 <thead>
                   <tr className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400">
-                    <th className="px-3 py-2.5 font-bold text-left">Unidad</th>
+                    <th className="px-3 py-2.5 font-bold text-left">Placa</th>
+                    <th className="px-3 py-2.5 font-bold text-left">Área</th>
                     {COLUMNAS.map((col) => (
                       <th key={col.id} className="px-3 py-2.5 font-bold text-right">
                         {col.id === 'stop' ? (
@@ -298,11 +300,9 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
                     <tr key={fila.placa} className="border-b border-slate-50 hover:bg-slate-50/60">
                       <td className="px-3 py-2">
                         <span className="font-bold text-slate-800">{fila.placa}</span>
-                        {fila.unidad && fila.unidad !== fila.placa ? (
-                          <span className="block text-[10px] text-slate-400 truncate max-w-[240px]">{fila.unidad}</span>
-                        ) : null}
                         {fila.sin_datos_rango ? <span className="block text-[10px] text-amber-700">Sin datos en el rango</span> : null}
                       </td>
+                      <td className="px-3 py-2 text-slate-600">{codigoArea(fila.unidad, fila.placa) || '—'}</td>
                       <CeldaTiempo segundos={fila.stop} pct={fila.pct_stop} clase="text-slate-700" />
                       <CeldaTiempo segundos={fila.idle} pct={fila.pct_idle} clase="text-amber-600" />
                       <CeldaTiempo segundos={fila.drive} pct={fila.pct_drive} clase="text-emerald-700" />
@@ -312,7 +312,7 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-50 text-slate-700 font-bold">
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-2.5" colSpan={2}>
                       Totales de {filasCalculadas.length} unidad{filasCalculadas.length === 1 ? '' : 'es'}
                     </td>
                     <td className="px-3 py-2.5 text-right">

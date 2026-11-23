@@ -2199,12 +2199,10 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const contenidoPanelFlota = (() => {
     const seccion = SECCIONES_FLOTA.find((s) => s.id === seccionFlota) || SECCIONES_FLOTA[0];
     const IconoSeccion = seccion.Icon;
-    const listo = ['localizador', 'coordenadas', 'historicas', 'zonas', 'configuracion', 'geocercas'].includes(seccionFlota);
+    const listo = ['localizador', 'historicas', 'zonas', 'configuracion', 'geocercas'].includes(seccionFlota);
     const cuerpo = seccionFlota === 'localizador'
       ? localizadorNodo
-      : seccionFlota === 'coordenadas'
-        ? coordenadasNodo
-        : seccionFlota === 'historicas'
+      : seccionFlota === 'historicas'
           ? ubicacionesHistoricasNodo
           : seccionFlota === 'geocercas'
             ? buscadorGeocercasNodo
@@ -2233,7 +2231,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     );
   })();
 
-  const nodoRecorrido = rutaPlan ? (
+  const nodoRecorrido = rutaPlan && mostrandoContenidoFlota && seccionFlota === 'historicas' ? (
     <TablaRecorrido
       puntos={rutaValidos}
       placa={selectedId}
@@ -2686,7 +2684,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                 zIndexOffset={selectedId === vehicle.id ? 1000 : 0}
                 eventHandlers={onSelect ? { click: () => onSelect(vehicle.id) } : undefined}
               >
-                <Tooltip permanent direction="top" opacity={1} className="fleet-unit-tooltip">
+                <Tooltip direction="top" opacity={1} className="fleet-unit-tooltip">
                   <div className="text-[11px] leading-snug space-y-0.5">
                     <p className="font-bold text-slate-900">{vehicle.placa}</p>
                     <p className="text-slate-600">{vehicle.descripcion || vehicle.modelo || '—'}</p>
@@ -2822,7 +2820,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </div>
       ) : null}
 
-      <div id="coordenadas-unidades" className="scroll-mt-4 px-4 sm:px-5 pb-3">{coordenadasNodo}</div>
+      {(mostrandoContenidoFlota && seccionFlota === 'localizador') ? <div id="coordenadas-unidades" className="scroll-mt-4 px-4 sm:px-5 pb-3">{coordenadasNodo}</div> : null}
 
       {/* Configuración: debajo del mapa, arriba de la consola Principal. Solo al elegirla en el menú. */}
       {consolaVisible && mostrarConfiguracion ? (

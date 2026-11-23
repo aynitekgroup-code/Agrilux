@@ -73,7 +73,7 @@ const ESPERA_REINTENTO_MS = 600;
 
 function esTimeoutDeStatement(error) {
   const texto = String(error?.message || error || '');
-  return /57014|statement[_ ]timeout|tardó más de 8 s|canceling statement/i.test(texto);
+  return /57014|statement[_ ]timeout|tardó más de 8 s|canceling statement|consulta excedió|aborterror/i.test(texto);
 }
 
 async function ejecutarConReintento(nombre, params, contexto, ejecutar) {

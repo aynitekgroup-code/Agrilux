@@ -13,6 +13,7 @@ import {
 import { generarResumenFlota } from '../../../lib/agrotrackInsights';
 import { rangoRapido, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, RelojEnVivo } from './reportesComunes';
 import { completarUnidadesReporte } from '../../../lib/agrotrackReporteFilas.js';
+import { codigoArea } from '../../../lib/agrotrackVisitasDia';
 
 /**
  * Reporte de actividad de flota (FASE 3).
@@ -21,8 +22,9 @@ import { completarUnidadesReporte } from '../../../lib/agrotrackReporteFilas.js'
  * 103 mil filas descargadas al navegador.
  */
 const COLUMNAS = [
+  { id: 'placa', label: 'Placa', numerica: false },
+  { id: 'area', label: 'Área', numerica: false },
   { id: 'periodo', label: 'Período', numerica: false },
-  { id: 'unidad', label: 'Unidad', numerica: false },
   { id: 'km_recorridos', label: 'Recorrido (km)', numerica: true },
   { id: 'prendido_segundos', label: 'Horas prendido', numerica: true },
   { id: 'viaje_segundos', label: 'Hora de viaje', numerica: true },
@@ -191,9 +193,10 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
     const col = COLUMNAS.find((c) => c.id === campo);
     const signo = dir === 'asc' ? 1 : -1;
     return [...filasConSinTelemetria].sort((a, b) => {
-      if (campo === 'placa' || campo === 'unidad' || campo === 'periodo') {
-        const av = String(a[campo] ?? a.unidad ?? '');
-        const bv = String(b[campo] ?? b.unidad ?? '');
+      if (campo === 'placa' || campo === 'area' || campo === 'unidad' || campo === 'periodo') {
+        const valor = (f) => campo === 'area' ? codigoArea(f.unidad, f.placa) : f[campo];
+        const av = String(valor(a) ?? '');
+        const bv = String(valor(b) ?? '');
         return av.localeCompare(bv, 'es') * signo;
       }
       if (col?.numerica) return (Number(a[campo] || 0) - Number(b[campo] || 0)) * signo;
@@ -482,18 +485,16 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
               <tbody>
                 {filasTabla.map((fila, i) => (
                   <tr key={`${fila.placa}-${fila.periodo || 'total'}-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
+                    <td className="px-3 py-2">
+                      <span className="font-bold text-slate-800">{fila.placa}</span>
+                      {fila.sin_datos_rango ? <span className="block text-[10px] text-amber-700">Sin datos en el rango · horas no disponibles</span> : null}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">{codigoArea(fila.unidad, fila.placa) || '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-600">
                       {etiquetaPeriodoReporte(fila, 'libre')}
                       {modoReporte !== 'tiempo-real' && horarioPeriodo(fila.periodo) ? (
                         <span className="block text-[10px] font-normal text-slate-400">{horarioPeriodo(fila.periodo)}</span>
                       ) : null}
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className="font-bold text-slate-800">{fila.placa}</span>
-                      {fila.unidad && fila.unidad !== fila.placa ? (
-                        <span className="block text-[10px] text-slate-400 truncate max-w-[240px]">{fila.unidad}</span>
-                      ) : null}
-                      {fila.sin_datos_rango ? <span className="block text-[10px] text-amber-700">Sin datos en el rango · horas no disponibles</span> : null}
                     </td>
                     <td className="px-3 py-2 text-right font-semibold">{numero(fila.km_recorridos, 1)}</td>
                     <td className="px-3 py-2 text-right font-bold text-slate-800">{fila.sin_datos_rango ? '—' : formatearDuracion(fila.prendido_segundos)}</td>
@@ -512,7 +513,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
               </tbody>
               <tfoot>
                 <tr className="bg-slate-50 text-slate-700 font-bold">
-                  <td className="px-3 py-2.5" colSpan={2}>
+                  <td className="px-3 py-2.5" colSpan={3}>
                     Totales de {filasConSinTelemetria.length} fila{filasConSinTelemetria.length === 1 ? '' : 's'}
                   </td>
                   <td className="px-3 py-2.5 text-right">{numero(totales.km, 1)}</td>

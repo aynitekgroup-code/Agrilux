@@ -28,8 +28,8 @@ import { calcularSinReportar } from '../../../lib/agrotrackReporteFilas.js';
 const VENTANAS_RAPIDO = [4, 8, 16, 24, 48];
 
 const COLUMNAS = [
-  { label: 'Área / Unidad', clase: 'text-left' },
   { label: 'Placa', clase: 'text-left' },
+  { label: 'Área', clase: 'text-left' },
   { label: 'Últ. dirección', clase: 'text-left' },
   { label: 'Últ. evento', clase: 'text-left' },
   { label: 'Últ. fecha GPRS', clase: 'text-left' },
@@ -403,11 +403,11 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
                 <tbody>
                   {filasTabla.map((fila, i) => (
                     <tr key={fila.placa || `sin-placa-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
-                      <td className="px-3 py-2 text-slate-600">
-                        {codigoArea(fila.unidad, fila.placa) || (fila.descripcion && fila.descripcion !== fila.placa ? fila.descripcion : '—')}
-                      </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span className="font-bold text-slate-800">{fila.placa || '—'}</span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">
+                        {codigoArea(fila.unidad, fila.placa) || (fila.descripcion && fila.descripcion !== fila.placa ? fila.descripcion : '—')}
                       </td>
                       <td className="px-3 py-2 text-slate-500 max-w-[260px]">
                         <span className="block truncate" title={fila.direccion || ''}>
@@ -473,19 +473,6 @@ export default function FleetSinReportar({ empresaId, fuente = 'real' }) {
         ) : null}
       </CuerpoEstado>
 
-      <p className="px-4 py-2.5 text-[10px] text-slate-400 border-t border-slate-50 leading-relaxed">
-        {fuente === 'real' ? (
-          <span className="inline-flex items-center gap-1">
-            <Database size={10} /> Última posición conocida de cada placa con agrotrack_estado_unidades_flota (p_desde = null, p_hasta = null).
-          </span>
-        ) : (
-          'Aún no hay datos reales para esta empresa.'
-        )}
-        <span className="block mt-0.5">
-          Sin reportar = última fecha GPRS anterior a (ahora − {ventana} h) · orden por mayor antigüedad primero ·
-          el tiempo se calcula contra el momento de la carga · hora de Perú.
-        </span>
-      </p>
       </div>
     </div>
   );

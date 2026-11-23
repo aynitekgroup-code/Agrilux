@@ -55,7 +55,6 @@ function normalizarPlacaBusqueda(valor) {
 
 export const SECCIONES = [
   { id: 'localizador', label: 'Localizador de Unidades', group: 'Flota', Icon: Search },
-  { id: 'coordenadas', label: 'Coordenadas de Unidades', group: 'Flota', Icon: Table },
   { id: 'historicas', label: 'Ubicaciones Históricas', group: 'Flota', Icon: History },
   { id: 'direcciones', label: 'Localizador de Direcciones', group: 'Flota', Icon: MapPin },
   { id: 'mensajeria', label: 'Servicio de Mensajería', group: 'Comunicación', Icon: Mail },

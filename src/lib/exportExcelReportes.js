@@ -14,6 +14,7 @@
  */
 import * as XLSX from 'xlsx';
 import { formatearFechaLarga } from './agrotrackFlota';
+import { codigoArea } from './agrotrackVisitasDia';
 
 /** Geocerca asignada de la unidad: la actual (RPC, PostGIS) o la última
  *  conocida si está fuera de todas. */
@@ -236,8 +237,8 @@ export function exportarSinReportarExcel(filas, { ventanaHoras = 24, generado = 
   const wb = XLSX.utils.book_new();
 
   const datos = (filas || []).map((f) => ({
-    'Unidad': f.unidad || f.placa || '—',
     'Placa': f.placa || '—',
+    'Área': codigoArea(f.unidad || f.descripcion, f.placa) || '—',
     'Últ. dirección': f.direccion || '—',
     'Últ. evento': f.ultimo_evento || '—',
     'Últ. fecha GPRS': f.ultima_fecha ? formatearFechaLarga(f.ultima_fecha) : 'sin reporte',

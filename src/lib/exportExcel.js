@@ -7,6 +7,7 @@ import { etiquetaPeriodoReporte, formatearFechaHora, formatearFechaLarga, clasif
 import { calcularEventosResumidos, totalesEventosResumidos, formatearHMS } from './agrotrackEventosResumidos';
 import { STATUS_META } from '../components/gestion/fleet/fleetTokens';
 import { normalizarDivision } from './agrotrackDivisiones';
+import { codigoArea } from './agrotrackVisitasDia';
 
 export function exportarParcelasExcel(parcelas, registros) {
   const wb = XLSX.utils.book_new();
@@ -89,7 +90,7 @@ export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', p
     return {
       'Período': etiquetaPeriodoReporte(f, modo),
       'Placa': f.placa,
-      'Unidad': f.unidad || f.placa,
+      'Área': codigoArea(f.unidad, f.placa) || '',
       'Recorrido (km)': Number(f.km_recorridos || 0),
       // "Encendido" se quitó (7:47 a. m.): duplicaba "Horas prendido"
       // (encendido = viaje + ralentí, criterio único del reporte).
@@ -112,7 +113,7 @@ export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', p
   datos.push({
     'Período': 'TOTALES',
     'Placa': '',
-    'Unidad': `${filas.length} fila(s)`,
+    'Área': `${filas.length} fila(s)`,
     'Recorrido (km)': Number(suma('km_recorridos').toFixed(2)),
     'Horas prendido (h)': hayMedidos ? horas(suma('viaje_segundos') + suma('ralenti_segundos')) : '',
     'Hora de viaje (h)': hayMedidos ? horas(suma('viaje_segundos')) : '',
@@ -283,7 +284,7 @@ export function exportarEventosResumidosExcel(filas, { totalSegundos = null, ran
   const calculadas = yaCalculadas ? filas : calcularEventosResumidos(filas, totalSegundos);
   const datos = calculadas.map((f) => ({
     'Placa': f.placa,
-    'Unidad': f.unidad,
+    'Área': codigoArea(f.unidad, f.placa) || '',
     'Total Stop': f.total == null ? '' : formatearHMS(f.stop),
     'Stop %': f.pct_stop,
     'Total Idle': f.total == null ? '' : formatearHMS(f.idle),
@@ -298,7 +299,7 @@ export function exportarEventosResumidosExcel(filas, { totalSegundos = null, ran
   const totales = totalesEventosResumidos(calculadas);
   datos.push({
     'Placa': 'TOTALES',
-    'Unidad': `${calculadas.length} unidad(es)`,
+    'Área': `${calculadas.length} unidad(es)`,
     'Total Stop': totales.total > 0 ? formatearHMS(totales.stop) : '',
     'Stop %': totales.pct_stop,
     'Total Idle': totales.total > 0 ? formatearHMS(totales.idle) : '',
@@ -350,7 +351,7 @@ export function exportarEstadoUnidadesExcel(filas, { rangoTexto = '', periodo = 
     const estado = clasificarEstado(f, periodo?.hasta);
     return {
       'Placa': f.placa,
-      'Unidad': f.unidad || f.placa,
+      'Área': codigoArea(f.unidad || f.descripcion, f.placa) || '',
       'Últ. fecha': f.ultima_fecha ? formatearFechaLarga(f.ultima_fecha) : '—',
       'Estado': f.sin_telemetria ? 'Sin telemetría' : STATUS_META[estado]?.label || estado,
       'Dirección': f.direccion || '—',

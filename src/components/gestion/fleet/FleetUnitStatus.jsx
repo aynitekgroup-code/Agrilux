@@ -517,21 +517,6 @@ export default function FleetUnitStatus({ empresaId, periodo = null, fuente = 'r
         ) : null}
       </CuerpoEstado>
 
-      <p className="px-4 py-2.5 text-[10px] text-slate-400 border-t border-slate-50 leading-relaxed">
-        {fuente === 'real' ? (
-          <span className="inline-flex items-center gap-1">
-            <Database size={10} />
-            {tiempoReal
-              ? ' Estado en vivo: public.agrotrack_estado_vivo_flota (última posición enviada por Zonar) + geocercas PostGIS.'
-              : ' Cálculo en SQL con PostGIS sobre public.agrotrack_posiciones + public.agrotrack_geocercas_reportes (agrotrack_estado_unidades_flota).'}
-          </span>
-        ) : (
-          'Aún no hay datos reales para esta empresa.'
-        )}
-        <span className="block mt-0.5">
-          Antes: una sola columna con placa + área y filas repetidas. Ahora: Placa y Área separadas, una fila por placa y lectura de Zonar cada 5 minutos. Última posición del rango · geocerca = polígono (ST_Contains) que la contiene; si está fuera, se muestra la última geocerca de campo en la que estuvo (evento pt_referencia) · «Fuera de geocercas» solo si no hay ninguna · estado contra {tiempoReal ? 'la hora actual' : 'max(fecha) del periodo cargado'} · hora de Perú.
-        </span>
-      </p>
       </div>
     </div>
   );
