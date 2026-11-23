@@ -315,6 +315,43 @@ export function rangoLibreLima(desdeInput, hastaInput) {
   return { desde, hasta, texto };
 }
 
+/**
+ * Rango "hoy" en hora de Perú: del 00:00 a la hora actual. Lo usa el modo
+ * Tiempo real del reporte de actividad: allí no se elige rango, se lee el
+ * día que Zonar está alimentando en este momento.
+ * @returns {{desde: string|null, hasta: string|null, texto: string, fecha: string, hora: string}}
+ */
+export function rangoHoyLima(ahora = new Date()) {
+  const value = ahora instanceof Date ? ahora : fecha(ahora);
+  if (!value) return { desde: null, hasta: null, texto: '', fecha: '', hora: '' };
+  let fechaDia = '';
+  let hora = '';
+  try {
+    const partes = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+      timeZone: ZONA_PERU,
+    }).formatToParts(value);
+    const get = (tipo) => partes.find((parte) => parte.type === tipo)?.value || '';
+    fechaDia = `${get('year')}-${get('month')}-${get('day')}`;
+    hora = `${get('hour')}:${get('minute')}`;
+  } catch {
+    return { desde: null, hasta: null, texto: '', fecha: '', hora: '' };
+  }
+  const { desde, hasta } = rangoLibreLima(`${fechaDia}T00:00`, `${fechaDia}T${hora}`);
+  return {
+    desde,
+    hasta,
+    texto: `Hoy ${fechaDia} · 00:00 a ${hora} (hora de Perú)`,
+    fecha: fechaDia,
+    hora,
+  };
+}
+
 /** Último día (en hora de Perú) de un ISO, para precargar el selector de recorrido. */
 export function ultimoDiaLima(iso) {
   const value = fecha(iso);

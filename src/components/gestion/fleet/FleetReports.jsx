@@ -1,17 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, AlertTriangle, RotateCw, Database, FileChartColumn, ArrowUpDown, CalendarClock, FileSpreadsheet, Sparkles, Radio, History } from 'lucide-react';
+import { Loader2, AlertTriangle, RotateCw, Database, FileChartColumn, ArrowUpDown, CalendarClock, FileSpreadsheet, Sparkles, Radio } from 'lucide-react';
 import {
   obtenerActividadFlota,
   rangoLibreLima,
+  rangoHoyLima,
   formatearDuracion,
-  formatearRango,
   rangoFueraDelPeriodo,
   etiquetaPeriodoReporte,
   ultimoDiaLima,
   LIMITE_FILAS_ACTIVIDAD,
 } from '../../../lib/agrotrackFlota';
 import { generarResumenFlota } from '../../../lib/agrotrackInsights';
-import { rangoRapido, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca } from './reportesComunes';
+import { rangoRapido, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, RelojEnVivo } from './reportesComunes';
 import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
 
 /**
@@ -54,6 +54,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
   const [resumenError, setResumenError] = useState(null);
   const [orden, setOrden] = useState({ campo: 'unidad', dir: 'asc' });
   const [modoReporte, setModoReporte] = useState('historico');
+  const [ahora, setAhora] = useState(() => new Date());
 
   // Precarga con el último día (o mes) que trae datos reales.
   useEffect(() => {
@@ -63,6 +64,16 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
     setDesdeHora((prev) => prev || `${ultimo}T00:00`);
     setHastaHora((prev) => prev || `${ultimo}T23:59`);
   }, [periodo?.hasta]);
+
+  // Tiempo real: el rango no se elige, es el día en curso. `ahora` avanza
+  // cada minuto, así que la consulta y el refresco de la tabla se rearman
+  // solos con la ventana 00:00 → hora actual (igual que Status de maquinaria).
+  useEffect(() => {
+    if (modoReporte !== 'tiempo-real') return undefined;
+    setAhora(new Date());
+    const reloj = setInterval(() => setAhora(new Date()), 60 * 1000);
+    return () => clearInterval(reloj);
+  }, [modoReporte]);
 
   const {
     mostrar,
@@ -77,14 +88,47 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
   } = useFiltroUnidadGrupo({ vehicles, empresaId });
   const placa = mostrar === 'unidades' ? opcionFiltro : '';
 
-  const consulta = useMemo(() => rangoLibreLima(desdeHora, hastaHora), [desdeHora, hastaHora]);
-
-  const avisoFueraDePeriodo = useMemo(
-    () => rangoFueraDelPeriodo(consulta, periodo),
-    [consulta, periodo],
+  const consulta = useMemo(
+    () => (modoReporte === 'tiempo-real' ? rangoHoyLima(ahora) : rangoLibreLima(desdeHora, hastaHora)),
+    [modoReporte, ahora, desdeHora, hastaHora],
   );
 
-  const pendienteDeFecha = !desdeHora || !hastaHora;
+  const avisoFueraDePeriodo = useMemo(
+    () => (modoReporte === 'tiempo-real' ? null : rangoFueraDelPeriodo(consulta, periodo)),
+    [consulta, periodo, modoReporte],
+  );
+
+  // En tiempo real siempre hay día que leer (hoy); en histórico se espera
+  // a que el usuario elija desde y hasta.
+  const pendienteDeFecha = modoReporte === 'tiempo-real' ? !consulta.desde : (!desdeHora || !hastaHora);
+
+  // "23/11/2026" para el contador del día que se está leyendo.
+  const fechaLecturaTexto = useMemo(() => {
+    const [anio, mes, dia] = String(consulta?.fecha || '').split('-');
+    return dia && mes && anio ? `${dia}/${mes}/${anio}` : 'Hoy';
+  }, [consulta?.fecha]);
+
+  const textoActualizacion = modoReporte === 'tiempo-real'
+    ? 'se actualiza solo cada minuto'
+    : 'se actualiza al cambiar el rango o con Actualizar';
+
+  // Horario efectivo de cada fila del período: el rango elegido se recorta
+  // al día de la fila (el primer día arranca en "desde" y el último termina
+  // en "hasta"; los días intermedios van completos).
+  const horarioPeriodo = useMemo(() => {
+    const desde = String(consulta?.desde || '');
+    const hasta = String(consulta?.hasta || '');
+    if (!desde || !hasta) return () => '';
+    const diaDesde = desde.slice(0, 10);
+    const diaHasta = hasta.slice(0, 10);
+    const horaDesde = desde.slice(11, 16);
+    const horaHasta = hasta.slice(11, 16);
+    return (periodo) => {
+      const p = String(periodo || '');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(p)) return '';
+      return `${p === diaDesde ? horaDesde : '00:00'} – ${p === diaHasta ? horaHasta : '23:59'}`;
+    };
+  }, [consulta?.desde, consulta?.hasta]);
 
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
@@ -244,11 +288,24 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
           <div className="min-w-0">
             <h2 className="text-base font-bold text-slate-900">Reporte de actividad</h2>
             <p className="text-xs text-slate-500">
-              Recorrido, horas prendido, hora de viaje y ralentí por unidad dentro del rango elegido.
+              {modoReporte === 'tiempo-real'
+                ? 'Recorrido, horas prendido, hora de viaje y ralentí por unidad del día en curso.'
+                : 'Recorrido, horas prendido, hora de viaje y ralentí por unidad dentro del rango elegido.'}
             </p>
             {generadoEn ? (
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Generado: {generadoEn.toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
+              <p className="text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                  title="Reloj de Perú. No indica la antigüedad del dato: para eso mira «leído hace instantes»"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
+                  Hora Perú <RelojEnVivo />
+                </span>
+                <span>
+                  Generado: {generadoEn.toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
+                  {modoReporte === 'tiempo-real' ? ` · Día en lectura: ${fechaLecturaTexto}` : ''}
+                  {' · '}{textoActualizacion}
+                </span>
               </p>
             ) : null}
           </div>
@@ -316,53 +373,57 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Atajos</p>
-            <div className="flex gap-1.5">
-              {[
-                { id: 'hoy', label: 'Hoy' },
-                { id: 'ayer', label: 'Ayer' },
-                { id: 'semana', label: 'Esta semana' },
-                { id: 'semana-anterior', label: 'Semana anterior' },
-              ].map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={() => {
-                    const r = rangoRapido(a.id);
-                    if (!r) return;
-                    setDesdeHora(r.desde);
-                    setHastaHora(r.hasta);
-                  }}
-                  className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 bg-white text-slate-600 hover:border-forest hover:text-forest transition-colors"
-                >
-                  {a.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          {modoReporte !== 'tiempo-real' ? (
+            <>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Atajos</p>
+                <div className="flex gap-1.5">
+                  {[
+                    { id: 'hoy', label: 'Hoy' },
+                    { id: 'ayer', label: 'Ayer' },
+                    { id: 'semana', label: 'Esta semana' },
+                    { id: 'semana-anterior', label: 'Semana anterior' },
+                  ].map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => {
+                        const r = rangoRapido(a.id);
+                        if (!r) return;
+                        setDesdeHora(r.desde);
+                        setHastaHora(r.hasta);
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 bg-white text-slate-600 hover:border-forest hover:text-forest transition-colors"
+                    >
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-          <label className="min-w-0">
-            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Desde</span>
-            <input
-              type="datetime-local"
-              step="60"
-              value={desdeHora}
-              onChange={(e) => setDesdeHora(e.target.value)}
-              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-            />
-          </label>
+              <label className="min-w-0">
+                <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Desde</span>
+                <input
+                  type="datetime-local"
+                  step="60"
+                  value={desdeHora}
+                  onChange={(e) => setDesdeHora(e.target.value)}
+                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
+              </label>
 
-          <label className="min-w-0">
-            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Hasta</span>
-            <input
-              type="datetime-local"
-              step="60"
-              value={hastaHora}
-              onChange={(e) => setHastaHora(e.target.value)}
-              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-            />
-          </label>
+              <label className="min-w-0">
+                <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Hasta</span>
+                <input
+                  type="datetime-local"
+                  step="60"
+                  value={hastaHora}
+                  onChange={(e) => setHastaHora(e.target.value)}
+                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
+              </label>
+            </>
+          ) : null}
 
           <ControlesFiltroUnidadGrupo
             mostrar={mostrar}
@@ -443,7 +504,12 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
               <tbody>
                 {filasTabla.map((fila, i) => (
                   <tr key={`${fila.placa}-${fila.periodo || 'total'}-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
-                    <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-600">{etiquetaPeriodoReporte(fila, 'libre')}</td>
+                    <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-600">
+                      {etiquetaPeriodoReporte(fila, 'libre')}
+                      {modoReporte !== 'tiempo-real' && horarioPeriodo(fila.periodo) ? (
+                        <span className="block text-[10px] font-normal text-slate-400">{horarioPeriodo(fila.periodo)}</span>
+                      ) : null}
+                    </td>
                     <td className="px-3 py-2">
                       <span className="font-bold text-slate-800">{fila.placa}</span>
                       {fila.unidad && fila.unidad !== fila.placa ? (

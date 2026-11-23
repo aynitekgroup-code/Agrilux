@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Database, FileSpreadsheet, Timer, CircleStop } from 'lucide-react';
-import { obtenerActividadFlota } from '../../../lib/agrotrackFlota';
+import { Database, FileSpreadsheet, Timer, CircleStop, Radio } from 'lucide-react';
+import { obtenerActividadFlota, rangoHoyLima } from '../../../lib/agrotrackFlota';
 import {
   segundosDelRango,
   calcularEventosResumidos,
   totalesEventosResumidos,
   formatearHMS,
 } from '../../../lib/agrotrackEventosResumidos';
-import { useRango, ControlesRango, CuerpoEstado, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca } from './reportesComunes';
+import { useRango, ControlesRango, CuerpoEstado, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, RelojEnVivo } from './reportesComunes';
 import { normalizarPlaca } from '../../../lib/agrotrackGrupos';
 
 /**
@@ -39,7 +39,10 @@ function CeldaTiempo({ segundos, pct, clase }) {
 }
 
 export default function FleetEventsSummary({ empresaId, periodo = null, fuente = 'real', vehicles = [] }) {
-  const { rango, setRango, dia, setDia, mes, setMes, desdeHora, setDesdeHora, hastaHora, setHastaHora, consulta, pendienteDeFecha } = useRango(periodo);
+  const {
+    rango, setRango, dia, setDia, mes, setMes, desdeHora, setDesdeHora, hastaHora, setHastaHora,
+    consulta: consultaRango, pendienteDeFecha: pendienteRango,
+  } = useRango(periodo);
   const {
     mostrar,
     setMostrar,
@@ -58,6 +61,36 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
   const [error, setError] = useState(null);
   const [rangoTexto, setRangoTexto] = useState('');
   const [descargaError, setDescargaError] = useState(null);
+  const [generadoEn, setGeneradoEn] = useState(null);
+  const [modoReporte, setModoReporte] = useState('historico');
+  const [ahora, setAhora] = useState(() => new Date());
+
+  // Tiempo real: el rango no se elige, es el día en curso. `ahora` avanza
+  // cada minuto, así que la consulta y el refresco de la tabla se rearman
+  // solos con la ventana 00:00 → hora actual.
+  useEffect(() => {
+    if (modoReporte !== 'tiempo-real') return undefined;
+    setAhora(new Date());
+    const reloj = setInterval(() => setAhora(new Date()), 60 * 1000);
+    return () => clearInterval(reloj);
+  }, [modoReporte]);
+
+  const consulta = useMemo(
+    () => (modoReporte === 'tiempo-real' ? rangoHoyLima(ahora) : consultaRango),
+    [modoReporte, ahora, consultaRango],
+  );
+
+  const pendienteDeFecha = modoReporte === 'tiempo-real' ? !consulta.desde : pendienteRango;
+
+  // "23/11/2026" para el contador del día que se está leyendo.
+  const fechaLecturaTexto = useMemo(() => {
+    const [anio, mes, dia] = String(consulta?.fecha || '').split('-');
+    return dia && mes && anio ? `${dia}/${mes}/${anio}` : 'Hoy';
+  }, [consulta?.fecha]);
+
+  const textoActualizacion = modoReporte === 'tiempo-real'
+    ? 'se actualiza solo cada minuto'
+    : 'se actualiza al cambiar el rango o con Actualizar';
 
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
@@ -81,6 +114,7 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
         setFilas(resultado);
         setEstado(resultado.length ? 'ok' : 'vacio');
         setRangoTexto(consulta.texto);
+        setGeneradoEn(new Date());
       })
       .catch((e) => {
         if (cancelado) return;
@@ -100,7 +134,10 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
 
   // Duración real del rango (limitada al periodo cargado): es el denominador
   // de los porcentajes y el Total de cada fila.
-  const totalSegundos = useMemo(() => segundosDelRango(consulta, periodo), [consulta, periodo]);
+  const totalSegundos = useMemo(
+    () => segundosDelRango(consulta, modoReporte === 'tiempo-real' ? null : periodo),
+    [consulta, periodo, modoReporte],
+  );
 
   const filasBaseCalculadas = useMemo(
     () => calcularEventosResumidos(filasFiltradas, totalSegundos),
@@ -167,8 +204,26 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
           <div className="min-w-0">
             <h2 className="text-base font-bold text-slate-900">Eventos resumidos (Stop / Idle / Drive)</h2>
             <p className="text-xs text-slate-500">
-              Reporte 15 de Zonar: porcentaje de tiempo de cada unidad detenida, en ralentí y en viaje dentro del rango.
+              {modoReporte === 'tiempo-real'
+                ? 'Reporte 15 de Zonar: porcentaje de tiempo de cada unidad detenida, en ralentí y en viaje del día en curso.'
+                : 'Reporte 15 de Zonar: porcentaje de tiempo de cada unidad detenida, en ralentí y en viaje dentro del rango.'}
             </p>
+            {generadoEn ? (
+              <p className="text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                  title="Reloj de Perú. No indica la antigüedad del dato: para eso mira «leído hace instantes»"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
+                  Hora Perú <RelojEnVivo />
+                </span>
+                <span>
+                  Generado: {generadoEn.toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
+                  {modoReporte === 'tiempo-real' ? ` · Día en lectura: ${fechaLecturaTexto}` : ''}
+                  {' · '}{textoActualizacion}
+                </span>
+              </p>
+            ) : null}
           </div>
           <div className="ml-auto flex items-center gap-2">
             {fuente === 'real' && rangoTexto ? (
@@ -189,8 +244,40 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
         </div>
         {descargaError ? <p className="text-[10px] text-red-600">{descargaError}</p> : null}
 
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-lg bg-slate-50 p-0.5" role="group" aria-label="Modo del reporte">
+            <button
+              type="button"
+              onClick={() => setModoReporte('tiempo-real')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
+                modoReporte === 'tiempo-real' ? 'bg-forest text-white' : 'text-slate-500 hover:text-forest'
+              }`}
+              title="Tiempo de Stop / Idle / Drive del día en curso, con los datos que envía Zonar"
+            >
+              <Radio size={13} className={modoReporte === 'tiempo-real' ? 'animate-pulse' : ''} /> Tiempo real (Zonar)
+            </button>
+            <button
+              type="button"
+              onClick={() => setModoReporte('historico')}
+              className={`px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
+                modoReporte === 'historico' ? 'bg-forest text-white' : 'text-slate-500 hover:text-forest'
+              }`}
+            >
+              Histórico por rango
+            </button>
+          </div>
+          {modoReporte === 'tiempo-real' ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
+              leído hace instantes
+            </span>
+          ) : null}
+        </div>
+
         <div className="flex flex-wrap items-end gap-3">
-          <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} desdeHora={desdeHora} setDesdeHora={setDesdeHora} hastaHora={hastaHora} setHastaHora={setHastaHora} />
+          {modoReporte !== 'tiempo-real' ? (
+            <ControlesRango rango={rango} setRango={setRango} dia={dia} setDia={setDia} mes={mes} setMes={setMes} desdeHora={desdeHora} setDesdeHora={setDesdeHora} hastaHora={hastaHora} setHastaHora={setHastaHora} />
+          ) : null}
           <ControlesFiltroUnidadGrupo
             mostrar={mostrar}
             setMostrar={setMostrar}
