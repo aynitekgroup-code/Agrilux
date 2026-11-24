@@ -20,6 +20,12 @@ test('geocerca operativa prevalece y departamento solo es respaldo', () => {
   assert.equal(geocercaHunter({}), 'Sin coincidencia');
 });
 
+test('Excel Hunter distingue área de grupo operativo', () => {
+  const [fila] = filasStatusHunterExcel([{ equipo_id: '1', area_operativa: 'Excavadora', grupos_operativos: ['Drenajes'] }], { fecha: () => '—', clasificar: () => 'Desconocido' });
+  assert.equal(fila['Área operativa'], 'Excavadora');
+  assert.equal(fila['Grupo operativo'], 'Drenajes');
+});
+
 test('Excel Hunter escribe valores externos como texto y no fórmulas', () => {
   const datos = filasStatusHunterExcel([{ equipo_id: '1', unidad: '=1+1' }], { fecha: () => '—', clasificar: () => 'Desconocido' });
   const hoja = XLSX.utils.json_to_sheet(datos);
