@@ -1,4 +1,4 @@
-// Prueba controlada: sin cron, con escritura limitada a un equipo explícito.
+// La flota completa solo se habilita con HUNTER_FLOTA_COMPLETA=1.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 // @ts-ignore — módulos JavaScript compartidos con las pruebas Node.
 import { leerEstadoHunter } from '../../../agentes/hunter/cliente.mjs';
@@ -20,15 +20,15 @@ Deno.serve(async (req) => {
     const datos = await leerEstadoHunter(usuario, password);
     const unidades = normalizarEstadoHunter(datos);
     const equipo = Deno.env.get('HUNTER_EQUIPO_PRUEBA');
-    // Por defecto no se guarda nada. Solo se autoriza una unidad de prueba,
-    // sin permitir desde la solicitud seleccionar otra o habilitar toda la flota.
-    if (!equipo) return json({ ok: true, modo: 'solo lectura', unidades: unidades.length });
-    const fila = unidades.find((v: { equipo_id: string }) => v.equipo_id === equipo);
-    if (!fila?.fecha) return json({ ok: false, error: 'Equipo de prueba sin fecha válida.' }, 422);
+    const completa = Deno.env.get('HUNTER_FLOTA_COMPLETA') === '1';
+    if (!equipo && !completa) return json({ ok: true, modo: 'solo lectura', unidades: unidades.length });
+    const seleccion = completa ? unidades : unidades.filter((v: { equipo_id: string }) => v.equipo_id === equipo);
+    const filas = seleccion.filter((v: { fecha: string | null }) => !!v.fecha);
+    if (!filas.length) return json({ ok: false, error: 'No hay unidades seleccionadas con fecha válida.' }, 422);
     const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
-    const { data, error } = await sb.rpc('agrotrack_hunter_guardar_estado', { p_empresa_id: empresa, p_unidades: [fila] });
-    if (error) throw new Error('No se pudo guardar el equipo de prueba en Agrilux.');
-    return json({ ok: true, modo: 'equipo de prueba', unidades: unidades.length, filas: data });
+    const { data, error } = await sb.rpc('agrotrack_hunter_guardar_estado', { p_empresa_id: empresa, p_unidades: filas });
+    if (error) throw new Error('No se pudo guardar el estado Hunter en Agrilux.');
+    return json({ ok: true, modo: completa ? 'flota completa' : 'equipo de prueba', unidades: unidades.length, sin_fecha: seleccion.length - filas.length, filas: data });
   } catch (e) {
     // No registrar cuerpos, cookies ni errores inesperados del proveedor.
     console.error('Hunter: fallo de lectura o escritura');
