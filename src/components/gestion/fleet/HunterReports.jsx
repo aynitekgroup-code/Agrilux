@@ -34,7 +34,7 @@ export default function HunterReports() {
   return <section className="rounded-xl border border-emerald-200 bg-white p-4 space-y-4">
     <div><h2 className="text-lg font-semibold">Reportes Hunter 360</h2>
       <p className="text-sm text-slate-600">Carga manual de una captura JSON validada. Los datos se procesan en este navegador, no se guardan ni se sincronizan con Agrilux y no se mezclan con Zonar.</p>
-      <p className="text-sm text-amber-700">Las paradas agrupadas pueden ocultar eventos de ignición; el resumen y los viajes son los informados por Hunter.</p></div>
+      <p className="text-sm text-amber-700">Hunter agrupa algunas paradas: se cuentan por separado y no se duplican como puntos GPS. El detalle de viajes y paradas se muestra solo si la captura lo incluye; los eventos dentro de una parada pueden no estar disponibles. El resumen conserva los valores de Hunter y no usa los criterios de Zonar.</p></div>
     <label className="block text-sm font-medium">Captura Hunter <input className="block mt-1" type="file" accept=".json,application/json" onChange={cargar} /></label>
     {cargando && <p role="status">Procesando captura…</p>}
     {error && <p role="alert" className="text-red-700">{error}</p>}
