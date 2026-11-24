@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
-import { filasStatusHunterExcel } from '../src/lib/hunterStatusExport.js';
+import { filasStatusHunterExcel, geocercaHunter } from '../src/lib/hunterStatusExport.js';
 
 test('Excel Hunter conserva los datos filtrados y los desconocidos', () => {
   const filas = filasStatusHunterExcel([{ equipo_id: '123', unidad: 'CASE 2', velocidad_kmh: 0 }], {
@@ -10,8 +10,14 @@ test('Excel Hunter conserva los datos filtrados y los desconocidos', () => {
   assert.equal(filas.length, 1);
   assert.equal(filas[0]['ID equipo Hunter'], '123');
   assert.equal(filas[0]['Velocidad (km/h)'], 0);
-  assert.equal(filas[0]['Departamento'], 'No determinado');
+  assert.equal(filas[0]['Geocerca'], 'Sin coincidencia');
   assert.equal(filas[0]['Estado orientativo'], 'Desconocido');
+});
+
+test('geocerca operativa prevalece y departamento solo es respaldo', () => {
+  assert.equal(geocercaHunter({ geocerca: 'Fábrica', departamento: 'LAMBAYEQUE' }), 'Fábrica');
+  assert.equal(geocercaHunter({ departamento: 'LIMA' }), 'Dpto. LIMA');
+  assert.equal(geocercaHunter({}), 'Sin coincidencia');
 });
 
 test('Excel Hunter escribe valores externos como texto y no fórmulas', () => {
