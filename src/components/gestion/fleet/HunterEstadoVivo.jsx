@@ -3,6 +3,8 @@ import { FileSpreadsheet, MapPinned, RefreshCw, Search } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { compararUnidades } from '../../../lib/agrotrackReporteFilas';
 import { exportarStatusHunterExcel, geocercaHunter } from '../../../lib/hunterStatusExport';
+import { agruparUnidadesHunter, filtrarUnidadesHunter, opcionesFiltrosHunter } from '../../../lib/hunterStatusFiltros';
+import { ControlesFiltroUnidadGrupo } from './reportesComunes';
 
 const fecha = (valor) => valor ? new Date(valor).toLocaleString('es-PE', { timeZone: 'America/Lima', dateStyle: 'short', timeStyle: 'short' }) : '—';
 function estado(f, ahora) {
@@ -20,10 +22,12 @@ export default function HunterEstadoVivo({ empresaId }) {
   const [intento, setIntento] = useState(0);
   const [busqueda, setBusqueda] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('todos');
+  const [mostrar, setMostrar] = useState('grupos');
+  const [opcionFiltro, setOpcionFiltro] = useState('');
+  const [filtroGeocerca, setFiltroGeocerca] = useState('');
   const [agrupar, setAgrupar] = useState('grupo');
   const [gruposDisponibles, setGruposDisponibles] = useState(true);
   const [areasDisponibles, setAreasDisponibles] = useState(true);
-  const [filtroGrupo, setFiltroGrupo] = useState('todos');
   const [geocercasDisponibles, setGeocercasDisponibles] = useState(true);
   const [departamentosDisponibles, setDepartamentosDisponibles] = useState(true);
   const [errorDescarga, setErrorDescarga] = useState('');
@@ -84,23 +88,27 @@ export default function HunterEstadoVivo({ empresaId }) {
   }, [empresaId, intento]);
   const categorias = ['En movimiento', 'Encendido / lento', 'Apagado', 'Sin reporte reciente', 'Desconocido'];
   const conteos = useMemo(() => Object.fromEntries(categorias.map((c) => [c, filas.filter((f) => estado(f, ahora) === c).length])), [filas, ahora]);
-  const visibles = useMemo(() => filas.filter((f) => {
-    const texto = `${f.unidad || ''} ${f.equipo_id} ${f.direccion || ''}`.toLocaleLowerCase('es');
-    return texto.includes(busqueda.trim().toLocaleLowerCase('es')) && (filtroEstado === 'todos' || estado(f, ahora) === filtroEstado) && (filtroGrupo === 'todos' || f.grupos_operativos.includes(filtroGrupo));
-  }).sort(compararUnidades), [filas, ahora, busqueda, filtroEstado, filtroGrupo]);
-  const opcionesGrupos = useMemo(() => [...new Set(filas.flatMap((f) => f.grupos_operativos))].sort((a,b) => a.localeCompare(b,'es')), [filas]);
-  const grupos = useMemo(() => {
-    if (agrupar === 'ninguno') return [['', visibles]];
-    const mapa = new Map();
-    for (const fila of visibles) {
-      const nombres = agrupar === 'grupo' ? (fila.grupos_operativos.length ? fila.grupos_operativos : ['Sin grupo asignado']) : [geocercaHunter(fila)];
-      for (const nombre of nombres) {
-        if (!mapa.has(nombre)) mapa.set(nombre, []);
-        mapa.get(nombre).push(fila);
-      }
-    }
-    return [...mapa.entries()].sort(([a], [b]) => a.localeCompare(b, 'es'));
-  }, [visibles, agrupar]);
+  const ordenadas = useMemo(() => [...filas].sort(compararUnidades), [filas]);
+  const opciones = useMemo(() => opcionesFiltrosHunter(ordenadas), [ordenadas]);
+  const visibles = useMemo(() => {
+    const consulta = busqueda.trim().toLocaleLowerCase('es');
+    return filtrarUnidadesHunter(ordenadas, { mostrar, opcionFiltro, filtroGeocerca }).filter((f) => {
+      const texto = `${f.unidad || ''} ${f.equipo_id} ${f.direccion || ''}`.toLocaleLowerCase('es');
+      return texto.includes(consulta) && (filtroEstado === 'todos' || estado(f, ahora) === filtroEstado);
+    });
+  }, [ordenadas, ahora, busqueda, filtroEstado, mostrar, opcionFiltro, filtroGeocerca]);
+  // Conserva el filtro visible si un refresco deja su geocerca o grupo vacío.
+  const opcionesGrupo = mostrar === 'grupos' && opcionFiltro && !opciones.grupos.includes(opcionFiltro)
+    ? [...opciones.grupos, opcionFiltro] : opciones.grupos;
+  const opcionesGeocerca = filtroGeocerca && !opciones.geocercas.includes(filtroGeocerca)
+    ? [...opciones.geocercas, filtroGeocerca] : opciones.geocercas;
+  const opcionesUnidad = mostrar === 'unidades' && opcionFiltro && !opciones.unidades.some(({ valor }) => valor === opcionFiltro)
+    ? [...opciones.unidades, { valor: opcionFiltro, etiqueta: opcionFiltro }] : opciones.unidades;
+  const grupoSeleccionado = mostrar === 'grupos' ? opcionFiltro : '';
+  const grupos = useMemo(
+    () => agruparUnidadesHunter(visibles, agrupar, grupoSeleccionado),
+    [visibles, agrupar, grupoSeleccionado],
+  );
   const tonos = { 'En movimiento': 'bg-emerald-50 text-emerald-700 border-emerald-200', 'Encendido / lento': 'bg-amber-50 text-amber-700 border-amber-200', Apagado: 'bg-slate-100 text-slate-600 border-slate-200', 'Sin reporte reciente': 'bg-rose-50 text-rose-700 border-rose-200', Desconocido: 'bg-slate-50 text-slate-500 border-slate-200' };
   async function descargar() {
     setErrorDescarga('');
@@ -112,13 +120,64 @@ export default function HunterEstadoVivo({ empresaId }) {
       <div className="flex flex-wrap items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><MapPinned size={19} /></span><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-base font-bold text-slate-900">Status de maquinaria</h2><span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">Hunter 360</span></div><p className="mt-0.5 text-xs text-slate-500">Última posición informada por Hunter · consulta de pantalla cada minuto</p></div></div><div className="flex gap-2"><button type="button" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50" onClick={() => setIntento((n) => n + 1)}><RefreshCw size={14} /> Actualizar</button><button type="button" disabled={estadoCarga !== 'listo' || !visibles.length} onClick={descargar} className="inline-flex items-center gap-2 rounded-lg bg-emerald-800 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-900 disabled:opacity-40"><FileSpreadsheet size={14} /> Descargar Excel</button></div></div>
       {errorDescarga && <p role="alert" className="text-xs text-red-700">{errorDescarga}</p>}
       {estadoCarga === 'listo' && filas.length > 0 && <div className="flex flex-wrap gap-2" aria-label="Filtrar por estado"><button type="button" aria-pressed={filtroEstado === 'todos'} onClick={() => setFiltroEstado('todos')} className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${filtroEstado === 'todos' ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-slate-200 text-slate-600'}`}>Todas <span className="ml-1 tabular-nums">{filas.length}</span></button>{categorias.map((c) => <button type="button" key={c} aria-pressed={filtroEstado === c} onClick={() => setFiltroEstado(c)} className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${filtroEstado === c ? 'ring-2 ring-emerald-500 ring-offset-1' : ''} ${tonos[c]}`}>{c} <span className="ml-1 tabular-nums">{conteos[c]}</span></button>)}</div>}
-      <div className="flex flex-wrap items-center justify-between gap-2"><label className="relative block w-full max-w-xs"><Search size={14} className="absolute left-3 top-2.5 text-slate-400" /><span className="sr-only">Buscar unidad o dirección</span><input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar unidad o dirección" className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-xs outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" /></label><p className="text-xs text-slate-500">{visibles.length} de {filas.length} unidades · Hora Perú</p></div>
+      <div className="flex flex-wrap items-end gap-3">
+        <ControlesFiltroUnidadGrupo
+          mostrar={mostrar}
+          setMostrar={(modo) => {
+            if (modo === mostrar) return;
+            setMostrar(modo);
+            setOpcionFiltro('');
+            setAgrupar((actual) => actual === 'geocerca' ? actual : modo === 'grupos' ? 'grupo' : 'ninguno');
+          }}
+          opcionFiltro={opcionFiltro}
+          setOpcionFiltro={setOpcionFiltro}
+          opcionesGrupos={opcionesGrupo}
+          opcionesUnidades={opcionesUnidad}
+        />
+        <label className="min-w-0">
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">Geocerca</span>
+          <select
+            value={filtroGeocerca}
+            onChange={(e) => setFiltroGeocerca(e.target.value)}
+            className="min-w-[185px] max-w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+          >
+            <option value="">Todas las geocercas</option>
+            {opcionesGeocerca.map((nombre) => <option key={nombre} value={nombre}>{nombre}</option>)}
+          </select>
+        </label>
+        <label className="relative block w-full max-w-xs sm:w-64">
+          <Search size={14} aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <span className="sr-only">Buscar unidad o dirección</span>
+          <input
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar unidad o dirección"
+            className="w-full rounded-lg border border-slate-200 py-1.5 pl-9 pr-3 text-xs outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+          />
+        </label>
+        {(opcionFiltro || filtroGeocerca) && (
+          <button type="button" onClick={() => { setOpcionFiltro(''); setFiltroGeocerca(''); }} className="rounded-lg px-2 py-1.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-700">
+            Quitar filtros
+          </button>
+        )}
+        <p className="pb-1.5 text-xs text-slate-500 sm:ml-auto">{visibles.length} de {filas.length} unidades · Hora Perú</p>
+      </div>
       <p className="text-[11px] text-slate-500">Sin reporte reciente: última posición mayor a 30 min o fecha no válida. Las categorías son orientativas y no equivalen al resumen histórico de Hunter.</p>
       {!geocercasDisponibles && <p role="status" className="text-xs text-amber-700">Para mostrar geocercas, ejecuta scripts/agrotrack-hunter-geocercas.sql en Supabase.</p>}
       {!departamentosDisponibles && <p role="status" className="text-xs text-amber-700">Para mostrar departamentos, ejecuta scripts/agrotrack-departamentos-peru.sql en Supabase.</p>}
       {!gruposDisponibles && <p role="status" className="text-xs text-amber-700">Para usar grupos Hunter, ejecuta scripts/agrotrack-hunter-grupos.sql en Supabase.</p>}
       {!areasDisponibles && <p role="status" className="text-xs text-amber-700">Para mostrar áreas Hunter, ejecuta scripts/agrotrack-hunter-grupos.sql en Supabase.</p>}
-      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600"><label className="inline-flex items-center gap-2">Agrupar por <select className="rounded border border-slate-200 bg-white px-2 py-1.5" value={agrupar} onChange={(e) => setAgrupar(e.target.value)}><option value="ninguno">Sin agrupar</option><option value="grupo">Grupo operativo</option><option value="geocerca">Geocerca</option></select></label><label className="inline-flex items-center gap-2">Grupo <select className="rounded border border-slate-200 bg-white px-2 py-1.5" value={filtroGrupo} onChange={(e) => setFiltroGrupo(e.target.value)}><option value="todos">Todos los grupos</option>{opcionesGrupos.map((grupo) => <option key={grupo} value={grupo}>{grupo}</option>)}</select></label><span>Los grupos sin asignación validada aparecen como «Sin grupo asignado».</span></div>
+      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+        <label className="inline-flex items-center gap-2">
+          Agrupar por
+          <select className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-slate-700" value={agrupar} onChange={(e) => setAgrupar(e.target.value)}>
+            <option value="ninguno">Sin agrupar</option>
+            <option value="grupo">Grupo operativo</option>
+            <option value="geocerca">Geocerca</option>
+          </select>
+        </label>
+        <span>Las unidades sin grupo operativo aparecen como «Sin grupo asignado». Si no hay geocerca operativa, se muestra el departamento.</span>
+      </div>
     </div>
     {estadoCarga === 'cargando' && <p role="status" className="p-5 text-sm text-slate-500">Cargando unidades Hunter…</p>}
     {estadoCarga === 'error' && <p role="alert" className="p-5 text-sm text-red-700">{error}</p>}

@@ -155,6 +155,7 @@ export function ControlesFiltroUnidadGrupo({
   opcionFiltro,
   setOpcionFiltro,
   unidades = [],
+  opcionesUnidades,
   opcionesGrupos = [],
   gruposInfo = { disponible: true, aviso: null },
 }) {
@@ -191,11 +192,10 @@ export function ControlesFiltroUnidadGrupo({
           <option value="">{mostrar === 'grupos' ? 'Todos los grupos' : 'Todas las unidades'}</option>
           {mostrar === 'grupos'
             ? opcionesGrupos.map((grupo) => <option key={grupo} value={grupo}>{grupo}</option>)
-            : unidades.map((unidad) => (
-              <option key={unidad.placa} value={unidad.placa}>
-                {unidad.placa}{unidad.descripcion ? ` - ${unidad.descripcion}` : unidad.sin_telemetria ? ' · sin telemetría' : ''}
-              </option>
-            ))}
+            : (opcionesUnidades ?? unidades.map((unidad) => ({
+              valor: unidad.placa,
+              etiqueta: `${unidad.placa}${unidad.descripcion ? ` - ${unidad.descripcion}` : unidad.sin_telemetria ? ' · sin telemetría' : ''}`,
+            }))).map(({ valor, etiqueta }) => <option key={valor} value={valor}>{etiqueta}</option>)}
         </select>
         {mostrar === 'grupos' && !gruposInfo.disponible && gruposInfo.aviso ? (
           <span className="block mt-1 text-[10px] text-amber-600 max-w-[280px] leading-snug">

@@ -66,7 +66,7 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
       <div className="p-5 sm:p-6 flex flex-col gap-4">
         <div className="flex flex-wrap items-start gap-4">
           <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-sm shrink-0 overflow-hidden">
-            <img src="/icons/Agrilux.logo.web.png" alt="Agrilux" className="w-11 h-14 object-contain" />
+            <img src="/icons/Agrilux.logo%20(2).png" alt="Agrilux" className="h-10 w-8 object-contain" />
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
