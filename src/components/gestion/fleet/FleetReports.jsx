@@ -126,21 +126,29 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
     ? 'se actualiza solo cada minuto'
     : 'se actualiza al cambiar el rango o con Actualizar';
 
-  // Horario efectivo de cada fila del período: el rango elegido se recorta
-  // al día de la fila (el primer día arranca en "desde" y el último termina
-  // en "hasta"; los días intermedios van completos).
-  const horarioPeriodo = useMemo(() => {
+  // Las filas sin datos representan el rango consultado, no un día medido.
+  // Las demás muestran el horario efectivo de su propio día.
+  const presentarPeriodo = useMemo(() => {
     const desde = String(consulta?.desde || '');
     const hasta = String(consulta?.hasta || '');
-    if (!desde || !hasta) return () => '';
     const diaDesde = desde.slice(0, 10);
     const diaHasta = hasta.slice(0, 10);
     const horaDesde = desde.slice(11, 16);
     const horaHasta = hasta.slice(11, 16);
-    return (periodo) => {
-      const p = String(periodo || '');
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(p)) return '';
-      return `${p === diaDesde ? horaDesde : '00:00'} – ${p === diaHasta ? horaHasta : '23:59'}`;
+    return (fila) => {
+      const fecha = etiquetaPeriodoReporte(fila, 'libre');
+      if (!desde || !hasta) return { fecha, horario: '' };
+      if (fila.sin_datos_rango) {
+        return {
+          fecha: diaDesde === diaHasta ? diaDesde : `${diaDesde} a ${diaHasta}`,
+          horario: `${horaDesde} – ${horaHasta}`,
+        };
+      }
+      const dia = String(fila.periodo || '');
+      const horario = /^\d{4}-\d{2}-\d{2}$/.test(dia)
+        ? `${dia === diaDesde ? horaDesde : '00:00'} – ${dia === diaHasta ? horaHasta : '23:59'}`
+        : '';
+      return { fecha, horario };
     };
   }, [consulta?.desde, consulta?.hasta]);
 
@@ -503,6 +511,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
                 {filasTabla.map((fila, i) => {
                   const recorridoCero = esCero(fila.km_recorridos);
                   const medido = (valor) => fila.sin_datos_rango ? null : valor;
+                  const { fecha, horario } = presentarPeriodo(fila);
 
                   return (
                     <tr
@@ -513,13 +522,13 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
                     >
                       <td className="px-3 py-2">
                         <span className="font-bold text-slate-800">{fila.placa}</span>
-                        {fila.sin_datos_rango ? <span className="block text-[10px] text-amber-700">Sin datos en el rango · horas no disponibles</span> : null}
+                        {fila.sin_datos_rango ? <span className="block text-[10px] text-amber-700">sin data</span> : null}
                       </td>
                       <td className="px-3 py-2 text-slate-600">{codigoArea(fila.unidad, fila.placa) || '—'}</td>
                       <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-600">
-                        {etiquetaPeriodoReporte(fila, 'libre')}
-                        {modoReporte !== 'tiempo-real' && horarioPeriodo(fila.periodo) ? (
-                          <span className="block text-[10px] font-normal text-slate-400">{horarioPeriodo(fila.periodo)}</span>
+                        {fecha}
+                        {modoReporte !== 'tiempo-real' && horario ? (
+                          <span className="block text-[10px] font-normal text-slate-400">{horario}</span>
                         ) : null}
                       </td>
                       <CeldaMetricaActividad valor={fila.km_recorridos} formato={numero} className="font-semibold" />
