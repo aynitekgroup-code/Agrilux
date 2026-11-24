@@ -276,9 +276,9 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
       >
         {estado === 'ok' || filasCalculadas.length ? (
           <>
-            <div className="overflow-x-auto">
+            <div className="max-h-[65vh] overflow-auto">
               <table className="w-full text-xs text-slate-700">
-                <thead>
+                <thead className="sticky top-0 z-10 bg-white shadow-sm">
                   <tr className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400">
                     <th className="px-3 py-2.5 font-bold text-left">Placa</th>
                     <th className="px-3 py-2.5 font-bold text-left">Área</th>
