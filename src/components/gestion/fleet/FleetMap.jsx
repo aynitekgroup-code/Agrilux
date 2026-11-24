@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CircleMarker, GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet';
+import { CircleMarker, GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import {
   AlertCircle,
@@ -325,7 +325,7 @@ function FitMapToGeofences({ geoJson, vehicles = [], focusRequest, fitToken = 0 
 }
 
 // Tooltip del polígono (FASE 3.8): HTML con el nombre destacado y el grupo
-// coloreado; queda pegado al cursor para que sea fácil de leer.
+// coloreado. Se abre solo con doble clic (2 clics en 1 segundo).
 function featureTooltip(feature, layer) {
   const properties = feature.properties || {};
   const tipo = tipoDeGeocerca(feature);
@@ -343,10 +343,27 @@ function featureTooltip(feature, layer) {
       </p>
     </div>`;
   if (properties.nombre) {
-    // Solo tooltip sticky (hover). El clic NO abre un popup blanco:
-    // el clic abre la ficha de la geocerca (vértices/área).
     layer.bindTooltip(html, { sticky: true, direction: 'top', opacity: 1, className: 'fleet-geocerca-tooltip' });
+    // La ficha se abre SOLO con doble clic: se desactivan las aperturas
+    // automáticas de Leaflet (hover, arrastre del cursor y clic simple) para
+    // que el mapa no se llene de globos al pasar el mouse.
+    layer.off('mouseover', layer._openTooltip);
+    layer.off('mouseout', layer.closeTooltip);
+    layer.off('mousemove', layer._moveTooltip);
+    layer.off('click', layer._openTooltip);
   }
+}
+
+// Cierra el globo de geocerca abierto al hacer clic en cualquier otro punto
+// del mapa (un solo clic fuera del polígono lo oculta).
+function CerrarTooltipGeocerca({ tooltipRef }) {
+  useMapEvents({
+    click() {
+      tooltipRef.current?.closeTooltip?.();
+      tooltipRef.current = null;
+    },
+  });
+  return null;
 }
 
 /** Encuadra el mapa sobre el recorrido cargado (FASE 2).
@@ -548,6 +565,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // Referencias a los marcadores de vehículo en Leaflet, para abrir su
   // popup de estado al enfocar la unidad (localizador o tabla de coordenadas).
   const markerRefs = useRef(new Map());
+  // Geocerca cuyo globo de información está abierto (doble clic en el mapa).
+  const tooltipGeocercaRef = useRef(null);
   // Recorrido pendiente de cargar desde la consola PRINCIPAL: la placa ya
   // cambió, el efecto sobre selectedId lo consume y carga la página 1.
   const rutaPendienteRef = useRef(null);
@@ -2511,6 +2530,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
 
           <ZoomRutaTracker onZoom={setZoomRuta} />
 
+          <CerrarTooltipGeocerca tooltipRef={tooltipGeocercaRef} />
+
           <FocusUnidad unidadFocus={focusUnidadRequest} marcadores={markerRefs.current} />
 
           {geoJsonPorGrupo.map(({ grupo, data }) => (
@@ -2533,20 +2554,38 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               }}
               onEachFeature={(feature, layer) => {
                 featureTooltip(feature, layer);
-                layer.on('click', () => {
+                // Doble clic = dos clics en 1 segundo sobre la misma geocerca.
+                let ultimoClic = 0;
+                layer.on('click', (event) => {
                   // En modo "insertar" o "dibujar" el clic lo maneja el mapa
                   // (agrega el punto): la selección no cambia.
                   if (editModo === 'insertar' || editModo === 'dibujo') return;
                   // VIII: al elegir la geocerca (clic en el polígono) el mapa
                   // se ajusta a ella, igual que desde el buscador.
                   focusGeofence(feature.properties || {});
+                  const ahora = Date.now();
+                  if (ahora - ultimoClic <= 1000) {
+                    ultimoClic = 0;
+                    // Muestra el globo con nombre, grupo y distrito.
+                    tooltipGeocercaRef.current?.closeTooltip?.();
+                    if (feature.properties?.nombre) {
+                      layer.openTooltip(event.latlng);
+                      tooltipGeocercaRef.current = layer;
+                      // El globo recién abierto no debe cerrarse con el
+                      // clic que llega al mapa.
+                      L.DomEvent.stopPropagation(event);
+                    } else {
+                      tooltipGeocercaRef.current = null;
+                    }
+                  } else {
+                    ultimoClic = ahora;
+                  }
                 });
                 layer.on('dblclick', (event) => {
                   if (editModo === 'insertar' || editModo === 'dibujo') return;
-                  // Evita que el doble-clic haga zoom: debe abrir la ficha.
+                  // Evita que el doble-clic haga zoom.
                   L.DomEvent.stopPropagation(event);
                   L.DomEvent.preventDefault(event);
-                  focusGeofence(feature.properties || {});
                 });
               }}
             />

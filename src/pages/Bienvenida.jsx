@@ -17,7 +17,7 @@ export default function Bienvenida() {
       <header className="border-b border-emerald-900/10 bg-white">
         <nav aria-label="Navegación principal" className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <a href="#inicio" className="flex items-center gap-3" aria-label="Agrilux, inicio">
-            <img src="/icons/Agrilux.logo.sinfondo.png" alt="" className="h-11 w-11 object-contain" />
+            <img src="/icons/Agrilux.logo%20(2).png" alt="" className="h-11 w-11 object-contain" />
             <span><span className="block text-lg font-extrabold tracking-[0.12em] text-[#174e35]">AGRILUX</span><span className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">Tecnología para el campo</span></span>
           </a>
           <div className="flex items-center gap-4 sm:gap-6">
