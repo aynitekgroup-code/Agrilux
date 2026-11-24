@@ -2,6 +2,19 @@
 // el padrón y distinguen «sin datos» de un cero medido por SQL.
 const placaClave = (p) => String(p || '').trim().toUpperCase();
 
+// Un cero medido no es lo mismo que ausencia de telemetría o de valor.
+export function recorridoEsCero(fila) {
+  const valor = fila?.km_recorridos;
+  return !fila?.sin_datos_rango && valor != null && String(valor).trim() !== ''
+    && Number.isFinite(Number(valor)) && Number(valor) === 0;
+}
+
+export function compararUnidades(a, b) {
+  const nombre = (f) => String(f.unidad || f.equipo_id || f.placa || '').trim();
+  return nombre(a).localeCompare(nombre(b), 'es', { numeric: true, sensitivity: 'base' })
+    || String(a.equipo_id || a.placa || '').localeCompare(String(b.equipo_id || b.placa || ''), 'es', { numeric: true });
+}
+
 export function completarUnidadesReporte(filas = [], unidades = [], periodo = null) {
   const presentes = new Set(filas.map((f) => placaClave(f.placa)));
   const resultado = [...filas];

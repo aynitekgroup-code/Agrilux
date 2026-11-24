@@ -12,7 +12,7 @@ import {
 } from '../../../lib/agrotrackFlota';
 import { generarResumenFlota } from '../../../lib/agrotrackInsights';
 import { rangoRapido, useLimiteFilas, BotonVerMas, BotonActualizarAhora, useFiltroUnidadGrupo, ControlesFiltroUnidadGrupo, filtrarFilasPorPlaca, RelojEnVivo } from './reportesComunes';
-import { completarUnidadesReporte } from '../../../lib/agrotrackReporteFilas.js';
+import { completarUnidadesReporte, recorridoEsCero } from '../../../lib/agrotrackReporteFilas.js';
 import { codigoArea } from '../../../lib/agrotrackVisitasDia';
 
 /**
@@ -54,7 +54,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
   const [resumenIA, setResumenIA] = useState(null);
   const [resumenCargando, setResumenCargando] = useState(false);
   const [resumenError, setResumenError] = useState(null);
-  const [orden, setOrden] = useState({ campo: 'unidad', dir: 'asc' });
+  const [orden, setOrden] = useState({ campo: 'placa', dir: 'asc' });
   const [modoReporte, setModoReporte] = useState('historico');
   const [ahora, setAhora] = useState(() => new Date());
 
@@ -496,7 +496,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
                         <span className="block text-[10px] font-normal text-slate-400">{horarioPeriodo(fila.periodo)}</span>
                       ) : null}
                     </td>
-                    <td className="px-3 py-2 text-right font-semibold">{numero(fila.km_recorridos, 1)}</td>
+                    <td className={`px-3 py-2 text-right font-semibold tabular-nums ${recorridoEsCero(fila) ? 'bg-red-100 text-red-800' : ''}`} title={fila.sin_datos_rango ? 'No hay datos en el rango' : recorridoEsCero(fila) ? 'Recorrido medido igual a cero' : undefined}>{fila.sin_datos_rango || fila.km_recorridos == null || String(fila.km_recorridos).trim() === '' ? '—' : numero(fila.km_recorridos, 1)}</td>
                     <td className="px-3 py-2 text-right font-bold text-slate-800">{fila.sin_datos_rango ? '—' : formatearDuracion(fila.prendido_segundos)}</td>
                     <td className="px-3 py-2 text-right">{fila.sin_datos_rango ? '—' : formatearDuracion(fila.viaje_segundos)}</td>
                     <td className="px-3 py-2 text-right">{fila.sin_datos_rango ? '—' : formatearDuracion(fila.ralenti_segundos)}</td>
@@ -528,6 +528,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
           </div>
 
           <BotonVerMas expandido={expandido} onAlternar={alternar} total={total} />
+          <p className="px-4 py-2 text-[11px] text-slate-500"><span className="rounded bg-red-100 px-1.5 py-0.5 font-semibold text-red-800">Rojo: recorrido medido = 0 km</span> · Sin datos se muestra como «—». Un recorrido cero no demuestra que la máquina no haya trabajado.</p>
 
           {filasConSinTelemetria.length >= LIMITE_FILAS_ACTIVIDAD ? (
             <p className="px-4 py-2 text-[10px] text-amber-600 border-t border-slate-50">

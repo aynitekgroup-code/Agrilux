@@ -91,7 +91,7 @@ export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', p
       'Período': etiquetaPeriodoReporte(f, modo),
       'Placa': f.placa,
       'Área': codigoArea(f.unidad, f.placa) || '',
-      'Recorrido (km)': Number(f.km_recorridos || 0),
+      'Recorrido (km)': f.sin_datos_rango || f.km_recorridos == null ? '' : Number(f.km_recorridos),
       // "Encendido" se quitó (7:47 a. m.): duplicaba "Horas prendido"
       // (encendido = viaje + ralentí, criterio único del reporte).
       'Horas prendido (h)': f.sin_datos_rango ? '' : horas(Number(f.viaje_segundos || 0) + Number(f.ralenti_segundos || 0)),

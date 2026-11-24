@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { MapPinned, RefreshCw, Search } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
+import { compararUnidades } from '../../../lib/agrotrackReporteFilas';
 
 const fecha = (valor) => valor ? new Date(valor).toLocaleString('es-PE', { timeZone: 'America/Lima', dateStyle: 'short', timeStyle: 'short' }) : '—';
 function estado(f, ahora) {
@@ -51,7 +52,7 @@ export default function HunterEstadoVivo({ empresaId }) {
   const visibles = useMemo(() => filas.filter((f) => {
     const texto = `${f.unidad || ''} ${f.equipo_id} ${f.direccion || ''}`.toLocaleLowerCase('es');
     return texto.includes(busqueda.trim().toLocaleLowerCase('es')) && (filtroEstado === 'todos' || estado(f, ahora) === filtroEstado);
-  }), [filas, ahora, busqueda, filtroEstado]);
+  }).sort(compararUnidades), [filas, ahora, busqueda, filtroEstado]);
   const grupos = useMemo(() => {
     if (!agrupar) return [['', visibles]];
     const mapa = new Map();

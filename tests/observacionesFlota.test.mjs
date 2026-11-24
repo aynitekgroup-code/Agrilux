@@ -1,6 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { completarUnidadesReporte, calcularSinReportar, describirPosicion } from '../src/lib/agrotrackReporteFilas.js';
+import { completarUnidadesReporte, calcularSinReportar, describirPosicion, recorridoEsCero, compararUnidades } from '../src/lib/agrotrackReporteFilas.js';
+
+test('recorrido cero distingue cero medido de ausencia de datos', () => {
+  assert.equal(recorridoEsCero({ km_recorridos: 0 }), true);
+  assert.equal(recorridoEsCero({ km_recorridos: '0' }), true);
+  assert.equal(recorridoEsCero({ km_recorridos: 0, sin_datos_rango: true }), false);
+  assert.equal(recorridoEsCero({ km_recorridos: null }), false);
+  assert.equal(recorridoEsCero({ km_recorridos: '' }), false);
+  assert.equal(recorridoEsCero({ km_recorridos: 0.01 }), false);
+});
+
+test('unidades Hunter se ordenan por nombre con números naturales', () => {
+  const filas = [{ unidad: 'CASE 10', equipo_id: '2' }, { unidad: 'CASE 2', equipo_id: '1' }];
+  assert.deepEqual(filas.sort(compararUnidades).map((f) => f.unidad), ['CASE 2', 'CASE 10']);
+});
 import { calcularEventosResumidos } from '../src/lib/agrotrackEventosResumidos.js';
 import { recortarVisitasConSql } from '../src/lib/agrotrackVisitasDia.js';
 import { readFileSync } from 'node:fs';
