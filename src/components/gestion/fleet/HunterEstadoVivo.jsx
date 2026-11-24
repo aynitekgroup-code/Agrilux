@@ -6,6 +6,7 @@ import { exportarStatusHunterExcel, geocercaHunter } from '../../../lib/hunterSt
 import { agruparUnidadesHunter, filtrarUnidadesHunter, opcionesFiltrosHunter } from '../../../lib/hunterStatusFiltros';
 import { ControlesFiltroUnidadGrupo } from './reportesComunes';
 
+const COLUMNAS = ['Unidad', 'Área', 'Última posición', 'Estado', 'Velocidad', 'Geocerca', 'Dirección', 'Sincronización'];
 const fecha = (valor) => valor ? new Date(valor).toLocaleString('es-PE', { timeZone: 'America/Lima', dateStyle: 'short', timeStyle: 'short' }) : '—';
 function estado(f, ahora) {
   const edad = ahora - Date.parse(f.fecha);
@@ -183,6 +184,46 @@ export default function HunterEstadoVivo({ empresaId }) {
     {estadoCarga === 'error' && <p role="alert" className="p-5 text-sm text-red-700">{error}</p>}
     {estadoCarga === 'listo' && !filas.length && <p className="p-5 text-sm text-slate-500">No hay posiciones Hunter guardadas para esta empresa.</p>}
     {estadoCarga === 'listo' && filas.length > 0 && !visibles.length && <p className="p-5 text-sm text-slate-500">Ninguna unidad coincide con los filtros.</p>}
-    {estadoCarga === 'listo' && visibles.length > 0 && <div className="max-h-[65vh] overflow-auto"><table className="w-full text-left text-xs text-slate-600"><thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400 shadow-sm"><tr>{['Unidad','Área','Última posición','Estado','Velocidad','Geocerca','Dirección','Sincronización'].map((t) => <th className="whitespace-nowrap px-3 py-2.5 font-bold" key={t}>{t}</th>)}</tr></thead><tbody>{grupos.map(([grupo, unidades]) => <React.Fragment key={grupo}>{agrupar !== 'ninguno' && <tr className="bg-slate-100"><th colSpan={8} className="px-3 py-2 text-left font-semibold text-slate-700">{grupo} · {unidades.length} unidad{unidades.length === 1 ? '' : 'es'}</th></tr>}{unidades.map((f) => { const categoria = estado(f, ahora); return <tr className="border-t border-slate-100 hover:bg-slate-50/70" key={f.equipo_id}><td className="whitespace-nowrap px-3 py-1.5 font-bold text-slate-800">{f.unidad || f.equipo_id}</td><td className="whitespace-nowrap px-3 py-1.5">{f.area_operativa || 'Sin área asignada'}</td><td className="whitespace-nowrap px-3 py-1.5 tabular-nums">{fecha(f.fecha)}</td><td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${tonos[categoria]}`}><span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />{categoria}</span></td><td className="whitespace-nowrap px-3 py-1.5 tabular-nums">{f.velocidad_kmh == null ? '—' : `${f.velocidad_kmh} km/h`}</td><td className="whitespace-nowrap px-3 py-1.5">{geocercaHunter(f)}</td><td className="min-w-[180px] max-w-xs truncate px-3 py-1.5" title={f.direccion || ''}>{f.direccion || '—'}</td><td className="whitespace-nowrap px-3 py-1.5 tabular-nums">{fecha(f.actualizado_en)}</td></tr>; })}</React.Fragment>)}</tbody></table></div>}
+    {estadoCarga === 'listo' && visibles.length > 0 && (
+      <div className="max-h-[65vh] overflow-auto">
+        <table className="w-full text-left text-xs text-slate-600">
+          <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400 shadow-sm">
+            <tr>
+              {COLUMNAS.map((titulo) => <th key={titulo} scope="col" className="whitespace-nowrap px-3 py-2.5 font-bold">{titulo}</th>)}
+            </tr>
+          </thead>
+          {grupos.map(([grupo, unidades]) => (
+            <tbody key={grupo}>
+              {agrupar !== 'ninguno' && (
+                <tr className={agrupar === 'geocerca' ? 'bg-slate-100' : 'bg-emerald-50/70'}>
+                  <th scope="rowgroup" colSpan={COLUMNAS.length} className={`px-3 py-2 text-left font-semibold ${agrupar === 'geocerca' ? 'text-slate-700' : 'text-forest'}`}>
+                    {grupo} · {unidades.length} {unidades.length === 1 ? 'unidad' : 'unidades'}
+                  </th>
+                </tr>
+              )}
+              {unidades.map((f) => {
+                const categoria = estado(f, ahora);
+                return (
+                  <tr className="border-t border-slate-100 hover:bg-slate-50/70" key={f.equipo_id}>
+                    <td className="whitespace-nowrap px-3 py-1.5 font-bold text-slate-800">{f.unidad || f.equipo_id}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5">{f.area_operativa || 'Sin área asignada'}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">{fecha(f.fecha)}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5">
+                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${tonos[categoria]}`}>
+                        <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />{categoria}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">{f.velocidad_kmh == null ? '—' : `${f.velocidad_kmh} km/h`}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5">{geocercaHunter(f)}</td>
+                    <td className="min-w-[180px] max-w-xs truncate px-3 py-1.5" title={f.direccion || ''}>{f.direccion || '—'}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">{fecha(f.actualizado_en)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          ))}
+        </table>
+      </div>
+    )}
   </section>;
 }
