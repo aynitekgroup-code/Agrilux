@@ -30,11 +30,11 @@ const COLUMNAS = [
 ];
 
 function CeldaTiempo({ segundos, pct, clase }) {
-  if (segundos == null) return <td className="px-3 py-2 text-right text-slate-300">—</td>;
+  if (segundos == null) return <td className="px-3 py-1 text-right text-slate-300">—</td>;
   return (
-    <td className="px-3 py-2 text-right">
+    <td className="px-3 py-1 text-right whitespace-nowrap tabular-nums">
       <span className={`font-semibold ${clase}`}>{formatearHMS(segundos)}</span>
-      {pct != null ? <span className="block text-[10px] text-slate-400">{pct}%</span> : null}
+      {pct != null ? <span className="ml-1.5 text-[10px] font-medium text-slate-500">{pct}%</span> : null}
     </td>
   );
 }
@@ -298,11 +298,11 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
                 <tbody>
                   {filasVistas.map((fila) => (
                     <tr key={fila.placa} className="border-b border-slate-50 hover:bg-slate-50/60">
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-1 whitespace-nowrap">
                         <span className="font-bold text-slate-800">{fila.placa}</span>
-                        {fila.sin_datos_rango ? <span className="block text-[10px] text-amber-700">Sin datos en el rango</span> : null}
+                        {fila.sin_datos_rango ? <span className="ml-2 text-[10px] text-amber-700">Sin datos</span> : null}
                       </td>
-                      <td className="px-3 py-2 text-slate-600">{codigoArea(fila.unidad, fila.placa) || '—'}</td>
+                      <td className="px-3 py-1 text-slate-600">{codigoArea(fila.unidad, fila.placa) || '—'}</td>
                       <CeldaTiempo segundos={fila.stop} pct={fila.pct_stop} clase="text-slate-700" />
                       <CeldaTiempo segundos={fila.idle} pct={fila.pct_idle} clase="text-amber-600" />
                       <CeldaTiempo segundos={fila.drive} pct={fila.pct_drive} clase="text-emerald-700" />
@@ -317,19 +317,19 @@ export default function FleetEventsSummary({ empresaId, periodo = null, fuente =
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       {totales.total > 0 ? formatearHMS(totales.stop) : '—'}
-                      <span className="block text-[10px] font-normal text-slate-400">
+                      <span className="ml-1.5 text-[10px] font-normal text-slate-500">
                         {totales.pct_stop != null ? `${totales.pct_stop}%` : '—'}
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-right text-amber-600">
                       {totales.total > 0 ? formatearHMS(totales.idle) : '—'}
-                      <span className="block text-[10px] font-normal text-slate-400">
+                      <span className="ml-1.5 text-[10px] font-normal text-slate-500">
                         {totales.pct_idle != null ? `${totales.pct_idle}%` : '—'}
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-right text-emerald-700">
                       {totales.total > 0 ? formatearHMS(totales.drive) : '—'}
-                      <span className="block text-[10px] font-normal text-slate-400">
+                      <span className="ml-1.5 text-[10px] font-normal text-slate-500">
                         {totales.pct_drive != null ? `${totales.pct_drive}%` : '—'}
                       </span>
                     </td>
