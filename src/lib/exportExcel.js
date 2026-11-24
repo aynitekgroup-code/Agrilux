@@ -75,7 +75,7 @@ function horas(segundos) {
   return Math.round((Number(segundos || 0) / 3600) * 100) / 100;
 }
 
-async function descargarActividadConFormato(wb, nombre, cantidadFilas, columnaRecorrido, ultimaColumna) {
+async function descargarActividadConFormato(wb, nombre, cantidadFilas, columnas) {
   if (!cantidadFilas) {
     XLSX.writeFile(wb, nombre);
     return;
@@ -97,17 +97,27 @@ async function descargarActividadConFormato(wb, nombre, cantidadFilas, columnaRe
     throw new Error('No se pudo aplicar el resaltado al Excel de actividad.');
   }
 
-  // $ fija la columna Recorrido para toda la fila; A2 se desplaza con cada
-  // celda. ISNUMBER evita que Excel trate una celda vacía como cero.
-  const recorrido = `$${columnaRecorrido}2`;
-  const formula = `OR(AND(ISNUMBER(${recorrido}),${recorrido}=0),AND(ISNUMBER(A2),A2=0))`;
-  const regla = `<conditionalFormatting sqref="A2:${ultimaColumna}${cantidadFilas + 1}">`
+  // $ fija la columna Recorrido como única condición de toda la fila.
+  const recorrido = `$${XLSX.utils.encode_col(columnas.indexOf('Recorrido (km)'))}2`;
+  const rango = XLSX.utils.encode_range({ s: { c: 0, r: 1 }, e: { c: columnas.length - 1, r: cantidadFilas } });
+  // ISNUMBER evita que Excel trate una celda vacía como cero.
+  const formula = `AND(ISNUMBER(${recorrido}),${recorrido}=0)`;
+  const reglaRecorrido = `<conditionalFormatting sqref="${rango}">`
     + `<cfRule type="expression" dxfId="0" priority="1"><formula>${formula}</formula></cfRule>`
     + '</conditionalFormatting>';
-  const rojo = '<dxfs count="1"><dxf><font><color rgb="FFFFFFFF"/></font>'
-    + '<fill><patternFill><bgColor rgb="FFFF0000"/></patternFill></fill></dxf></dxfs>';
-  zip.file(hoja, xmlHoja.replace(insertarAntesDe, (inicio) => regla + inicio));
-  zip.file(estilos, xmlEstilos.replace(sinEstilosDiferenciales, rojo));
+
+  // La regla de Alertas solo cambia el texto y se puede combinar con el fondo.
+  const columnaAlertas = XLSX.utils.encode_col(columnas.indexOf('Alertas'));
+  const alertas = `${columnaAlertas}2`;
+  const reglaAlertas = `<conditionalFormatting sqref="${alertas}:${columnaAlertas}${cantidadFilas + 1}">`
+    + `<cfRule type="expression" dxfId="1" priority="2"><formula>AND(ISNUMBER(${alertas}),${alertas}&gt;0)</formula></cfRule>`
+    + '</conditionalFormatting>';
+  // Misma paleta que en el reporte: fondo red-50 y texto de alertas red-700.
+  const estilosResaltado = '<dxfs count="2">'
+    + '<dxf><fill><patternFill><bgColor rgb="FFFEF2F2"/></patternFill></fill></dxf>'
+    + '<dxf><font><color rgb="FFB91C1C"/></font></dxf></dxfs>';
+  zip.file(hoja, xmlHoja.replace(insertarAntesDe, (inicio) => reglaRecorrido + reglaAlertas + inicio));
+  zip.file(estilos, xmlEstilos.replace(sinEstilosDiferenciales, estilosResaltado));
 
   const blob = await zip.generateAsync({
     type: 'blob', compression: 'DEFLATE',
@@ -137,7 +147,7 @@ export async function exportarActividadExcel(filas, { modo = 'dia', rangoTexto =
       'Período': etiquetaPeriodoReporte(f, modo),
       'Placa': f.placa,
       'Área': codigoArea(f.unidad, f.placa) || '',
-      'Recorrido (km)': f.sin_datos_rango || f.km_recorridos == null ? '' : Number(f.km_recorridos),
+      'Recorrido (km)': String(f.km_recorridos ?? '').trim() === '' ? '' : Number(f.km_recorridos),
       // "Encendido" se quitó (7:47 a. m.): duplicaba "Horas prendido"
       // (encendido = viaje + ralentí, criterio único del reporte).
       'Horas prendido (h)': f.sin_datos_rango ? '' : horas(Number(f.viaje_segundos || 0) + Number(f.ralenti_segundos || 0)),
@@ -187,7 +197,7 @@ export async function exportarActividadExcel(filas, { modo = 'dia', rangoTexto =
     { Concepto: 'Ralentí', Detalle: 'Encendido y velocidad <= 5 km/h' },
     { Concepto: 'Encendido', Detalle: 'Viaje + Ralentí (evento no indica estacionado/apagado)' },
     { Concepto: 'Recorrido', Detalle: 'Haversine entre puntos consecutivos, tramos <= 10 min, saltos >= 5 km descartados' },
-    { Concepto: 'Resaltado rojo', Detalle: 'Recorrido de 0 km: fila completa. Si el recorrido no es cero, solo se resaltan las celdas con un cero numérico.' },
+    { Concepto: 'Resaltado rojo', Detalle: 'Fondo rojo suave en las filas con 0 km; texto rojo en los conteos de alertas mayores que cero.' },
     { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
     { Concepto: 'Generado', Detalle: new Date().toLocaleString('es-PE') },
   ];
@@ -197,12 +207,7 @@ export async function exportarActividadExcel(filas, { modo = 'dia', rangoTexto =
 
   const etiquetaRango = (rangoTexto || 'todo').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
   const nombre = `Agrilux_Actividades_${etiquetaRango || 'rango'}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-  const columnas = Object.keys(datos[0]);
-  await descargarActividadConFormato(
-    wb, nombre, filas.length,
-    XLSX.utils.encode_col(columnas.indexOf('Recorrido (km)')),
-    XLSX.utils.encode_col(columnas.length - 1),
-  );
+  await descargarActividadConFormato(wb, nombre, filas.length, Object.keys(datos[0]));
 }
 
 /**

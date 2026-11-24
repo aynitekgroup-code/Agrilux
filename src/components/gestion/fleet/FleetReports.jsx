@@ -39,6 +39,18 @@ function numero(valor, decimales = 1) {
   return n.toLocaleString('es-PE', { minimumFractionDigits: decimales, maximumFractionDigits: decimales });
 }
 
+function esCero(valor) {
+  return valor === 0 || (typeof valor === 'string' && valor.trim() !== '' && Number(valor) === 0);
+}
+
+function CeldaMetricaActividad({ valor, formato, className = '' }) {
+  return (
+    <td className={`px-3 py-2 text-right ${className}`}>
+      {valor == null || valor === '' ? '—' : formato(valor)}
+    </td>
+  );
+}
+
 export default function FleetReports({ empresaId, empresaNombre = '', periodo = null, vehicles = [], fuente = 'real' }) {
   // Rango libre con fecha Y hora (pedido por el Ing. Carlos Perez): dos
   // buscadores datetime-local en hora de Perú.
@@ -488,33 +500,40 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
                 </tr>
               </thead>
               <tbody>
-                {filasTabla.map((fila, i) => (
-                  <tr key={`${fila.placa}-${fila.periodo || 'total'}-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
-                    <td className="px-3 py-2">
-                      <span className="font-bold text-slate-800">{fila.placa}</span>
-                      {fila.sin_datos_rango ? <span className="block text-[10px] text-amber-700">Sin datos en el rango · horas no disponibles</span> : null}
-                    </td>
-                    <td className="px-3 py-2 text-slate-600">{codigoArea(fila.unidad, fila.placa) || '—'}</td>
-                    <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-600">
-                      {etiquetaPeriodoReporte(fila, 'libre')}
-                      {modoReporte !== 'tiempo-real' && horarioPeriodo(fila.periodo) ? (
-                        <span className="block text-[10px] font-normal text-slate-400">{horarioPeriodo(fila.periodo)}</span>
-                      ) : null}
-                    </td>
-                    <td className={`px-3 py-2 text-right font-semibold tabular-nums ${recorridoEsCero(fila) ? 'bg-red-100 text-red-800' : ''}`} title={fila.sin_datos_rango ? 'No hay datos en el rango' : recorridoEsCero(fila) ? 'Recorrido medido igual a cero' : undefined}>{fila.sin_datos_rango || fila.km_recorridos == null || String(fila.km_recorridos).trim() === '' ? '—' : numero(fila.km_recorridos, 1)}</td>
-                    <td className="px-3 py-2 text-right font-bold text-slate-800">{fila.sin_datos_rango ? '—' : formatearDuracion(fila.prendido_segundos)}</td>
-                    <td className="px-3 py-2 text-right">{fila.sin_datos_rango ? '—' : formatearDuracion(fila.viaje_segundos)}</td>
-                    <td className="px-3 py-2 text-right">{fila.sin_datos_rango ? '—' : formatearDuracion(fila.ralenti_segundos)}</td>
-                    <td className="px-3 py-2 text-right">{fila.vel_max_kmh == null ? '—' : `${numero(fila.vel_max_kmh, 0)} km/h`}</td>
-                    <td className="px-3 py-2 text-right">
-                      {fila.sin_datos_rango ? '—' : Number(fila.alertas) > 0 ? (
-                        <span className="font-bold text-red-600">{fila.alertas}</span>
-                      ) : (
-                        <span className="text-slate-300">0</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {filasTabla.map((fila, i) => {
+                  const recorridoCero = esCero(fila.km_recorridos);
+                  const medido = (valor) => fila.sin_datos_rango ? null : valor;
+
+                  return (
+                    <tr
+                      key={`${fila.placa}-${fila.periodo || 'total'}-${i}`}
+                      className={`border-b ${recorridoCero
+                        ? 'border-red-100 bg-red-50 hover:bg-red-100/60'
+                        : 'border-slate-50 hover:bg-slate-50/60'}`}
+                    >
+                      <td className="px-3 py-2">
+                        <span className="font-bold text-slate-800">{fila.placa}</span>
+                        {fila.sin_datos_rango ? <span className="block text-[10px] text-amber-700">Sin datos en el rango · horas no disponibles</span> : null}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">{codigoArea(fila.unidad, fila.placa) || '—'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-600">
+                        {etiquetaPeriodoReporte(fila, 'libre')}
+                        {modoReporte !== 'tiempo-real' && horarioPeriodo(fila.periodo) ? (
+                          <span className="block text-[10px] font-normal text-slate-400">{horarioPeriodo(fila.periodo)}</span>
+                        ) : null}
+                      </td>
+                      <CeldaMetricaActividad valor={fila.km_recorridos} formato={numero} className="font-semibold" />
+                      <CeldaMetricaActividad valor={medido(fila.prendido_segundos)} formato={formatearDuracion} className="font-bold" />
+                      <CeldaMetricaActividad valor={medido(fila.viaje_segundos)} formato={formatearDuracion} />
+                      <CeldaMetricaActividad valor={medido(fila.ralenti_segundos)} formato={formatearDuracion} />
+                      <CeldaMetricaActividad valor={medido(fila.vel_max_kmh)} formato={(valor) => `${numero(valor, 0)} km/h`} />
+                      <CeldaMetricaActividad
+                        valor={medido(fila.alertas)}
+                        formato={(valor) => Number(valor) > 0 ? <span className="font-semibold text-red-700">{valor}</span> : valor}
+                      />
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr className="bg-slate-50 text-slate-700 font-bold">
