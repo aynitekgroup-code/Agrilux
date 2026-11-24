@@ -50,6 +50,7 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
   const [error, setError] = useState(null);
   const [rangoTexto, setRangoTexto] = useState('');
   const [descargaError, setDescargaError] = useState(null);
+  const [descargandoExcel, setDescargandoExcel] = useState(false);
   const [generadoEn, setGeneradoEn] = useState(null);
   const [resumenIA, setResumenIA] = useState(null);
   const [resumenCargando, setResumenCargando] = useState(false);
@@ -230,11 +231,14 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
   // necesita cuando el usuario pide el archivo.
   const descargarExcel = async () => {
     setDescargaError(null);
+    setDescargandoExcel(true);
     try {
       const { exportarActividadExcel } = await import('../../../lib/exportExcel');
-      exportarActividadExcel(filasOrdenadas, { modo: 'libre', rangoTexto, placa });
+      await exportarActividadExcel(filasOrdenadas, { modo: 'libre', rangoTexto, placa });
     } catch (e) {
       setDescargaError(e?.message || 'No se pudo generar el archivo de Excel.');
+    } finally {
+      setDescargandoExcel(false);
     }
   };
 
@@ -314,10 +318,11 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
             <button
               type="button"
               onClick={descargarExcel}
-              disabled={!puedeExportar}
+              disabled={!puedeExportar || descargandoExcel}
               className="inline-flex items-center gap-1.5 rounded-lg border border-forest bg-forest px-2.5 py-1.5 text-[11px] font-semibold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              <FileSpreadsheet size={13} /> Descargar Excel
+              {descargandoExcel ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />}
+              {descargandoExcel ? 'Generando Excel…' : 'Descargar Excel'}
             </button>
           </div>
         </div>

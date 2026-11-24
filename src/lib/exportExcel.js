@@ -75,13 +75,59 @@ function horas(segundos) {
   return Math.round((Number(segundos || 0) / 3600) * 100) / 100;
 }
 
+async function descargarActividadConFormato(wb, nombre, cantidadFilas, columnaRecorrido, ultimaColumna) {
+  if (!cantidadFilas) {
+    XLSX.writeFile(wb, nombre);
+    return;
+  }
+
+  // SheetJS CE no escribe rellenos. Agregamos formato condicional de Excel
+  // al XLSX que acaba de generar, sin convertir los números en texto.
+  const { default: JSZip } = await import('jszip');
+  const zip = await JSZip.loadAsync(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
+  const hoja = 'xl/worksheets/sheet1.xml'; // Actividades es la primera hoja.
+  const estilos = 'xl/styles.xml';
+  const [xmlHoja, xmlEstilos] = await Promise.all([
+    zip.file(hoja).async('string'),
+    zip.file(estilos).async('string'),
+  ]);
+  const sinEstilosDiferenciales = '<dxfs count="0"/>';
+  const insertarAntesDe = /<ignoredErrors\b|<\/worksheet>/;
+  if (!xmlEstilos.includes(sinEstilosDiferenciales) || !insertarAntesDe.test(xmlHoja)) {
+    throw new Error('No se pudo aplicar el resaltado al Excel de actividad.');
+  }
+
+  // $ fija la columna Recorrido para toda la fila; A2 se desplaza con cada
+  // celda. ISNUMBER evita que Excel trate una celda vacía como cero.
+  const recorrido = `$${columnaRecorrido}2`;
+  const formula = `OR(AND(ISNUMBER(${recorrido}),${recorrido}=0),AND(ISNUMBER(A2),A2=0))`;
+  const regla = `<conditionalFormatting sqref="A2:${ultimaColumna}${cantidadFilas + 1}">`
+    + `<cfRule type="expression" dxfId="0" priority="1"><formula>${formula}</formula></cfRule>`
+    + '</conditionalFormatting>';
+  const rojo = '<dxfs count="1"><dxf><font><color rgb="FFFFFFFF"/></font>'
+    + '<fill><patternFill><bgColor rgb="FFFF0000"/></patternFill></fill></dxf></dxfs>';
+  zip.file(hoja, xmlHoja.replace(insertarAntesDe, (inicio) => regla + inicio));
+  zip.file(estilos, xmlEstilos.replace(sinEstilosDiferenciales, rojo));
+
+  const blob = await zip.generateAsync({
+    type: 'blob', compression: 'DEFLATE',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const enlace = document.createElement('a');
+  enlace.href = url;
+  enlace.download = nombre;
+  enlace.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
 /**
  * Reporte de actividad de flota (FASE 3) a Excel, con las mismas columnas de
  * la consola y una hoja de criterio para que el archivo se entienda solo.
  * @param {Array} filas  filas de agrotrack_actividad_flota
  * @param {{modo?: string, rangoTexto?: string, placa?: string}} opciones
  */
-export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', placa = '' } = {}) {
+export async function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', placa = '' } = {}) {
   const wb = XLSX.utils.book_new();
 
   const datos = (filas || []).map((f) => {
@@ -127,7 +173,7 @@ export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', p
   const ws = XLSX.utils.json_to_sheet(datos);
   ws['!cols'] = [
     { wch: 14 }, { wch: 12 }, { wch: 30 }, { wch: 14 }, { wch: 17 },
-    { wch: 16 }, { wch: 12 }, { wch: 11 }, { wch: 15 }, { wch: 9 }, { wch: 12 },
+    { wch: 16 }, { wch: 12 }, { wch: 11 }, { wch: 15 }, { wch: 9 }, { wch: 12 }, { wch: 42 },
   ];
   XLSX.utils.book_append_sheet(wb, ws, 'Actividades');
 
@@ -141,6 +187,7 @@ export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', p
     { Concepto: 'Ralentí', Detalle: 'Encendido y velocidad <= 5 km/h' },
     { Concepto: 'Encendido', Detalle: 'Viaje + Ralentí (evento no indica estacionado/apagado)' },
     { Concepto: 'Recorrido', Detalle: 'Haversine entre puntos consecutivos, tramos <= 10 min, saltos >= 5 km descartados' },
+    { Concepto: 'Resaltado rojo', Detalle: 'Recorrido de 0 km: fila completa. Si el recorrido no es cero, solo se resaltan las celdas con un cero numérico.' },
     { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
     { Concepto: 'Generado', Detalle: new Date().toLocaleString('es-PE') },
   ];
@@ -149,7 +196,13 @@ export function exportarActividadExcel(filas, { modo = 'dia', rangoTexto = '', p
   XLSX.utils.book_append_sheet(wb, wsCriterio, 'Criterio');
 
   const etiquetaRango = (rangoTexto || 'todo').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
-  XLSX.writeFile(wb, `Agrilux_Actividades_${etiquetaRango || 'rango'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  const nombre = `Agrilux_Actividades_${etiquetaRango || 'rango'}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  const columnas = Object.keys(datos[0]);
+  await descargarActividadConFormato(
+    wb, nombre, filas.length,
+    XLSX.utils.encode_col(columnas.indexOf('Recorrido (km)')),
+    XLSX.utils.encode_col(columnas.length - 1),
+  );
 }
 
 /**
