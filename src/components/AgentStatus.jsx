@@ -33,7 +33,7 @@ export default function AgentStatus() {
   if (!tieneActividad) return null;
 
   return (
-    <div className="bg-gradient-to-r from-primary/5 to-emerald-50 rounded-2xl p-4 border border-primary/10">
+    <div className="mb-3 rounded-2xl border border-primary/10 bg-gradient-to-r from-primary/5 to-emerald-50 p-4">
       {/* Header */}
       <div className="flex items-center gap-2 mb-3">
         <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">

@@ -56,6 +56,8 @@ export default function WebLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [userProfileModalOpen, setUserProfileModalOpen] = useState(false);
   const esAdmin = user?.email === ADMIN_EMAIL;
+  const esFlota = location.pathname.startsWith('/gestion/vehiculos-flota');
+  const esGestion = location.pathname === '/gestion';
 
   const handleLogout = async () => {
     await logout();
@@ -190,7 +192,7 @@ export default function WebLayout({ children }) {
       {/* ── Contenido principal ──────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header superior */}
-        <header className="bg-emerald-50/70 border-b border-emerald-100 sticky top-0 z-40 px-6 py-3 flex items-center justify-between gap-4">
+        <header className="sticky top-0 z-40 flex items-center justify-between gap-4 border-b border-emerald-100 bg-emerald-50 px-5 py-2.5 shadow-sm">
           <div className="flex items-center gap-3 min-w-0">
             <h1 className="text-base font-semibold text-forest truncate">
               {navItems.find((i) =>
@@ -340,11 +342,9 @@ export default function WebLayout({ children }) {
         </header>
 
         {/* Área de contenido */}
-        <main className={`flex-1 py-5 overflow-y-auto overflow-x-hidden ${location.pathname.startsWith('/gestion/vehiculos-flota') ? 'px-2 sm:px-3' : 'px-6'}`}>
+        <main className={`flex-1 overflow-y-auto overflow-x-hidden ${esFlota ? 'px-2 py-3 sm:px-3' : esGestion ? 'px-4 py-3 sm:px-5' : 'px-6 py-5'}`}>
           <div className="w-full max-w-none min-w-0">
-            <div className="mb-4">
-              <AgentStatus />
-            </div>
+            <AgentStatus />
             {children}
           </div>
         </main>
