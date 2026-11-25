@@ -4,17 +4,11 @@ import { supabase } from '../../../lib/supabase';
 import { compararUnidades } from '../../../lib/agrotrackReporteFilas';
 import { exportarStatusHunterExcel, geocercaHunter } from '../../../lib/hunterStatusExport';
 import { agruparUnidadesHunter, filtrarUnidadesHunter, opcionesFiltrosHunter } from '../../../lib/hunterStatusFiltros';
+import { estadoHunter as estado } from '../../../lib/hunterEstado';
 import { ControlesFiltroUnidadGrupo } from './reportesComunes';
 
 const COLUMNAS = ['Unidad', 'Área', 'Última posición', 'Estado', 'Velocidad', 'Geocerca', 'Dirección', 'Sincronización'];
 const fecha = (valor) => valor ? new Date(valor).toLocaleString('es-PE', { timeZone: 'America/Lima', dateStyle: 'short', timeStyle: 'short' }) : '—';
-function estado(f, ahora) {
-  const edad = ahora - Date.parse(f.fecha);
-  if (!Number.isFinite(edad) || edad < -300000 || edad > 30 * 60000) return 'Sin reporte reciente';
-  if (f.ignicion === false) return 'Apagado';
-  if (f.ignicion === true && f.velocidad_kmh != null) return Number(f.velocidad_kmh) > 5 ? 'En movimiento' : 'Encendido / lento';
-  return 'Desconocido';
-}
 export default function HunterEstadoVivo({ empresaId }) {
   const [filas, setFilas] = useState([]);
   const [estadoCarga, setEstadoCarga] = useState('cargando');
@@ -88,7 +82,7 @@ export default function HunterEstadoVivo({ empresaId }) {
     const timer = setInterval(() => cargar(true), 60000);
     return () => { activo = false; clearInterval(timer); };
   }, [empresaId, intento]);
-  const categorias = ['En movimiento', 'Encendido / lento', 'Apagado', 'Sin reporte reciente', 'Desconocido'];
+  const categorias = ['En movimiento', 'Encendido / movimiento lento', 'Encendido / detenido', 'Apagado', 'Sin reporte reciente', 'Desconocido'];
   const conteos = useMemo(() => Object.fromEntries(categorias.map((c) => [c, filas.filter((f) => estado(f, ahora) === c).length])), [filas, ahora]);
   const ordenadas = useMemo(() => [...filas].sort(compararUnidades), [filas]);
   const opciones = useMemo(() => opcionesFiltrosHunter(ordenadas), [ordenadas]);
@@ -113,7 +107,7 @@ export default function HunterEstadoVivo({ empresaId }) {
     () => agruparUnidadesHunter(visibles, agrupar, grupoSeleccionado),
     [visibles, agrupar, grupoSeleccionado],
   );
-  const tonos = { 'En movimiento': 'bg-emerald-50 text-emerald-700 border-emerald-200', 'Encendido / lento': 'bg-amber-50 text-amber-700 border-amber-200', Apagado: 'bg-slate-100 text-slate-600 border-slate-200', 'Sin reporte reciente': 'bg-rose-50 text-rose-700 border-rose-200', Desconocido: 'bg-slate-50 text-slate-500 border-slate-200' };
+  const tonos = { 'En movimiento': 'bg-emerald-50 text-emerald-700 border-emerald-200', 'Encendido / movimiento lento': 'bg-amber-50 text-amber-700 border-amber-200', 'Encendido / detenido': 'bg-orange-50 text-orange-700 border-orange-200', Apagado: 'bg-slate-100 text-slate-600 border-slate-200', 'Sin reporte reciente': 'bg-rose-50 text-rose-700 border-rose-200', Desconocido: 'bg-slate-50 text-slate-500 border-slate-200' };
   async function descargar() {
     setErrorDescarga('');
     try { await exportarStatusHunterExcel(visibles, { fecha, clasificar: (f) => estado(f, ahora) }); }
@@ -173,7 +167,7 @@ export default function HunterEstadoVivo({ empresaId }) {
         )}
         <p className="pb-1.5 text-xs text-slate-500 sm:ml-auto">{visibles.length} de {filas.length} unidades · Hora Perú</p>
       </div>
-      <p className="text-[11px] text-slate-500">Sin reporte reciente: última posición mayor a 30 min o fecha no válida. Las categorías son orientativas y no equivalen al resumen histórico de Hunter.</p>
+      <p className="text-[11px] text-slate-500">Clasificación orientativa de la última posición: detenido = 0 km/h; movimiento lento = más de 0 hasta 5 km/h; movimiento = más de 5 km/h. Estar detenido o lento no determina si la máquina está trabajando. Sin reporte reciente: posición mayor a 30 min o fecha no válida. No equivale al historial de Hunter.</p>
       {!geocercasDisponibles && <p role="status" className="text-xs text-amber-700">Para mostrar geocercas, ejecuta scripts/agrotrack-hunter-geocercas.sql en Supabase.</p>}
       {!departamentosDisponibles && <p role="status" className="text-xs text-amber-700">Para mostrar departamentos, ejecuta scripts/agrotrack-departamentos-peru.sql en Supabase.</p>}
       {!gruposDisponibles && <p role="status" className="text-xs text-amber-700">Para usar grupos Hunter, ejecuta scripts/agrotrack-hunter-grupos.sql en Supabase.</p>}
