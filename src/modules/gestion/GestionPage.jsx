@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext';
 import { supabase } from '../../lib/supabase';
 import {
@@ -116,6 +116,10 @@ export default function Gestion() {
       navigate('/gestion/vehiculos-flota');
     }, 300);
   };
+
+  if (String(empresaActiva?.nombre || '').trim().toLowerCase() === 'pomalca') {
+    return <Navigate to="/gestion/vehiculos-flota" replace />;
+  }
 
   return (
     <main className="flex-1 max-w-[1580px] w-full mx-auto px-3 py-3 sm:px-4 lg:px-5">

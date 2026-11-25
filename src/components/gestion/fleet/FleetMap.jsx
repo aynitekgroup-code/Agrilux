@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CircleMarker, GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
+import { diaMapaPeru } from '../../../lib/fechasMapa';
 import L from 'leaflet';
 import {
   AlertCircle,
@@ -2053,6 +2054,10 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             </p>
           ) : null}
         </label>
+        <div className="flex flex-wrap gap-2" aria-label="Fechas rápidas para el recorrido">
+          {[['Hoy', 0], ['Ayer', 1]].map(([label, dias]) => <button key={label} type="button" onClick={() => { const dia = diaMapaPeru(Date.now(), dias); setRutaDesde(`${dia}T00:00`); setRutaHasta(`${dia}T23:59`); }} className="min-h-10 rounded-lg border border-emerald-300 bg-white px-3 text-xs font-bold text-emerald-800 hover:bg-emerald-50">{label}</button>)}
+          <span className="self-center text-[11px] text-slate-500">O elige fechas y horas abajo (Perú).</span>
+        </div>
         <div className="grid grid-cols-2 gap-2">
           <label className="flex flex-col gap-1 text-[11px] font-semibold text-[#426C50]">
             Desde · hora de Perú
@@ -2442,7 +2447,15 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </div>
       ) : null}
 
-
+      {consolaVisible && vehicles.length ? (
+        <div className="relative px-3 pb-2 lg:hidden">
+          <label className="sr-only" htmlFor="busqueda-maquina-movil">Buscar máquina o placa</label>
+          <input id="busqueda-maquina-movil" type="search" value={busquedaRuta} onChange={(e) => setBusquedaRuta(e.target.value)} placeholder="Buscar máquina o placa…" autoComplete="off" className="min-h-11 w-full rounded-xl border border-emerald-300 bg-white px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" />
+          {busquedaRuta.trim() ? <div className="absolute left-3 right-3 top-full z-[1001] max-h-60 overflow-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+            {resultadosRuta.length ? resultadosRuta.map((v) => <button key={v.placa} type="button" onClick={() => selectUnidadRuta(v.placa)} className="block min-h-11 w-full border-b border-slate-100 px-3 py-2 text-left text-sm text-slate-800 hover:bg-emerald-50">{v.placa}{v.descripcion ? ` · ${v.descripcion}` : ''}</button>) : <p className="p-3 text-sm text-slate-600">No encontramos máquinas con ese nombre.</p>}
+          </div> : null}
+        </div>
+      ) : null}
       <div
         className={vehicles.length
           ? panelUnidadesContraido
@@ -2453,7 +2466,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         {vehicles.length ? (
           panelUnidadesContraido ? (
             <aside
-              className="flex flex-col items-center gap-2 self-start rounded-2xl border border-slate-100 bg-white p-2 shadow-sm"
+              className="order-first flex flex-col items-center gap-2 self-start rounded-2xl border border-slate-100 bg-white p-2 shadow-sm"
               aria-label="Expandir panel de unidades"
             >
               <button
@@ -2489,7 +2502,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             </aside>
           ) : (
             <aside
-              className="min-w-0 space-y-1 max-h-[660px] overflow-y-auto scroll-consola pr-1"
+              className="order-last min-w-0 space-y-1 max-h-[660px] overflow-y-auto scroll-consola pr-1 lg:order-first"
               aria-label="Panel de unidades"
             >
               <div className="sticky top-0 z-10 flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-white px-2 py-1 shadow-sm">
@@ -2547,15 +2560,15 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             </aside>
           )
         ) : null}
-        <div id="mapa-flota" className={vehicles.length ? 'relative z-0 isolate scroll-mt-4 min-w-0 overflow-hidden rounded-[14px] border border-[#A7C7AB] bg-white shadow-sm' : 'relative z-0 isolate scroll-mt-4 overflow-hidden rounded-[14px] border border-[#A7C7AB] bg-white shadow-sm'}>
-        {aislarUnidad && selectedId ? <button type="button" onClick={mostrarTodasLasUnidades} className="absolute right-3 top-3 z-[1000] rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow">Ver todas las máquinas</button> : null}
+        <div id="mapa-flota" className={`${panelUnidadesContraido ? 'order-last' : 'order-first lg:order-last'} relative z-0 isolate scroll-mt-4 min-w-0 overflow-hidden rounded-[14px] border border-[#A7C7AB] bg-white shadow-sm`}>
+        <button type="button" onClick={mostrarTodasLasUnidades} className="absolute right-3 top-3 z-[1000] rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow">Ver todas las máquinas</button>
         <MapContainer
-          className={vistaSatelite ? 'fleet-map fleet-map--satelite' : 'fleet-map'}
+          className={`${vistaSatelite ? 'fleet-map fleet-map--satelite' : 'fleet-map'} h-[55vh] min-h-[340px] lg:h-[660px]`}
           center={[-6.78, -79.83]}
           zoom={12}
           maxZoom={21}
           scrollWheelZoom
-          style={{ width: '100%', height: vehicles.length ? 660 : 540, borderRadius: 14, background: '#E7EDE1' }}
+          style={{ width: '100%', borderRadius: 14, background: '#E7EDE1' }}
         >
           <TileLayer
             maxZoom={21}
@@ -2730,6 +2743,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                 ? formatearFechaHora(vehicle.ultima_fecha)
                 : '');
             const geocercaPopup = geocercaActualUnidad(vehicle);
+            const posicionAntigua = fuentePosiciones === 'real' && !describirPosicion(vehicle.ultima_fecha, ahoraPosiciones).reciente;
             return (
               <Marker
                 key={vehicle.id}
@@ -2762,7 +2776,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                     <p className="text-slate-600">{vehicle.descripcion || vehicle.modelo || '—'}</p>
                     <div className="flex items-center gap-1.5">
                       <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ background: meta.dot }} />
-                      <span className="text-slate-700 font-medium">{meta.label}</span>
+                      <span className="text-slate-700 font-medium">{posicionAntigua ? 'Sin reporte reciente' : meta.label}</span>
                       {Number.isFinite(velocidad) && velocidad > 0 ? (
                         <span className="text-slate-500">· {velocidad} km/h</span>
                       ) : null}
@@ -2803,10 +2817,12 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                     {vehicle.nivel_tanque_pct != null ? (
                       <p className="text-slate-500">Tanque: <span className="text-slate-700">{vehicle.nivel_tanque_pct}%</span></p>
                     ) : null}
-                    {fechaPosicion ? <p className="text-slate-500">{fechaPosicion}</p> : null}
+                    <p className="text-slate-500">Último reporte: {fechaPosicion || 'Sin fecha disponible'}</p>
+                    {posicionAntigua ? <p className="text-amber-700">La posición puede estar desactualizada; no indica el estado actual.</p> : null}
                     {fuentePosiciones !== 'real' ? (
                       <p className="text-slate-400">GPS de demostración</p>
                     ) : null}
+                    <button type="button" onClick={() => { onSelect?.(vehicle.placa); setAislarUnidad(true); setSeccionFlota('historicas'); setConsolaSeccion('historicas'); setMostrandoContenidoFlota(true); }} className="mt-2 block w-full rounded-lg bg-emerald-700 px-3 py-2 text-center text-xs font-bold text-white hover:bg-emerald-800">Ver recorrido</button>
                     <button
                       type="button"
                       onClick={() => leerVentanaUnidad(vehicle)}

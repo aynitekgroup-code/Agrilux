@@ -444,7 +444,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
         <div className="space-y-4">
           <SectionHeading
             title="Mapa de flota"
-            description="Posiciones de agrotrack_posiciones sobre el mapa: geocercas, buscador, comandos de voz y recorrido por unidad."
+            description="Busca una máquina para ver su ubicación o consulta sus recorridos en Ubicaciones Históricas."
           >
             {conDatosReales ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide">
@@ -478,11 +478,18 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
         <div className="space-y-4">
           <SectionHeading
             title="Reportes de flota"
-            description="Los reportes pedidos por el Ing. Carlos Perez: Actividad por día/mes (recorrido, horas prendido, hora de viaje y ralentí), Eventos resumidos Stop/Idle/Drive, Status de maquinaria (estado de unidades con su geocerca actual), reportes de geocercas (con detalle de visitas y respaldo del rango) y Unidades sin reportar (Zonar: Unidades - Sin Reportar), todos con datos reales y exportables a Excel."
+            description="Consulta actividad, estado y unidades sin reportar. Los reportes de Hunter y Zonar se muestran por separado."
           />
+          <nav aria-label="Ir a reportes por proveedor" className="flex flex-wrap gap-2 rounded-xl border border-emerald-100 bg-white p-3 text-sm">
+            <a href="#reportes-hunter" className="rounded-lg border border-emerald-300 px-3 py-2 font-semibold text-emerald-800 hover:bg-emerald-50">Hunter 360</a>
+            <a href="#reportes-zonar" className="rounded-lg border border-emerald-300 px-3 py-2 font-semibold text-emerald-800 hover:bg-emerald-50">Zonar</a>
+          </nav>
+          <div id="reportes-hunter" className="scroll-mt-4 space-y-4">
           <HunterActividad empresaId={empresa_activa_id} />
           <HunterEstadoVivo empresaId={empresa_activa_id} />
           <HunterReports />
+          </div>
+          <div id="reportes-zonar" className="scroll-mt-4 space-y-4">
           <FleetReports
             empresaId={empresa_activa_id}
             empresaNombre={empresaActiva?.nombre || ''}
@@ -505,6 +512,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
             empresaId={empresa_activa_id}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
+          </div>
           <VigiaFlota
             empresaId={empresa_activa_id}
             periodo={conDatosReales ? panel.periodo : null}
@@ -527,7 +535,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
         <div className="space-y-4">
           <SectionHeading
             title="Reportes de geocercas"
-            description="Entradas y salidas de los eventos de Zonar y tiempo dentro de cada lote, calculados con PostGIS sobre las posiciones GPS del periodo cargado."
+            description="Consulta entradas, salidas y tiempo dentro de los lotes, según los datos disponibles de Zonar."
           />
           {/* 14/11/2026: todas las unidades juntas + tabla dinámica de las 6:30. */}
           <ErrorBoundary mensaje="No se pudo dibujar la tabla diaria de geocercas.">
@@ -562,7 +570,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
         <div className="space-y-4">
           <SectionHeading
             title="Control de combustible"
-            description="Niveles de tanque, cargas registradas, comparación real vs. estimada y anomalías detectadas."
+            description="Consulta de combustible. Esta sección aún no tiene una fuente de datos conectada."
           >
             <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide">
               <Bell size={12} /> Sin fuente de datos
