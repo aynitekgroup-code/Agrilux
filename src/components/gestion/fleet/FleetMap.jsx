@@ -485,12 +485,13 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // de las unidades en el mapa (los datos del recorrido histórico no se ocultan).
   const [mostrarUnidadesEnMapa, setMostrarUnidadesEnMapa] = useState(true);
   const [aislarUnidad, setAislarUnidad] = useState(false);
+  const [reinicioBusqueda, setReinicioBusqueda] = useState(0);
   // Panel de unidades junto al mapa: se puede contraer a una franja de iconos
   // para que el mapa gane todo el ancho disponible.
   const [panelUnidadesContraido, setPanelUnidadesContraido] = useState(false);
   // Panel Flota del mapa: menú de secciones (mismo catálogo que la Consola Principal).
   const [seccionFlota, setSeccionFlota] = useState('localizador');
-  const [mostrandoContenidoFlota, setMostrandoContenidoFlota] = useState(false);
+  const [mostrandoContenidoFlota, setMostrandoContenidoFlota] = useState(true);
   // El panel de Configuración solo se muestra cuando se elige desde el menú lateral.
   const [mostrarConfiguracion, setMostrarConfiguracion] = useState(false);
   // Buscador de geocercas del panel: lista desplegable con chevron (estilo Select).
@@ -1868,7 +1869,18 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   };
 
   /* ----- Tablas VI compartidas entre la Consola principal y Mapas ----- */
+  const mostrarTodasLasUnidades = () => {
+    setAislarUnidad(false);
+    setMostrarUnidadesEnMapa(true);
+    setReinicioBusqueda((valor) => valor + 1);
+    setBusquedaRuta('');
+    setFocusRequest(null);
+    onSelect?.('');
+    setFitToken((valor) => valor + 1);
+  };
   const localizadorNodo = vehicles.length ? (
+    <>
+    <button type="button" onClick={mostrarTodasLasUnidades} className="mb-3 w-full rounded-lg border border-emerald-700 bg-emerald-700 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-800">Ver todas las máquinas</button>
     <PanelGruposUnidades
       unidades={vehiclesConPosicion}
       gruposPorPlaca={gruposPorPlaca}
@@ -1880,12 +1892,14 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       guardandoPlaca={guardandoGrupo}
       seleccionadoId={selectedId}
       modoDescripcion={!gruposEditables && !gruposCargando}
+      reinicioBusqueda={reinicioBusqueda}
       onSeleccionar={(placa) => {
         if (onSelect) onSelect(placa);
         enfocarUnidad(placa);
       }}
       onGuardar={guardarGrupoDeUnidad}
     />
+    </>
   ) : null;
 
   const coordenadasNodo = vehicles.length ? (
@@ -2534,7 +2548,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           )
         ) : null}
         <div id="mapa-flota" className={vehicles.length ? 'relative z-0 isolate scroll-mt-4 min-w-0 overflow-hidden rounded-[14px] border border-[#A7C7AB] bg-white shadow-sm' : 'relative z-0 isolate scroll-mt-4 overflow-hidden rounded-[14px] border border-[#A7C7AB] bg-white shadow-sm'}>
-        {aislarUnidad && selectedId ? <button type="button" onClick={() => setAislarUnidad(false)} className="absolute right-3 top-3 z-[1000] rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow">Mostrar todas las unidades</button> : null}
+        {aislarUnidad && selectedId ? <button type="button" onClick={mostrarTodasLasUnidades} className="absolute right-3 top-3 z-[1000] rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow">Ver todas las máquinas</button> : null}
         <MapContainer
           className={vistaSatelite ? 'fleet-map fleet-map--satelite' : 'fleet-map'}
           center={[-6.78, -79.83]}

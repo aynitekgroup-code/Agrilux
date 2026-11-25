@@ -320,10 +320,12 @@ export function PanelGruposUnidades({
   guardandoPlaca = null,
   seleccionadoId = '',
   modoDescripcion = false,
+  reinicioBusqueda = 0,
   onSeleccionar = () => {},
   onGuardar = () => {},
 }) {
   const [busqueda, setBusqueda] = useState('');
+  useEffect(() => { setBusqueda(''); }, [reinicioBusqueda]);
   const [colapsados, setColapsados] = useState({});
   // Desglose visible por defecto: el panel muestra directamente la información.
   const [desgloseAbierto] = useState(true);

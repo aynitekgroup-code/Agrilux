@@ -39,6 +39,32 @@ const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
 const Descargar = lazy(() => import('./pages/Descargar'));
 const EliminarCuenta = lazy(() => import('./pages/EliminarCuenta'));
 
+// Solo cambia el destino de inicio; la membresía y los permisos siguen vigentes.
+function Inicio() {
+  const { user, loading, isAprobado, empresas_disponibles, empresasCargadasUsuario, empresa_activa_id, setEmpresaActiva } = useAuth();
+  const navigate = useNavigate();
+  const [error, setError] = useState('');
+  const pomalca = empresas_disponibles.find((empresa) => String(empresa.nombre || '').trim().toLowerCase() === 'pomalca');
+  const listaCargada = !user || empresasCargadasUsuario === user.uid;
+  useEffect(() => {
+    if (loading || !user || !isAprobado || !listaCargada || !pomalca) return;
+    let cancelado = false;
+    async function abrirMapa() {
+      if (empresa_activa_id !== pomalca.id) {
+        const cambiado = await setEmpresaActiva(pomalca.id);
+        if (cancelado) return;
+        if (!cambiado) { setError('No se pudo seleccionar Pomalca. Ingresa a Gestión y selecciona la empresa.'); return; }
+      }
+      if (!cancelado) navigate('/gestion/vehiculos-flota', { replace: true });
+    }
+    abrirMapa();
+    return () => { cancelado = true; };
+  }, [loading, user?.uid, isAprobado, listaCargada, pomalca?.id, empresa_activa_id, navigate]);
+  if (error) return <div role="alert" className="p-6 text-red-700">{error}</div>;
+  if (loading || (user && isAprobado && (!listaCargada || pomalca))) return <div className="p-6 text-center text-green-700" role="status">Abriendo tu mapa…</div>;
+  return <Bienvenida />;
+}
+
 function PantallaPendiente() {
   const { user, logout } = useAuth();
   return (
@@ -160,7 +186,7 @@ function AppRoutes() {
     }
   }, [user, ubicacionGuardada, selectorMostrado]);
 
-  if (location.pathname === '/') return <Bienvenida />;
+  if (location.pathname === '/') return <Inicio />;
 
   if (loading) return (
     <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-green-50 to-green-200">

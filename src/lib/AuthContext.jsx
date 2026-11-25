@@ -39,6 +39,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [empresa_activa_id, setEmpresaActivaId] = useState(null);
   const [empresas_disponibles, setEmpresasDisponibles] = useState([]);
+  const [empresasCargadasUsuario, setEmpresasCargadasUsuario] = useState(null);
 
   const fetchPerfil = async (sessionUser) => {
     if (!sessionUser) return null;
@@ -85,11 +86,14 @@ export const AuthProvider = ({ children }) => {
           setEmpresaActivaId(seleccionarEmpresaInicial(session.user.id, empresas));
         } catch (e) {
           console.warn('Error cargando empresas del usuario:', e.message);
+        } finally {
+          setEmpresasCargadasUsuario(session.user.id);
         }
       } else {
         setUser(null);
         setEmpresasDisponibles([]);
         setEmpresaActivaId(null);
+        setEmpresasCargadasUsuario(null);
       }
       setLoading(false);
     });
@@ -118,11 +122,14 @@ export const AuthProvider = ({ children }) => {
           setEmpresaActivaId(seleccionarEmpresaInicial(session.user.id, empresas));
         } catch (e) {
           console.warn('Error cargando empresas del usuario:', e.message);
+        } finally {
+          setEmpresasCargadasUsuario(session.user.id);
         }
       } else {
         setUser(null);
         setEmpresasDisponibles([]);
         setEmpresaActivaId(null);
+        setEmpresasCargadasUsuario(null);
       }
       setLoading(false);
     });
@@ -355,7 +362,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, register, login, logout, resendConfirmation, updateUbicacion, updatePerfil, updateEmpresaActiva, isAprobado, empresa_activa_id, empresas_disponibles, setEmpresaActiva, checkConnection }}>
+    <AuthContext.Provider value={{ user, loading, register, login, logout, resendConfirmation, updateUbicacion, updatePerfil, updateEmpresaActiva, isAprobado, empresa_activa_id, empresas_disponibles, empresasCargadasUsuario, setEmpresaActiva, checkConnection }}>
       {children}
     </AuthContext.Provider>
   );
