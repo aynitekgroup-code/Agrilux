@@ -105,6 +105,16 @@ function normalizeText(value) {
     .trim();
 }
 
+function iconoPuntoRuta(numero, tipo) {
+  return L.divIcon({
+    className: 'fleet-ruta-numero-icon',
+    html: `<span class="fleet-ruta-punto fleet-ruta-punto--${tipo}"></span><span class="fleet-ruta-numero fleet-ruta-numero--${tipo}">${numero}</span>`,
+    iconSize: [48, 18],
+    iconAnchor: [7, 9],
+    tooltipAnchor: [0, -12],
+  });
+}
+
 // Acepta la geometría como objeto GeoJSON, como texto JSON o como Feature.
 // Soporta tanto la columna `geometria` como `poligono` (o `geom`).
 function parseGeometry(value) {
@@ -500,9 +510,6 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const [rutaPagina, setRutaPagina] = useState(1);
   const [rutaPuntos, setRutaPuntos] = useState(null);    // null = sin cargar
   const [zoomRuta, setZoomRuta] = useState(12);
-  // Radio de los puntos GPS del recorrido: crece con el zoom (a zoom 12 son
-  // ~4.5 px, a zoom 16 ya son picos visibles sobre el satélite).
-  const radioPuntoRuta = Math.min(10, Math.max(3, (zoomRuta - 9) * 1.5));
   // Tamaño (px) de los marcadores de unidades: se dibujan como iconos DOM en
   // el markerPane (z-index 600), por encima de TODAS las geocercas, y crecen
   // con el zoom para poder tocarlos sin seleccionar el polígono de abajo.
@@ -1434,15 +1441,19 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // Se enriquece cada punto con `geocerca` (polígono de menor área que lo
   // contiene); se calcula una sola vez por carga de la página.
   const rutaValidos = useMemo(
-    () =>
-      (rutaPuntos || []).slice((rutaPagina - 1) * 100, rutaPagina * 100)
+    () => {
+      const inicio = (rutaPagina - 1) * 100;
+      return (rutaPuntos || [])
         .filter(
           (punto) => Number.isFinite(Number(punto.latitud)) && Number.isFinite(Number(punto.longitud)),
         )
-        .map((punto) => ({
+        .slice(inicio, rutaPagina * 100)
+        .map((punto, indice) => ({
           ...punto,
+          orden: inicio + indice + 1,
           geocerca: geocercaDePunto(Number(punto.latitud), Number(punto.longitud), geofences),
-        })),
+        }));
+    },
     [rutaPuntos, rutaPagina, geofences],
   );
 
@@ -2630,59 +2641,32 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                 positions={rutaValidos.map((punto) => [Number(punto.latitud), Number(punto.longitud)])}
                  pathOptions={{ color: '#d50000', weight: 4, opacity: 1 }}
               />
-              {/* Puntos GPS del recorrido: se pintan antes que inicio/fin/alertas
-                  para que queden debajo (el fin rojo y las alertas conservan
-                  prioridad visual). */}
-              {rutaValidos.map((punto) => (
-                <CircleMarker
-                  key={`ruta-punto-${punto.id ?? `${punto.fecha}-${punto.latitud}-${punto.longitud}`}`}
-                  center={[Number(punto.latitud), Number(punto.longitud)]}
-                   radius={radioPuntoRuta}
-                    pathOptions={{ color: '#FFFFFF', weight: Math.max(1.1, radioPuntoRuta / 4), fillColor: '#d50000', fillOpacity: 1 }}
-                >
-                  <Tooltip direction="top" offset={[0, -4]} opacity={1} className="fleet-unit-tooltip">
-                    <div className="text-[11px] leading-snug">
-                      <p className="font-bold text-slate-800">{formatearFechaHora(punto.fecha)}</p>
-                      <p className="text-slate-600">
-                        {punto.evento || '—'}
-                        {punto.geocerca ? ` · ${punto.geocerca}` : ''}
-                      </p>
-                    </div>
-                  </Tooltip>
-                </CircleMarker>
-              ))}
-              <CircleMarker
-                center={[
-                  Number(rutaValidos[0].latitud),
-                  Number(rutaValidos[0].longitud),
-                ]}
-                radius={6}
-                pathOptions={{ color: '#FFFFFF', weight: 2, fillColor: '#16A34A', fillOpacity: 1 }}
-              >
-                <Tooltip direction="top" offset={[0, -6]} opacity={1} className="fleet-unit-tooltip">
-                  <div className="text-[11px] leading-snug">
-                    <p className="font-bold text-slate-900">Primer punto de esta página</p>
-                    <p className="text-slate-600">{formatearFechaHora(rutaValidos[0].fecha)}</p>
-                  </div>
-                </Tooltip>
-              </CircleMarker>
-              <CircleMarker
-                center={[
-                  Number(rutaValidos[rutaValidos.length - 1].latitud),
-                  Number(rutaValidos[rutaValidos.length - 1].longitud),
-                ]}
-                radius={6}
-                pathOptions={{ color: '#FFFFFF', weight: 2, fillColor: '#DC2626', fillOpacity: 1 }}
-              >
-                <Tooltip direction="top" offset={[0, -6]} opacity={1} className="fleet-unit-tooltip">
-                  <div className="text-[11px] leading-snug">
-                    <p className="font-bold text-slate-900">Último punto de esta página</p>
-                    <p className="text-slate-600">
-                      {formatearFechaHora(rutaValidos[rutaValidos.length - 1].fecha)}
-                    </p>
-                  </div>
-                </Tooltip>
-              </CircleMarker>
+              {rutaValidos.map((punto, indice) => {
+                const esInicio = indice === 0;
+                const esActual = indice === rutaValidos.length - 1;
+                const tipo = esInicio ? 'inicio' : esActual ? 'actual' : punto.es_alerta ? 'alerta' : 'normal';
+                return (
+                  <Marker
+                    key={`ruta-punto-${punto.id ?? `${punto.fecha}-${punto.latitud}-${punto.longitud}`}`}
+                    position={[Number(punto.latitud), Number(punto.longitud)]}
+                    icon={iconoPuntoRuta(punto.orden, tipo)}
+                    zIndexOffset={esActual ? 300 : esInicio ? 200 : 100}
+                  >
+                    <Tooltip direction="top" opacity={1} className="fleet-unit-tooltip">
+                      <div className="text-[11px] leading-snug">
+                        <p className="font-bold text-slate-800">
+                          Punto {punto.orden}{esInicio ? ' · inicio' : esActual ? ' · último punto' : ''}
+                        </p>
+                        <p className="text-slate-600">{formatearFechaHora(punto.fecha)}</p>
+                        <p className="text-slate-600">
+                          {punto.evento || '—'}
+                          {punto.geocerca ? ` · ${punto.geocerca}` : ''}
+                        </p>
+                      </div>
+                    </Tooltip>
+                  </Marker>
+                );
+              })}
               {rutaValidos
                 .filter((punto) => punto.es_alerta)
                 .map((punto) => (
@@ -2743,7 +2727,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                 zIndexOffset={selectedId === vehicle.id ? 1000 : 0}
                 eventHandlers={onSelect ? { click: () => { setAislarUnidad(true); onSelect(vehicle.id); } } : undefined}
               >
-                <Tooltip permanent direction="right" offset={[diametroUnidad / 2, 0]} opacity={1} className="fleet-unit-tooltip">{vehicle.placa}{vehicle.descripcion ? ` · ${vehicle.descripcion}` : ''}</Tooltip>
+                <Tooltip permanent direction="right" offset={[diametroUnidad / 2, 0]} opacity={1} className="fleet-unidad-label">{vehicle.placa}{vehicle.descripcion ? ` · ${vehicle.descripcion}` : ''}</Tooltip>
                 {/* Ventana flotante (popup) con las características de la
                     máquina al hacer clic. Se pintan solo los campos que
                     existan: sirve igual para datos reales (placa, modelo,

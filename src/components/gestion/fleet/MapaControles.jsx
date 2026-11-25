@@ -971,6 +971,7 @@ export function TablaRecorrido({
           <table className="w-full text-xs text-slate-700">
             <thead className="sticky top-0 z-10 bg-white">
               <tr className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400">
+                <th className="px-3 py-2.5 font-bold text-right">N°</th>
                 <th className="px-3 py-2.5 font-bold text-left">Fecha</th>
                 <th className="px-3 py-2.5 font-bold text-left">Evento</th>
                 <th className="px-3 py-2.5 font-bold text-left">Dirección</th>
@@ -984,6 +985,7 @@ export function TablaRecorrido({
             <tbody>
               {puntosPagina.map((punto) => (
                 <tr key={punto.id ?? `${punto.fecha}-${punto.latitud}`} className="border-b border-slate-50 hover:bg-slate-50/60">
+                  <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-500">{punto.orden}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-slate-600">{formatearFechaLarga(punto.fecha)}</td>
                   <td className="px-3 py-2 text-slate-700">{punto.evento || '—'}</td>
                   <td className="max-w-[220px] truncate px-3 py-2 text-slate-600" title={punto.direccion || ''}>

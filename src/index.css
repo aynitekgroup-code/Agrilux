@@ -109,6 +109,55 @@ body::before {
   box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.4), 0 1px 4px rgba(15, 23, 42, 0.55);
 }
 
+/* Recorrido histórico: cada posición mantiene su orden cronológico visible. */
+.fleet-ruta-numero-icon {
+  background: transparent;
+  border: 0;
+}
+.fleet-ruta-punto {
+  position: absolute;
+  top: 3px;
+  left: 1px;
+  display: block;
+  box-sizing: border-box;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #ffffff;
+  border-radius: 9999px;
+  background: #d50000;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.55);
+}
+.fleet-ruta-numero {
+  position: absolute;
+  top: 1px;
+  left: 17px;
+  color: #d50000;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  text-shadow: -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff;
+  white-space: nowrap;
+}
+.fleet-ruta-punto--inicio { background: #16a34a; }
+.fleet-ruta-punto--actual { background: #f59e0b; }
+.fleet-ruta-punto--alerta { background: #dc2626; }
+.fleet-ruta-numero--inicio { color: #15803d; }
+.fleet-ruta-numero--actual { color: #b45309; }
+.fleet-ruta-numero--alerta { color: #dc2626; }
+
+/* El rótulo de la unidad no tapa el recorrido ni las geocercas. */
+.fleet-unidad-label {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #1e293b;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0;
+  text-shadow: -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff;
+}
+.fleet-unidad-label::before { display: none; }
+
 /* FASE 3.8: tooltip de geocerca (HTML con nombre + chip de grupo) */.fleet-geocerca-tooltip {
   border: none;
   border-radius: 10px;
