@@ -147,16 +147,29 @@ body::before {
 
 /* El rótulo de la unidad no tapa el recorrido ni las geocercas. */
 .fleet-unidad-label {
-  border: 0;
+  border: 1px solid rgba(30, 41, 59, 0.72);
+  border-radius: 5px;
   background: transparent;
   box-shadow: none;
   color: #1e293b;
   font-size: 11px;
   font-weight: 700;
-  padding: 0;
-  text-shadow: -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff;
+  padding: 2px 4px;
+  text-shadow: none;
 }
-.fleet-unidad-label::before { display: none; }
+.fleet-unidad-label.leaflet-tooltip-right::before {
+  display: block;
+  top: 50%;
+  left: -5px;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border: 0;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.72);
+  border-left: 1px solid rgba(30, 41, 59, 0.72);
+  background: transparent;
+  transform: rotate(45deg);
+}
 
 /* FASE 3.8: tooltip de geocerca (HTML con nombre + chip de grupo) */.fleet-geocerca-tooltip {
   border: none;
