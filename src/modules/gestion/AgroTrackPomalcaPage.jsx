@@ -69,11 +69,10 @@ function SectionHeading({ title, description, children }) {
  */
 
 /**
- * 20/11/2026: la gerencia entra por /gestion/vehiculos-flota sin query string.
- * El aterrizaje debe ser el reporte de geocercas con la vista por división, no
- * la consola. Cualquier ?section=... explícito sigue teniendo prioridad.
+ * La entrada normal a /gestion/vehiculos-flota abre el mapa. Cualquier
+ * ?section=... explícito sigue teniendo prioridad.
  */
-export default function AgroTrackPomalcaPage({ initialSection = 'geocercas' }) {
+export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
   const [searchParams] = useSearchParams();
   const { user, empresa_activa_id, empresas_disponibles } = useAuth();
   const empresaActiva = (empresas_disponibles || []).find((empresa) => empresa.id === empresa_activa_id);
