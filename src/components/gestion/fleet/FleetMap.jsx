@@ -1935,8 +1935,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     <div className="rounded-xl border border-slate-200 bg-white p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ubicaciones históricas</p>
-          <p className="mt-0.5 text-[11px] text-slate-500">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Ubicaciones históricas</p>
+          <p className="mt-0.5 text-[11px] text-[#537665]">
             {selectedId ? `Unidad seleccionada: ${selectedId}` : 'Selecciona una unidad en el mapa o en la lista.'}
             {' '}· rango con fecha y hora.
           </p>
@@ -1952,17 +1952,17 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         ) : null}
       </div>
       <div className="mt-2 grid gap-2">
-        <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+        <label className="flex flex-col gap-1 text-[11px] font-semibold text-[#426C50]">
           Catálogo de unidades
-          <select value={selectedId || ''} onChange={(event) => event.target.value ? selectUnidadRuta(event.target.value) : onSelect?.('')} className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800">
+          <select value={selectedId || ''} onChange={(event) => event.target.value ? selectUnidadRuta(event.target.value) : onSelect?.('')} className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-forest">
             <option value="">Selecciona una unidad</option>
             {[...new Map([...vehicles, ...unidadesMaestro].filter((v) => v.placa).map((v) => [v.placa, v])).values()].sort((a, b) => a.placa.localeCompare(b.placa, 'es', { numeric: true })).map((v) => <option key={v.placa} value={v.placa}>{v.placa}{v.descripcion ? ` · ${v.descripcion}` : ''}</option>)}
           </select>
         </label>
-        <label className="relative flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+        <label className="relative flex flex-col gap-1 text-[11px] font-semibold text-[#426C50]">
           Unidad (placa o descripción)
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5">
-            <Search size={13} className="shrink-0 text-slate-400" aria-hidden="true" />
+            <Search size={13} className="shrink-0 text-[#6A8B76]" aria-hidden="true" />
             <input
               type="search"
               value={busquedaRuta || selectedId || ''}
@@ -1973,7 +1973,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               placeholder="1639-1K, SEGURIDAD…"
               autoComplete="off"
               aria-label="Buscar unidad para el recorrido"
-              className="w-full bg-transparent text-xs font-semibold text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400"
+              className="w-full bg-transparent text-xs font-semibold text-forest outline-none placeholder:font-normal placeholder:text-[#789683]"
             />
             {busquedaRuta || selectedId ? (
               <button
@@ -1985,7 +1985,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                 }}
                 aria-label="Limpiar unidad y buscar otra"
                 title="Quitar la unidad y buscar otra"
-                className="shrink-0 text-slate-500 hover:text-slate-800"
+                className="shrink-0 text-[#537665] hover:text-forest"
               >
                 <X size={14} />
               </button>
@@ -2006,7 +2006,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             </button>
           </div>
           {voiceUnitMessage ? (
-            <p className="mt-1 max-w-64 text-[10px] leading-snug text-slate-500" role="status" aria-live="polite">
+            <p className="mt-1 max-w-64 text-[10px] leading-snug text-[#537665]" role="status" aria-live="polite">
               {voiceUnitMessage}
             </p>
           ) : null}
@@ -2021,8 +2021,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                   >
                     <MapPin size={13} className="shrink-0 text-forest" />
                     <span className="min-w-0">
-                      <span className="block font-semibold text-slate-800">{v.placa}{v.descripcion ? ` · ${v.descripcion}` : ''}</span>
-                      <span className="block truncate text-[10px] text-slate-400">
+                      <span className="block font-semibold text-forest">{v.placa}{v.descripcion ? ` · ${v.descripcion}` : ''}</span>
+                      <span className="block truncate text-[10px] text-[#6A8B76]">
                         {(Number(v.velocidad_kmh) || 0) > 0 ? `${Number(v.velocidad_kmh)} km/h` : 'Detenida / sin dato'}{v.ultimo_evento ? ` · ${v.ultimo_evento}` : ''}
                       </span>
                       <span className="block truncate text-[10px] text-emerald-700">
@@ -2034,29 +2034,29 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               ))}
             </ul>
           ) : busquedaRuta.trim() ? (
-            <p className="absolute left-0 top-full z-30 mt-1 w-72 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-400 shadow-lg">
+            <p className="absolute left-0 top-full z-30 mt-1 w-72 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-[#6A8B76] shadow-lg">
               Ninguna unidad coincide con «{busquedaRuta.trim()}».
             </p>
           ) : null}
         </label>
         <div className="grid grid-cols-2 gap-2">
-          <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+          <label className="flex flex-col gap-1 text-[11px] font-semibold text-[#426C50]">
             Desde · hora de Perú
             <input
               type="datetime-local"
               value={rutaDesde}
               onChange={(event) => setRutaDesde(event.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-normal text-slate-700 outline-none focus:border-emerald-500"
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-normal text-forest outline-none focus:border-emerald-500"
               aria-label="Inicio del recorrido (fecha y hora)"
             />
           </label>
-          <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+          <label className="flex flex-col gap-1 text-[11px] font-semibold text-[#426C50]">
             Hasta · hora de Perú
             <input
               type="datetime-local"
               value={rutaHasta}
               onChange={(event) => setRutaHasta(event.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-normal text-slate-700 outline-none focus:border-emerald-500"
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-normal text-forest outline-none focus:border-emerald-500"
               aria-label="Fin del recorrido (fecha y hora)"
             />
           </label>
@@ -2079,7 +2079,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             <button
               type="button"
               onClick={limpiarRecorrido}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-white"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-[#426C50] hover:bg-white hover:text-forest"
             >
               <X size={14} /> Limpiar
             </button>
@@ -2255,11 +2255,11 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               ? zonasPanelNodo
               : null;
     return (
-      <div className="min-w-0 space-y-3 rounded-xl border border-[#E7D8B7] bg-[#FFFCF5] p-3 shadow-sm">
-        <header className="flex flex-wrap items-start justify-between gap-2 border-b border-[#E7D8B7] pb-3">
+      <div className="min-w-0 space-y-3 rounded-xl border border-[#B8D8BE] bg-[#E3F3E6] p-3 shadow-sm">
+        <header className="flex flex-wrap items-start justify-between gap-2 border-b border-[#B8D8BE] pb-3">
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{seccion.group}</p>
-            <h4 className="mt-0.5 text-sm font-bold text-slate-900">{seccion.label}</h4>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-primary">{seccion.group}</p>
+            <h4 className="mt-0.5 text-sm font-bold text-forest">{seccion.label}</h4>
           </div>
           <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
             <IconoSeccion size={12} className="mr-1.5" />
@@ -2294,7 +2294,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   ) : null;
 
   return (
-    <section className="bg-[#F8F4EA] rounded-2xl border border-[#E7D8B7] shadow-sm overflow-hidden min-w-0">
+    <section className="bg-[#F1F8F2] rounded-2xl border border-[#B8D8BE] shadow-sm overflow-hidden min-w-0">
       {/* El panel de Geocercas vive en Consola/PRINCIPAL → Configuración. */}
 
       {error ? (
@@ -2533,7 +2533,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             </aside>
           )
         ) : null}
-        <div id="mapa-flota" className={vehicles.length ? 'relative z-0 isolate scroll-mt-4 min-w-0 overflow-hidden rounded-[14px] border border-[#D8C89F] bg-white shadow-sm' : 'relative z-0 isolate scroll-mt-4 overflow-hidden rounded-[14px] border border-[#D8C89F] bg-white shadow-sm'}>
+        <div id="mapa-flota" className={vehicles.length ? 'relative z-0 isolate scroll-mt-4 min-w-0 overflow-hidden rounded-[14px] border border-[#A7C7AB] bg-white shadow-sm' : 'relative z-0 isolate scroll-mt-4 overflow-hidden rounded-[14px] border border-[#A7C7AB] bg-white shadow-sm'}>
         {aislarUnidad && selectedId ? <button type="button" onClick={() => setAislarUnidad(false)} className="absolute right-3 top-3 z-[1000] rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow">Mostrar todas las unidades</button> : null}
         <MapContainer
           center={[-6.78, -79.83]}
@@ -2867,7 +2867,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         <div id="recorrido-detallado" className="scroll-mt-4 px-4 sm:px-5 pb-3">{nodoRecorrido}</div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#E7D8B7] px-3 py-1.5 text-[11px] text-slate-500 sm:px-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#B8D8BE] px-3 py-1.5 text-[11px] text-slate-500 sm:px-4">
         <span className="inline-flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-sm border border-green-700 bg-green-500/30" />
           Límites reales importados

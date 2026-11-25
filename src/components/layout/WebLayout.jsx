@@ -33,7 +33,7 @@ import {
 import { useAuth } from '../../lib/AuthContext';
 import OnlineStatus from '../OnlineStatus';
 import AgentStatus from '../AgentStatus';
-import { AdminAccessModal, ChangePasswordModal, EmpresaSelectorModal, LocationSelectorModal, UserProfileModal } from './SharedModals';
+import { AdminAccessModal, ChangePasswordModal, EmpresaDataModal, EmpresaSelectorModal, LocationSelectorModal, UserProfileModal } from './SharedModals';
 
 const navItems = [
   { path: '/diagnostico', icon: Camera, label: 'Diagnóstico' },
@@ -47,7 +47,7 @@ const ADMIN_EMAIL = 'aynitek.group@gmail.com';
 export default function WebLayout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, empresa_activa_id, empresas_disponibles, setEmpresaActiva } = useAuth();
+  const { user, logout, empresa_activa_id, empresas_disponibles, setEmpresaActiva, updateEmpresaActiva, updatePerfil } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mostrarUbicacion, setMostrarUbicacion] = useState(false);
   const [adminModal, setAdminModal] = useState(false);
@@ -55,9 +55,12 @@ export default function WebLayout({ children }) {
   const [empresaModalOpen, setEmpresaModalOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [userProfileModalOpen, setUserProfileModalOpen] = useState(false);
+  const [empresaDataModalOpen, setEmpresaDataModalOpen] = useState(false);
   const esAdmin = user?.email === ADMIN_EMAIL;
   const esFlota = location.pathname.startsWith('/gestion/vehiculos-flota');
   const esGestion = location.pathname === '/gestion';
+  const empresaActiva = empresas_disponibles.find((empresa) => empresa.id === empresa_activa_id) || null;
+  const esAdministradorEmpresa = empresaActiva?.rol === 'administrador';
 
   const handleLogout = async () => {
     await logout();
@@ -255,6 +258,18 @@ export default function WebLayout({ children }) {
                         <Users size={18} />
                         Trabajadores de empresa
                       </button>
+                      {esAdministradorEmpresa && (
+                        <button
+                          onClick={() => {
+                            setMenuOpen(false);
+                            setEmpresaDataModalOpen(true);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg"
+                        >
+                          <Building size={18} />
+                          Administrar datos
+                        </button>
+                      )}
                     </>
                   )}
                   <button
@@ -358,6 +373,14 @@ export default function WebLayout({ children }) {
         empresas={empresas_disponibles}
         empresaActivaId={empresa_activa_id}
         onSelectEmpresa={setEmpresaActiva}
+      />
+      <EmpresaDataModal
+        open={empresaDataModalOpen && esAdministradorEmpresa}
+        onClose={() => setEmpresaDataModalOpen(false)}
+        empresa={empresaActiva}
+        user={user}
+        onGuardarEmpresa={updateEmpresaActiva}
+        onGuardarPerfil={updatePerfil}
       />
       <LocationSelectorModal open={mostrarUbicacion} onClose={() => setMostrarUbicacion(false)} />
       <AdminAccessModal open={adminModal} onClose={() => setAdminModal(false)} />

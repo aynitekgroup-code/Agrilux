@@ -268,8 +268,8 @@ function FilaUnidad({
             className={`h-1.5 w-1.5 shrink-0 rounded-full ${seleccionada ? 'bg-emerald-600' : 'bg-slate-300'}`}
             aria-hidden="true"
           />
-          <span className="text-xs font-bold text-slate-800">{placa}</span>
-          <span className="truncate text-[11px] text-slate-500">{unidad?.descripcion || '—'}</span>
+          <span className="text-xs font-bold text-forest">{placa}</span>
+          <span className="truncate text-[11px] text-[#537665]">{unidad?.descripcion || '—'}</span>
         </span>
       </button>
 
@@ -283,20 +283,20 @@ function FilaUnidad({
             disabled={guardando}
             autoComplete="off"
             aria-label={`Grupo de ${placa}`}
-            className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 outline-none focus:border-emerald-500 disabled:opacity-60"
+            className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-forest outline-none focus:border-emerald-500 disabled:opacity-60"
           />
           <button
             type="submit"
             disabled={guardando || sinCambios}
             title={sinCambios ? 'Sin cambios' : `Guardar ${placa} en el grupo`}
             aria-label={`Guardar grupo de ${placa}`}
-            className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:border-emerald-500 hover:text-emerald-700 disabled:opacity-40"
+            className="rounded-lg border border-slate-200 p-1.5 text-[#537665] hover:border-emerald-500 hover:text-emerald-700 disabled:opacity-40"
           >
             {guardando ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}
           </button>
         </form>
       ) : (
-        <span className="max-w-[45%] truncate rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+        <span className="max-w-[45%] truncate rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-[#426C50]">
           {String(grupoActual || '').trim() || 'Sin grupo'}
         </span>
       )}
@@ -490,8 +490,8 @@ export function PanelGruposUnidades({
               <Search size={15} aria-hidden="true" />
             </span>
             <span className="min-w-0">
-              <h3 className="text-base font-bold text-slate-900">Localizador de unidades</h3>
-              <p className="text-xs text-slate-500">
+              <h3 className="text-base font-bold text-forest">Localizador de unidades</h3>
+              <p className="text-xs text-[#537665]">
                 {cargando
                   ? 'Cargando grupos…'
                   : `${unidades.length} unidades en el mapa · ${grupos.length} grupo(s)${modoDescripcion ? ' (por descripción)' : ''}${sinAsignar ? ` · ${sinAsignar} sin grupo asignado (por descripción)` : ''}`}
@@ -499,13 +499,13 @@ export function PanelGruposUnidades({
             </span>
           </div>
           <label className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-1.5 focus-within:border-emerald-500">
-            <Search size={14} className="shrink-0 text-slate-400" />
+            <Search size={14} className="shrink-0 text-[#6A8B76]" />
             <input
               type="text"
               value={busqueda}
               onChange={(event) => setBusqueda(event.target.value)}
               placeholder="Buscar unidad o placa…"
-              className="w-36 sm:w-56 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400"
+              className="w-36 bg-transparent text-xs text-forest outline-none placeholder:text-[#789683] sm:w-56"
               aria-label="Buscar unidad o placa"
               autoComplete="off"
             />
@@ -527,7 +527,7 @@ export function PanelGruposUnidades({
         </div>
 
         {vozAviso ? (
-          <p className="text-[10px] leading-snug text-slate-500" role="status" aria-live="polite">{vozAviso}</p>
+          <p className="text-[10px] leading-snug text-[#537665]" role="status" aria-live="polite">{vozAviso}</p>
         ) : null}
 
         {aviso ? (
@@ -553,7 +553,7 @@ export function PanelGruposUnidades({
         {desgloseGrupos.map((g) => (
           <span
             key={g.clave}
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600"
+            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-[#426C50]"
             title={`${g.unidades.length} unidad(es) en el grupo ${g.etiqueta}`}
           >
             {g.etiqueta}: <b className="text-forest">{g.unidades.length}</b>
@@ -562,10 +562,10 @@ export function PanelGruposUnidades({
         {desgloseEstados.map(([estado, total]) => (
           <span
             key={estado}
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-500"
+            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-[#537665]"
             title={`${total} unidad(es) en estado ${estado}`}
           >
-            {estado.replace(/_/g, ' ')}: <b className="text-slate-700">{total}</b>
+            {estado.replace(/_/g, ' ')}: <b className="text-[#285D3B]">{total}</b>
           </span>
         ))}
       </div>
@@ -577,15 +577,15 @@ export function PanelGruposUnidades({
 
       <div className="max-h-[420px] overflow-y-auto">
         {cargando ? (
-          <p className="flex items-center justify-center gap-2 p-6 text-xs text-slate-500">
+            <p className="flex items-center justify-center gap-2 p-6 text-xs text-[#537665]">
             <LoaderCircle size={15} className="animate-spin" /> Cargando grupos de unidades…
           </p>
         ) : !unidades.length ? (
-          <p className="p-6 text-center text-xs text-slate-500">
+          <p className="p-6 text-center text-xs text-[#537665]">
             Todavía no hay unidades con posición en el mapa.
           </p>
         ) : !visibles.length ? (
-          <p className="p-6 text-center text-xs text-slate-500">
+          <p className="p-6 text-center text-xs text-[#537665]">
             Ninguna unidad coincide con “{busqueda}”.
           </p>
         ) : (
@@ -599,10 +599,10 @@ export function PanelGruposUnidades({
                   aria-expanded={!colapsado}
                   className="flex w-full items-center gap-2 bg-slate-50/70 px-4 py-2.5 text-left hover:bg-slate-50"
                 >
-                  {colapsado ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronUp size={14} className="text-slate-400" />}
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Grupo</span>
-                  <span className="truncate text-xs font-bold text-slate-700">{grupo.etiqueta}</span>
-                  <span className="ml-auto rounded-full border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
+                  {colapsado ? <ChevronDown size={14} className="text-[#6A8B76]" /> : <ChevronUp size={14} className="text-[#6A8B76]" />}
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-primary">Grupo</span>
+                  <span className="truncate text-xs font-bold text-forest">{grupo.etiqueta}</span>
+                  <span className="ml-auto rounded-full border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-[#426C50]">
                     {grupo.unidades.length}
                   </span>
                 </button>
@@ -632,7 +632,7 @@ export function PanelGruposUnidades({
         )}
       </div>
 
-      <p className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-[10px] text-slate-500">
+      <p className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-[10px] text-[#537665]">
         {busqueda
           ? `Mostrando ${totalVisibles} de ${unidades.length} unidades`
           : 'Clic en la unidad para llevar el mapa hasta su posición.'}

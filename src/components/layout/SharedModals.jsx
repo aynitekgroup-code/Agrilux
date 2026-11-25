@@ -6,7 +6,7 @@
  * (auth admin, recuperación de contraseña, selector de ubicación).
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Key, CheckCircle, Loader2, User, Mail, MapPin, Phone, Building, Clock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -256,6 +256,95 @@ export function EmpresaSelectorModal({ open, onClose, empresas, empresaActivaId,
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Modal: Datos de empresa y perfil ────────────────────────────────────────
+export function EmpresaDataModal({ open, onClose, empresa, user, onGuardarEmpresa, onGuardarPerfil }) {
+  const [form, setForm] = useState({});
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState('');
+  const [exito, setExito] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setForm({
+      empresaNombre: empresa?.nombre || '',
+      ruc: empresa?.ruc || '',
+      telefonoEmpresa: empresa?.telefono || '',
+      ubicacionEmpresa: empresa?.ubicacion || '',
+      campana: empresa?.campana_activa || '2026-A',
+      nombre: user?.nombre || '',
+      whatsapp: user?.whatsapp || '',
+      ubicacion: user?.ubicacion || '',
+    });
+    setError('');
+    setExito('');
+  }, [open, empresa, user]);
+
+  if (!open) return null;
+
+  const actualizar = (campo, valor) => setForm((prev) => ({ ...prev, [campo]: valor }));
+  const guardar = async (event) => {
+    event.preventDefault();
+    setGuardando(true);
+    setError('');
+    setExito('');
+    try {
+      await onGuardarEmpresa({
+        nombre: form.empresaNombre,
+        ruc: form.ruc,
+        telefono: form.telefonoEmpresa,
+        ubicacion: form.ubicacionEmpresa,
+        campana_activa: form.campana,
+      });
+      await onGuardarPerfil({ nombre: form.nombre, whatsapp: form.whatsapp, ubicacion: form.ubicacion });
+      setExito('Datos actualizados correctamente.');
+    } catch (saveError) {
+      setError(saveError?.message || 'No se pudieron guardar los cambios.');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[1500] flex items-center justify-center bg-slate-950/45 p-4" role="dialog" aria-modal="true" aria-labelledby="administrar-datos-titulo" onMouseDown={onClose}>
+      <form className="max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl" onSubmit={guardar} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Solo administradores</p>
+            <h2 id="administrar-datos-titulo" className="mt-0.5 text-lg font-bold text-slate-900">Datos de empresa y perfil</h2>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Cerrar">×</button>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <fieldset className="space-y-3 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
+            <legend className="px-1 text-xs font-bold text-emerald-800">Empresa activa</legend>
+            <label className="block text-[11px] font-semibold text-slate-600">Nombre<input required value={form.empresaNombre || ''} onChange={(event) => actualizar('empresaNombre', event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800 outline-none focus:border-emerald-500" /></label>
+            <label className="block text-[11px] font-semibold text-slate-600">RUC<input value={form.ruc || ''} onChange={(event) => actualizar('ruc', event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800 outline-none focus:border-emerald-500" /></label>
+            <label className="block text-[11px] font-semibold text-slate-600">Teléfono<input value={form.telefonoEmpresa || ''} onChange={(event) => actualizar('telefonoEmpresa', event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800 outline-none focus:border-emerald-500" /></label>
+            <label className="block text-[11px] font-semibold text-slate-600">Ubicación<input value={form.ubicacionEmpresa || ''} onChange={(event) => actualizar('ubicacionEmpresa', event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800 outline-none focus:border-emerald-500" /></label>
+            <label className="block text-[11px] font-semibold text-slate-600">Campaña activa<input value={form.campana || ''} onChange={(event) => actualizar('campana', event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800 outline-none focus:border-emerald-500" /></label>
+          </fieldset>
+
+          <fieldset className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <legend className="px-1 text-xs font-bold text-slate-700">Tu perfil</legend>
+            <label className="block text-[11px] font-semibold text-slate-600">Nombre<input required value={form.nombre || ''} onChange={(event) => actualizar('nombre', event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800 outline-none focus:border-emerald-500" /></label>
+            <label className="block text-[11px] font-semibold text-slate-600">Correo electrónico<input value={user?.email || ''} readOnly className="mt-1 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-2 text-xs text-slate-500" /></label>
+            <label className="block text-[11px] font-semibold text-slate-600">WhatsApp<input value={form.whatsapp || ''} onChange={(event) => actualizar('whatsapp', event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800 outline-none focus:border-emerald-500" /></label>
+            <label className="block text-[11px] font-semibold text-slate-600">Ubicación personal<input value={form.ubicacion || ''} onChange={(event) => actualizar('ubicacion', event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800 outline-none focus:border-emerald-500" /></label>
+          </fieldset>
+        </div>
+
+        {error ? <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700" role="alert">{error}</p> : null}
+        {exito ? <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700" role="status">{exito}</p> : null}
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">Cancelar</button>
+          <button type="submit" disabled={guardando} className="rounded-lg bg-forest px-3 py-2 text-xs font-semibold text-white hover:bg-forest-dark disabled:opacity-60">{guardando ? 'Guardando…' : 'Guardar cambios'}</button>
+        </div>
+      </form>
     </div>
   );
 }
