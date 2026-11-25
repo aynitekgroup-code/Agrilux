@@ -26,6 +26,7 @@ export default function HunterEstadoVivo({ empresaId }) {
   const [mostrar, setMostrar] = useState('grupos');
   const [opcionFiltro, setOpcionFiltro] = useState('');
   const [filtroGeocerca, setFiltroGeocerca] = useState('');
+  const [filtroArea, setFiltroArea] = useState('');
   const [agrupar, setAgrupar] = useState('grupo');
   const [gruposDisponibles, setGruposDisponibles] = useState(true);
   const [areasDisponibles, setAreasDisponibles] = useState(true);
@@ -93,16 +94,18 @@ export default function HunterEstadoVivo({ empresaId }) {
   const opciones = useMemo(() => opcionesFiltrosHunter(ordenadas), [ordenadas]);
   const visibles = useMemo(() => {
     const consulta = busqueda.trim().toLocaleLowerCase('es');
-    return filtrarUnidadesHunter(ordenadas, { mostrar, opcionFiltro, filtroGeocerca }).filter((f) => {
+    return filtrarUnidadesHunter(ordenadas, { mostrar, opcionFiltro, filtroGeocerca, filtroArea }).filter((f) => {
       const texto = `${f.unidad || ''} ${f.equipo_id} ${f.direccion || ''}`.toLocaleLowerCase('es');
       return texto.includes(consulta) && (filtroEstado === 'todos' || estado(f, ahora) === filtroEstado);
     });
-  }, [ordenadas, ahora, busqueda, filtroEstado, mostrar, opcionFiltro, filtroGeocerca]);
+  }, [ordenadas, ahora, busqueda, filtroEstado, mostrar, opcionFiltro, filtroGeocerca, filtroArea]);
   // Conserva el filtro visible si un refresco deja su geocerca o grupo vacío.
   const opcionesGrupo = mostrar === 'grupos' && opcionFiltro && !opciones.grupos.includes(opcionFiltro)
     ? [...opciones.grupos, opcionFiltro] : opciones.grupos;
   const opcionesGeocerca = filtroGeocerca && !opciones.geocercas.includes(filtroGeocerca)
     ? [...opciones.geocercas, filtroGeocerca] : opciones.geocercas;
+  const opcionesArea = filtroArea && !opciones.areas.includes(filtroArea)
+    ? [...opciones.areas, filtroArea] : opciones.areas;
   const opcionesUnidad = mostrar === 'unidades' && opcionFiltro && !opciones.unidades.some(({ valor }) => valor === opcionFiltro)
     ? [...opciones.unidades, { valor: opcionFiltro, etiqueta: opcionFiltro }] : opciones.unidades;
   const grupoSeleccionado = mostrar === 'grupos' ? opcionFiltro : '';
@@ -136,6 +139,13 @@ export default function HunterEstadoVivo({ empresaId }) {
           opcionesUnidades={opcionesUnidad}
         />
         <label className="min-w-0">
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">Área</span>
+          <select value={filtroArea} onChange={(e) => setFiltroArea(e.target.value)} className="min-w-[185px] max-w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+            <option value="">Todas las áreas</option>
+            {opcionesArea.map((area) => <option key={area} value={area}>{area}</option>)}
+          </select>
+        </label>
+        <label className="min-w-0">
           <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">Geocerca</span>
           <select
             value={filtroGeocerca}
@@ -156,8 +166,8 @@ export default function HunterEstadoVivo({ empresaId }) {
             className="w-full rounded-lg border border-slate-200 py-1.5 pl-9 pr-3 text-xs outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
           />
         </label>
-        {(opcionFiltro || filtroGeocerca) && (
-          <button type="button" onClick={() => { setOpcionFiltro(''); setFiltroGeocerca(''); }} className="rounded-lg px-2 py-1.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-700">
+        {(opcionFiltro || filtroGeocerca || filtroArea) && (
+          <button type="button" onClick={() => { setOpcionFiltro(''); setFiltroGeocerca(''); setFiltroArea(''); }} className="rounded-lg px-2 py-1.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-700">
             Quitar filtros
           </button>
         )}

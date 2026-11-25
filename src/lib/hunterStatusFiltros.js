@@ -12,6 +12,7 @@ export function opcionesFiltrosHunter(filas) {
   return {
     grupos: opcionesUnicas(filas, gruposOperativosHunter),
     geocercas: opcionesUnicas(filas, geocercaHunter),
+    areas: opcionesUnicas(filas, (fila) => fila.area_operativa ? [fila.area_operativa] : []),
     unidades: filas.map((fila) => ({
       valor: String(fila.equipo_id),
       etiqueta: fila.unidad || String(fila.equipo_id),
@@ -19,12 +20,13 @@ export function opcionesFiltrosHunter(filas) {
   };
 }
 
-export function filtrarUnidadesHunter(filas, { mostrar, opcionFiltro, filtroGeocerca }) {
+export function filtrarUnidadesHunter(filas, { mostrar, opcionFiltro, filtroGeocerca, filtroArea }) {
   return filas.filter((fila) => (
     (!opcionFiltro || (mostrar === 'grupos'
       ? gruposOperativosHunter(fila).includes(opcionFiltro)
       : String(fila.equipo_id) === opcionFiltro))
     && (!filtroGeocerca || geocercaHunter(fila) === filtroGeocerca)
+    && (!filtroArea || fila.area_operativa === filtroArea)
   ));
 }
 

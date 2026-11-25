@@ -39,13 +39,9 @@ function numero(valor, decimales = 1) {
   return n.toLocaleString('es-PE', { minimumFractionDigits: decimales, maximumFractionDigits: decimales });
 }
 
-function esCero(valor) {
-  return valor === 0 || (typeof valor === 'string' && valor.trim() !== '' && Number(valor) === 0);
-}
-
 function CeldaMetricaActividad({ valor, formato, className = '' }) {
   return (
-    <td className={`px-3 py-2 text-right ${className}`}>
+    <td className={`px-3 py-1 text-right tabular-nums ${className}`}>
       {valor == null || valor === '' ? '—' : formato(valor)}
     </td>
   );
@@ -125,32 +121,6 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
   const textoActualizacion = modoReporte === 'tiempo-real'
     ? 'se actualiza solo cada minuto'
     : 'se actualiza al cambiar el rango o con Actualizar';
-
-  // Las filas sin datos representan el rango consultado, no un día medido.
-  // Las demás muestran el horario efectivo de su propio día.
-  const presentarPeriodo = useMemo(() => {
-    const desde = String(consulta?.desde || '');
-    const hasta = String(consulta?.hasta || '');
-    const diaDesde = desde.slice(0, 10);
-    const diaHasta = hasta.slice(0, 10);
-    const horaDesde = desde.slice(11, 16);
-    const horaHasta = hasta.slice(11, 16);
-    return (fila) => {
-      const fecha = etiquetaPeriodoReporte(fila, 'libre');
-      if (!desde || !hasta) return { fecha, horario: '' };
-      if (fila.sin_datos_rango) {
-        return {
-          fecha: diaDesde === diaHasta ? diaDesde : `${diaDesde} a ${diaHasta}`,
-          horario: `${horaDesde} – ${horaHasta}`,
-        };
-      }
-      const dia = String(fila.periodo || '');
-      const horario = /^\d{4}-\d{2}-\d{2}$/.test(dia)
-        ? `${dia === diaDesde ? horaDesde : '00:00'} – ${dia === diaHasta ? horaHasta : '23:59'}`
-        : '';
-      return { fecha, horario };
-    };
-  }, [consulta?.desde, consulta?.hasta]);
 
   useEffect(() => {
     if (!empresaId || pendienteDeFecha) {
@@ -509,9 +479,8 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
               </thead>
               <tbody>
                 {filasTabla.map((fila, i) => {
-                  const recorridoCero = esCero(fila.km_recorridos);
+                  const recorridoCero = recorridoEsCero(fila);
                   const medido = (valor) => fila.sin_datos_rango ? null : valor;
-                  const { fecha, horario } = presentarPeriodo(fila);
 
                   return (
                     <tr
@@ -520,18 +489,15 @@ export default function FleetReports({ empresaId, empresaNombre = '', periodo = 
                         ? 'border-red-100 bg-red-50 hover:bg-red-100/60'
                         : 'border-slate-50 hover:bg-slate-50/60'}`}
                     >
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-1 whitespace-nowrap">
                         <span className="font-bold text-slate-800">{fila.placa}</span>
-                        {fila.sin_datos_rango ? <span className="block text-[10px] text-amber-700">sin data</span> : null}
+                        {fila.sin_datos_rango ? <span className="ml-1.5 text-[10px] text-amber-700">Sin data</span> : null}
                       </td>
-                      <td className="px-3 py-2 text-slate-600">{codigoArea(fila.unidad, fila.placa) || '—'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-600">
-                        {fecha}
-                        {modoReporte !== 'tiempo-real' && horario ? (
-                          <span className="block text-[10px] font-normal text-slate-400">{horario}</span>
-                        ) : null}
+                      <td className="px-3 py-1 text-slate-600">{codigoArea(fila.unidad, fila.placa) || '—'}</td>
+                      <td className="px-3 py-1 whitespace-nowrap font-semibold text-slate-600">
+                        {fila.sin_datos_rango ? '—' : etiquetaPeriodoReporte(fila, 'libre')}
                       </td>
-                      <CeldaMetricaActividad valor={fila.km_recorridos} formato={numero} className="font-semibold" />
+                      <CeldaMetricaActividad valor={medido(fila.km_recorridos)} formato={numero} className="font-semibold" />
                       <CeldaMetricaActividad valor={medido(fila.prendido_segundos)} formato={formatearDuracion} className="font-bold" />
                       <CeldaMetricaActividad valor={medido(fila.viaje_segundos)} formato={formatearDuracion} />
                       <CeldaMetricaActividad valor={medido(fila.ralenti_segundos)} formato={formatearDuracion} />
