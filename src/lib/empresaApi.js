@@ -384,6 +384,7 @@ export async function listarEmpresasDelUsuario(userId) {
         id,
         nombre,
         ruc,
+        telefono,
         ubicacion,
         campana_activa
       )
@@ -397,6 +398,7 @@ export async function listarEmpresasDelUsuario(userId) {
     rol: m.rol,
     nombre: m.empresas.nombre,
     ruc: m.empresas.ruc,
+    telefono: m.empresas.telefono,
     ubicacion: m.empresas.ubicacion,
     campana_activa: m.empresas.campana_activa
   }));

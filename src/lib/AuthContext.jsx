@@ -272,6 +272,12 @@ export const AuthProvider = ({ children }) => {
     const nombreFinal = (nombre ?? user.nombre ?? '').trim();
     const ubicacionFinal = ubicacion ?? user.ubicacion ?? '';
     const whatsappFinal = normalizarWhatsapp(whatsapp ?? user.whatsapp ?? '');
+    const anterior = {
+      nombre: user.nombre,
+      ubicacion: user.ubicacion,
+      whatsapp: user.whatsapp,
+      coords: user.coords,
+    };
     setUser(prev => ({
       ...prev,
       nombre: nombreFinal,
@@ -287,10 +293,40 @@ export const AuthProvider = ({ children }) => {
         ...(coords ? { coords } : {}),
       };
       const { error } = await supabase.from('usuarios').update(data).eq('id', uid);
-      if (error) console.warn('Supabase updatePerfil:', error.message);
+      if (error) throw error;
+      return true;
     } catch (e) {
       console.warn('updatePerfil offline:', e.message);
+      setUser(prev => ({ ...prev, ...anterior }));
+      throw e;
     }
+  };
+
+  const updateEmpresaActiva = async ({ nombre, ruc, telefono, ubicacion, campana_activa }) => {
+    if (!empresa_activa_id) throw new Error('No hay empresa activa');
+    const empresaActual = empresas_disponibles.find((empresa) => empresa.id === empresa_activa_id);
+    if (empresaActual?.rol !== 'administrador') {
+      throw new Error('Solo un administrador puede modificar los datos de la empresa.');
+    }
+    const datos = {
+      nombre: String(nombre || '').trim(),
+      ruc: String(ruc || '').trim() || null,
+      telefono: String(telefono || '').trim() || null,
+      ubicacion: String(ubicacion || '').trim(),
+      campana_activa: String(campana_activa || '').trim() || '2026-A',
+    };
+    if (!datos.nombre) throw new Error('El nombre de la empresa es obligatorio.');
+    const { data, error } = await supabase
+      .from('empresas')
+      .update(datos)
+      .eq('id', empresa_activa_id)
+      .select()
+      .single();
+    if (error) throw error;
+    setEmpresasDisponibles((prev) => prev.map((empresa) => (
+      empresa.id === empresa_activa_id ? { ...empresa, ...data } : empresa
+    )));
+    return data;
   };
 
   const logout = async () => {
@@ -319,7 +355,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, register, login, logout, resendConfirmation, updateUbicacion, updatePerfil, isAprobado, empresa_activa_id, empresas_disponibles, setEmpresaActiva, checkConnection }}>
+    <AuthContext.Provider value={{ user, loading, register, login, logout, resendConfirmation, updateUbicacion, updatePerfil, updateEmpresaActiva, isAprobado, empresa_activa_id, empresas_disponibles, setEmpresaActiva, checkConnection }}>
       {children}
     </AuthContext.Provider>
   );
