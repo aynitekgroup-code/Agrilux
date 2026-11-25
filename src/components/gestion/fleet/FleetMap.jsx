@@ -2255,8 +2255,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               ? zonasPanelNodo
               : null;
     return (
-      <div className="min-w-0 space-y-3 rounded-xl border-2 border-emerald-200 bg-emerald-50/40 p-3">
-        <header className="flex flex-wrap items-start justify-between gap-2 border-b border-emerald-200 pb-3">
+      <div className="min-w-0 space-y-3 rounded-xl border border-[#E7D8B7] bg-[#FFFCF5] p-3 shadow-sm">
+        <header className="flex flex-wrap items-start justify-between gap-2 border-b border-[#E7D8B7] pb-3">
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{seccion.group}</p>
             <h4 className="mt-0.5 text-sm font-bold text-slate-900">{seccion.label}</h4>
@@ -2294,7 +2294,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   ) : null;
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden min-w-0">
+    <section className="bg-[#F8F4EA] rounded-2xl border border-[#E7D8B7] shadow-sm overflow-hidden min-w-0">
       {/* El panel de Geocercas vive en Consola/PRINCIPAL → Configuración. */}
 
       {error ? (
@@ -2432,8 +2432,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       <div
         className={vehicles.length
           ? panelUnidadesContraido
-            ? 'grid grid-cols-[minmax(0,56px)_minmax(0,1fr)] gap-2 px-1 sm:px-2 pb-2'
-            : 'grid grid-cols-1 gap-2 px-1 sm:px-2 pb-2 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]'
+            ? 'grid grid-cols-[minmax(0,56px)_minmax(0,1fr)] items-start gap-2 px-1 sm:px-2 pb-2'
+            : 'grid grid-cols-1 items-start gap-2 px-1 sm:px-2 pb-2 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]'
           : 'px-1 sm:px-2 pb-2'}
       >
         {vehicles.length ? (
@@ -2475,10 +2475,10 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             </aside>
           ) : (
             <aside
-              className="min-w-0 space-y-2 max-h-[660px] overflow-y-auto scroll-consola pr-1"
+              className="min-w-0 space-y-1 max-h-[660px] overflow-y-auto scroll-consola pr-1"
               aria-label="Panel de unidades"
             >
-              <div className="sticky top-0 z-10 flex items-center justify-between gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-2 shadow-sm">
+              <div className="sticky top-0 z-10 flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-white px-2 py-1 shadow-sm">
                 {mostrandoContenidoFlota ? (
                   <button
                     type="button"
@@ -2487,11 +2487,11 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                     aria-label="Volver a secciones"
                     className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-forest"
                   >
-                    <ChevronLeft size={14} /> Secciones
+                    <ChevronLeft size={14} /> Menú de mapas
                   </button>
                 ) : (
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Secciones
+                    Menú de mapas
                   </span>
                 )}
                 <button
@@ -2500,7 +2500,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                   title="Contraer panel de unidades"
                   aria-label="Contraer panel de unidades"
                   aria-expanded={!panelUnidadesContraido}
-                  className="grid h-9 w-9 place-items-center rounded-xl text-forest hover:bg-emerald-50"
+                  className="grid h-8 w-8 place-items-center rounded-lg text-forest hover:bg-emerald-50"
                 >
                   <PanelLeftClose size={17} />
                 </button>
@@ -2509,7 +2509,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               {mostrandoContenidoFlota ? (
                 contenidoPanelFlota
               ) : (
-                <div className="rounded-xl border border-slate-100 bg-white p-2">
+                <div className="rounded-xl border border-slate-100 bg-white p-1.5">
                   <MenuSecciones
                     seccionId={seccionFlota}
                     onSeleccionar={(id) => {
@@ -2533,7 +2533,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             </aside>
           )
         ) : null}
-        <div id="mapa-flota" className={vehicles.length ? 'relative z-0 isolate scroll-mt-4 min-w-0' : 'relative z-0 isolate scroll-mt-4'}>
+        <div id="mapa-flota" className={vehicles.length ? 'relative z-0 isolate scroll-mt-4 min-w-0 overflow-hidden rounded-[14px] border border-[#D8C89F] bg-white shadow-sm' : 'relative z-0 isolate scroll-mt-4 overflow-hidden rounded-[14px] border border-[#D8C89F] bg-white shadow-sm'}>
         {aislarUnidad && selectedId ? <button type="button" onClick={() => setAislarUnidad(false)} className="absolute right-3 top-3 z-[1000] rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow">Mostrar todas las unidades</button> : null}
         <MapContainer
           center={[-6.78, -79.83]}
@@ -2867,7 +2867,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         <div id="recorrido-detallado" className="scroll-mt-4 px-4 sm:px-5 pb-3">{nodoRecorrido}</div>
       ) : null}
 
-      <div className="px-4 sm:px-5 pb-4 pt-1 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-slate-500">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#E7D8B7] px-3 py-1.5 text-[11px] text-slate-500 sm:px-4">
         <span className="inline-flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-sm border border-green-700 bg-green-500/30" />
           Límites reales importados

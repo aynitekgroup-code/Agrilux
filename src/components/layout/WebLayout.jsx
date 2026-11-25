@@ -70,12 +70,12 @@ export default function WebLayout({ children }) {
       <div className="flex flex-1 min-h-0">
         {/* ── Sidebar ─────────────────────────────────────────────── */}
         <aside
-          className={`hidden md:flex shrink-0 bg-white border-r border-gray-200 flex-col sticky top-0 h-screen transition-[width] duration-300 ease-in-out ${
-            sidebarOpen ? 'w-64' : 'w-20'
+          className={`hidden md:flex shrink-0 bg-emerald-50/70 border-r border-emerald-100 flex-col sticky top-0 h-screen transition-[width] duration-300 ease-in-out ${
+            sidebarOpen ? 'w-64' : 'w-16'
           }`}
         >
         {/* Identidad */}
-        <div className={`py-5 border-b border-gray-100 flex items-center ${sidebarOpen ? 'px-5 justify-between' : 'px-4 justify-center'}`}>
+        <div className={`py-5 border-b border-emerald-100 flex items-center ${sidebarOpen ? 'px-5 justify-between' : 'px-3 justify-center'}`}>
           {sidebarOpen && (
             <img
               src="/icons/Agrilux.logo.web.png"
@@ -89,9 +89,9 @@ export default function WebLayout({ children }) {
             aria-label={sidebarOpen ? 'Colapsar menú lateral' : 'Expandir menú lateral'}
             aria-expanded={sidebarOpen}
             title={sidebarOpen ? 'Colapsar menú lateral' : 'Expandir menú lateral'}
-            className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-forest transition-colors hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-300"
           >
-            <span className="absolute inset-1 rounded-full border border-primary/20" aria-hidden="true" />
+            <span className="absolute inset-1 rounded-full border border-emerald-300" aria-hidden="true" />
             {sidebarOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}
           </button>
         </div>
@@ -115,8 +115,8 @@ export default function WebLayout({ children }) {
                   sidebarOpen ? 'gap-3 px-3' : 'justify-center px-2'
                 } py-2.5 ${
                   active
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    ? 'bg-forest text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-emerald-100 hover:text-forest'
                 }`}
               >
                 <Icon size={18} strokeWidth={active ? 2.5 : 1.8} />
@@ -127,7 +127,7 @@ export default function WebLayout({ children }) {
         </nav>
 
         {/* Usuario en sidebar */}
-        <div className={`py-4 border-t border-gray-100 ${sidebarOpen ? 'px-4' : 'px-2'}`}>
+        <div className={`py-4 border-t border-emerald-100 ${sidebarOpen ? 'px-4' : 'px-2'}`}>
           {sidebarOpen ? (
             <>
               <div
@@ -190,15 +190,15 @@ export default function WebLayout({ children }) {
       {/* ── Contenido principal ──────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header superior */}
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-40 px-6 py-3 flex items-center justify-between gap-4">
+        <header className="bg-emerald-50/70 border-b border-emerald-100 sticky top-0 z-40 px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <h1 className="text-base font-semibold text-gray-800 truncate">
+            <h1 className="text-base font-semibold text-forest truncate">
               {navItems.find((i) =>
                 i.path === '/' ? location.pathname === '/' : location.pathname.startsWith(i.path)
               )?.label || 'Agrilux'}
             </h1>
             {user?.ubicacion && (
-              <span className="hidden lg:flex items-center gap-1 text-xs text-gray-400 truncate">
+              <span className="hidden lg:flex items-center gap-1 text-xs text-emerald-800/60 truncate">
                 <MapPin size={12} /> {user.ubicacion}
               </span>
             )}
@@ -217,7 +217,7 @@ export default function WebLayout({ children }) {
               onClick={() => setMenuOpen(!menuOpen)}
               aria-expanded={menuOpen}
               aria-haspopup="menu"
-              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm text-gray-700"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-emerald-100/70 transition-colors text-sm text-slate-700"
             >
               <span className="hidden md:inline truncate max-w-[140px]">
                 {user?.nombre || 'Menú'}
