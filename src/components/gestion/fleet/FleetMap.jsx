@@ -378,7 +378,7 @@ function FocusUnidad({ unidadFocus, marcadores }) {
     if (!unidadFocus) return undefined;
     const { lat, lon, placa } = unidadFocus;
     try {
-      map.flyTo([lat, lon], Math.max(map.getZoom(), 15), { duration: 0.7 });
+      map.flyTo([lat, lon], Math.max(map.getZoom(), 18), { duration: 0.7 });
     } catch {
       // Coordenadas inválidas no deben tumbar la consola entera.
     }
@@ -407,12 +407,13 @@ function FitMapToRoute({ puntos, token }) {
     try {
       const bounds = L.latLngBounds(puntos);
       if (bounds.isValid()) {
-        map.fitBounds(bounds.pad(0.12), { maxZoom: 16, animate: false });
+        map.fitBounds(bounds.pad(0.12), { maxZoom: 19, animate: false });
       }
     } catch {
       // Un punto malformado no debe tumbar la consola entera.
     }
-  }, [map, puntos, token]);
+  // El encuadre solo cambia al cargar otra página, no cuando el usuario hace zoom.
+  }, [map, token]);
   return null;
 }
 
@@ -473,6 +474,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // Zonas → checkbox «Mostrar Unidades Dentro»: oculta/muestra los marcadores
   // de las unidades en el mapa (los datos del recorrido histórico no se ocultan).
   const [mostrarUnidadesEnMapa, setMostrarUnidadesEnMapa] = useState(true);
+  const [aislarUnidad, setAislarUnidad] = useState(false);
   // Panel de unidades junto al mapa: se puede contraer a una franja de iconos
   // para que el mapa gane todo el ancho disponible.
   const [panelUnidadesContraido, setPanelUnidadesContraido] = useState(false);
@@ -895,6 +897,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // Enfoca una unidad en el mapa (marcador seleccionado + flyTo). Se usa al
   // hacer clic en el localizador y al elegirla en Coordenadas de unidades.
   const enfocarUnidad = useCallback((placa) => {
+    setAislarUnidad(true);
     const objetivo = vehiclesConPosicion.find((v) => v.placa === placa)
       || vehicles.find((v) => v.placa === placa);
     if (!objetivo) return;
@@ -1046,6 +1049,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // (<= 900 filas por llamada, nunca el histórico crudo completo).
   const cargarRecorridoCon = useCallback(async (desde, hasta) => {
     if (!empresaId || !selectedId) return;
+    setAislarUnidad(true);
     const { desde: d, hasta: h, texto } = rangoLibreLima(desde, hasta);
     if (!d || !h) {
       setRutaError('Elige la fecha y hora de inicio y de fin del recorrido (hora de Perú).');
@@ -1081,8 +1085,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       }
       setRutaPlan({
         ...plan,
-        totalPaginas: 1,
-        paginas: [{ indice: 1, desdeMs: plan.desdeMs, hastaMs: plan.hastaMs, desde: d, hasta: h }],
+        totalPaginas: Math.max(1, Math.ceil(todos.length / 100)),
+        paginas: [],
       });
       setRutaPuntos(todos);
       setRutaPagina(1);
@@ -1106,8 +1110,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     if (!rutaPlan) return;
     const destino = Math.min(Math.max(1, Number(indice) || 1), rutaPlan.totalPaginas);
     if (destino === rutaPagina || rutaCargando) return;
-    ejecutarPaginaRuta(rutaPlan, destino);
-  }, [rutaPlan, rutaPagina, rutaCargando, ejecutarPaginaRuta]);
+    setRutaPagina(destino);
+    setRutaFitToken(Date.now());
+  }, [rutaPlan, rutaPagina, rutaCargando]);
 
   const limpiarRecorrido = () => {
     setRutaPlan(null);
@@ -1430,7 +1435,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // contiene); se calcula una sola vez por carga de la página.
   const rutaValidos = useMemo(
     () =>
-      (rutaPuntos || [])
+      (rutaPuntos || []).slice((rutaPagina - 1) * 100, rutaPagina * 100)
         .filter(
           (punto) => Number.isFinite(Number(punto.latitud)) && Number.isFinite(Number(punto.longitud)),
         )
@@ -1438,7 +1443,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           ...punto,
           geocerca: geocercaDePunto(Number(punto.latitud), Number(punto.longitud), geofences),
         })),
-    [rutaPuntos, geofences],
+    [rutaPuntos, rutaPagina, geofences],
   );
 
   const handleSelectGeofence = (geofence) => {
@@ -1936,6 +1941,13 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         ) : null}
       </div>
       <div className="mt-2 grid gap-2">
+        <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+          Catálogo de unidades
+          <select value={selectedId || ''} onChange={(event) => event.target.value ? selectUnidadRuta(event.target.value) : onSelect?.('')} className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800">
+            <option value="">Selecciona una unidad</option>
+            {[...new Map([...vehicles, ...unidadesMaestro].filter((v) => v.placa).map((v) => [v.placa, v])).values()].sort((a, b) => a.placa.localeCompare(b.placa, 'es', { numeric: true })).map((v) => <option key={v.placa} value={v.placa}>{v.placa}{v.descripcion ? ` · ${v.descripcion}` : ''}</option>)}
+          </select>
+        </label>
         <label className="relative flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
           Unidad (placa o descripción)
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5">
@@ -2079,21 +2091,24 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </p>
       ) : null}
       {rutaPlan && !rutaError ? (
-        <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800" role="status">
+        <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800" role="status">
           Rango {rutaRangoTexto} · Página {rutaPagina} de {rutaPlan.totalPaginas}
-          {ventanaRutaTexto ? ` · ventana ${ventanaRutaTexto}` : ''}
+          {' '}· hasta 100 puntos por página
           {rutaPuntos && rutaPuntos.length > 0
             ? ` · ${rutaPuntos.length} puntos GPS${rutaPuntos.some((punto) => punto.es_alerta)
               ? ` · ${rutaPuntos.filter((punto) => punto.es_alerta).length} con alerta de velocidad o pánico`
               : ''}`
             : ''}
           .
-        </p>
+          <div className="mt-2 flex items-center gap-2">
+            <button type="button" disabled={rutaPagina <= 1 || rutaCargando} onClick={() => cambiarPaginaRuta(rutaPagina - 1)} className="rounded border border-emerald-300 bg-white px-2 py-1 disabled:opacity-40">Anterior</button>
+            <button type="button" disabled={rutaPagina >= rutaPlan.totalPaginas || rutaCargando} onClick={() => cambiarPaginaRuta(rutaPagina + 1)} className="rounded border border-emerald-300 bg-white px-2 py-1 disabled:opacity-40">Siguiente</button>
+          </div>
+        </div>
       ) : null}
       {!rutaError && rutaPuntos && !rutaCargando && rutaPuntos.length === 0 ? (
         <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status">
-          No hay posiciones de {selectedId} en {ventanaRutaTexto || 'esa ventana'}. Usa ◀ ▶ para
-          revisar otra página o cambia el rango.
+          No hay posiciones de {selectedId} en el rango elegido. Cambia el rango y vuelve a consultar.
         </p>
       ) : null}
     </div>
@@ -2229,8 +2244,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               ? zonasPanelNodo
               : null;
     return (
-      <div className="min-w-0 space-y-3 rounded-xl border border-slate-100 bg-white p-3">
-        <header className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-3">
+      <div className="min-w-0 space-y-3 rounded-xl border-2 border-emerald-200 bg-emerald-50/40 p-3">
+        <header className="flex flex-wrap items-start justify-between gap-2 border-b border-emerald-200 pb-3">
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{seccion.group}</p>
             <h4 className="mt-0.5 text-sm font-bold text-slate-900">{seccion.label}</h4>
@@ -2508,13 +2523,17 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           )
         ) : null}
         <div id="mapa-flota" className={vehicles.length ? 'relative z-0 isolate scroll-mt-4 min-w-0' : 'relative z-0 isolate scroll-mt-4'}>
+        {aislarUnidad && selectedId ? <button type="button" onClick={() => setAislarUnidad(false)} className="absolute right-3 top-3 z-[1000] rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow">Mostrar todas las unidades</button> : null}
         <MapContainer
           center={[-6.78, -79.83]}
           zoom={12}
+          maxZoom={21}
           scrollWheelZoom
           style={{ width: '100%', height: vehicles.length ? 660 : 540, borderRadius: 14, background: '#E7EDE1' }}
         >
           <TileLayer
+            maxZoom={21}
+            maxNativeZoom={19}
             key={vistaSatelite ? 'satelite' : 'calle'}
             attribution={
               vistaSatelite
@@ -2606,9 +2625,10 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           ) : null}
           {rutaValidos.length > 0 ? (
             <>
+              <Polyline positions={rutaValidos.map((punto) => [Number(punto.latitud), Number(punto.longitud)])} pathOptions={{ color: '#ffffff', weight: 8, opacity: 1 }} />
               <Polyline
                 positions={rutaValidos.map((punto) => [Number(punto.latitud), Number(punto.longitud)])}
-                 pathOptions={{ color: '#EC4899', weight: 4, opacity: 1 }}
+                 pathOptions={{ color: '#d50000', weight: 4, opacity: 1 }}
               />
               {/* Puntos GPS del recorrido: se pintan antes que inicio/fin/alertas
                   para que queden debajo (el fin rojo y las alertas conservan
@@ -2618,7 +2638,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                   key={`ruta-punto-${punto.id ?? `${punto.fecha}-${punto.latitud}-${punto.longitud}`}`}
                   center={[Number(punto.latitud), Number(punto.longitud)]}
                    radius={radioPuntoRuta}
-                   pathOptions={{ color: '#FFFFFF', weight: Math.max(1.1, radioPuntoRuta / 4), fillColor: '#EC4899', fillOpacity: 1 }}
+                    pathOptions={{ color: '#FFFFFF', weight: Math.max(1.1, radioPuntoRuta / 4), fillColor: '#d50000', fillOpacity: 1 }}
                 >
                   <Tooltip direction="top" offset={[0, -4]} opacity={1} className="fleet-unit-tooltip">
                     <div className="text-[11px] leading-snug">
@@ -2641,7 +2661,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               >
                 <Tooltip direction="top" offset={[0, -6]} opacity={1} className="fleet-unit-tooltip">
                   <div className="text-[11px] leading-snug">
-                    <p className="font-bold text-slate-900">Inicio del recorrido</p>
+                    <p className="font-bold text-slate-900">Primer punto de esta página</p>
                     <p className="text-slate-600">{formatearFechaHora(rutaValidos[0].fecha)}</p>
                   </div>
                 </Tooltip>
@@ -2656,7 +2676,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               >
                 <Tooltip direction="top" offset={[0, -6]} opacity={1} className="fleet-unit-tooltip">
                   <div className="text-[11px] leading-snug">
-                    <p className="font-bold text-slate-900">Fin del recorrido</p>
+                    <p className="font-bold text-slate-900">Último punto de esta página</p>
                     <p className="text-slate-600">
                       {formatearFechaHora(rutaValidos[rutaValidos.length - 1].fecha)}
                     </p>
@@ -2689,7 +2709,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               />
             </>
           ) : null}
-          {mostrarUnidadesEnMapa && vehiclesConPosicion.map((vehicle) => {
+          {mostrarUnidadesEnMapa && vehiclesConPosicion.filter((vehicle) => !aislarUnidad || vehicle.placa === selectedId || vehicle.id === selectedId).map((vehicle) => {
             const meta = STATUS_META[vehicle.estado] || STATUS_META.offline;
             const latitud = Number(vehicle.lat);
             const longitud = Number(vehicle.lng);
@@ -2721,23 +2741,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                 position={[latitud, longitud]}
                 icon={(selectedId === vehicle.id ? iconosUnidad.activo : iconosUnidad.base)[meta.dot]}
                 zIndexOffset={selectedId === vehicle.id ? 1000 : 0}
-                eventHandlers={onSelect ? { click: () => onSelect(vehicle.id) } : undefined}
+                eventHandlers={onSelect ? { click: () => { setAislarUnidad(true); onSelect(vehicle.id); } } : undefined}
               >
-                <Tooltip direction="top" opacity={1} className="fleet-unit-tooltip">
-                  <div className="text-[11px] leading-snug space-y-0.5">
-                    <p className="font-bold text-slate-900">{vehicle.placa}</p>
-                    <p className="text-slate-600">{vehicle.descripcion || vehicle.modelo || '—'}</p>
-                    {!describirPosicion(vehicle.ultima_fecha, ahoraPosiciones).reciente && fuentePosiciones === 'real' ? <p className="text-amber-700">Posición antigua</p> : null}
-                    <p className="text-slate-700">
-                      {meta.label}
-                      {Number.isFinite(velocidad) && velocidad > 0 ? ` · ${velocidad} km/h` : ''}
-                    </p>
-                    {fechaPosicion ? <p className="text-slate-500">{fechaPosicion}</p> : null}
-                    {fuentePosiciones !== 'real' ? (
-                      <p className="text-slate-400">GPS de demostración</p>
-                    ) : null}
-                  </div>
-                </Tooltip>
+                <Tooltip permanent direction="right" offset={[diametroUnidad / 2, 0]} opacity={1} className="fleet-unit-tooltip">{vehicle.placa}{vehicle.descripcion ? ` · ${vehicle.descripcion}` : ''}</Tooltip>
                 {/* Ventana flotante (popup) con las características de la
                     máquina al hacer clic. Se pintan solo los campos que
                     existan: sirve igual para datos reales (placa, modelo,
