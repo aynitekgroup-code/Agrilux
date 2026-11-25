@@ -2536,6 +2536,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         <div id="mapa-flota" className={vehicles.length ? 'relative z-0 isolate scroll-mt-4 min-w-0 overflow-hidden rounded-[14px] border border-[#A7C7AB] bg-white shadow-sm' : 'relative z-0 isolate scroll-mt-4 overflow-hidden rounded-[14px] border border-[#A7C7AB] bg-white shadow-sm'}>
         {aislarUnidad && selectedId ? <button type="button" onClick={() => setAislarUnidad(false)} className="absolute right-3 top-3 z-[1000] rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow">Mostrar todas las unidades</button> : null}
         <MapContainer
+          className={vistaSatelite ? 'fleet-map fleet-map--satelite' : 'fleet-map'}
           center={[-6.78, -79.83]}
           zoom={12}
           maxZoom={21}
@@ -2727,7 +2728,16 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                 zIndexOffset={selectedId === vehicle.id ? 1000 : 0}
                 eventHandlers={onSelect ? { click: () => { setAislarUnidad(true); onSelect(vehicle.id); } } : undefined}
               >
-                <Tooltip permanent direction="right" offset={[diametroUnidad / 2, 0]} opacity={1} className="fleet-unidad-label">{vehicle.placa}{vehicle.descripcion ? ` · ${vehicle.descripcion}` : ''}</Tooltip>
+                <Tooltip
+                  key={vistaSatelite ? 'satelite' : 'calle'}
+                  permanent
+                  direction="right"
+                  offset={[diametroUnidad / 2, 0]}
+                  opacity={1}
+                  className={`fleet-unidad-label${vistaSatelite ? ' fleet-unidad-label--satelite' : ''}`}
+                >
+                  {vehicle.placa}{vehicle.descripcion ? ` · ${vehicle.descripcion}` : ''}
+                </Tooltip>
                 {/* Ventana flotante (popup) con las características de la
                     máquina al hacer clic. Se pintan solo los campos que
                     existan: sirve igual para datos reales (placa, modelo,
