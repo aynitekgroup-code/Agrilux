@@ -69,7 +69,7 @@ export const SECCIONES = [
 ];
 
 /** Menú de secciones reutilizable (Consola principal y panel Flota del mapa). */
-export function MenuSecciones({ seccionId, onSeleccionar, compacto = false }) {
+export function MenuSecciones({ seccionId, onSeleccionar, compacto = false, amplio = false }) {
   const grupos = useMemo(() => SECCIONES.reduce((acc, item) => {
     (acc[item.group] = acc[item.group] || []).push(item);
     return acc;
@@ -89,13 +89,13 @@ export function MenuSecciones({ seccionId, onSeleccionar, compacto = false }) {
                   type="button"
                   onClick={() => onSeleccionar?.(item.id)}
                   aria-current={activa ? 'page' : undefined}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-forest/20 ${
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-forest/20 ${amplio ? 'min-h-12 py-3 text-sm' : 'py-2 text-xs'} ${
                     activa
                       ? 'bg-forest text-white font-semibold shadow-sm'
                       : 'text-slate-600 hover:bg-emerald-50 hover:text-forest'
                   }`}
                 >
-                  <Icon size={14} className={`shrink-0 ${activa ? 'text-white' : 'text-forest'}`} aria-hidden="true" />
+                  <Icon size={amplio ? 18 : 14} className={`shrink-0 ${activa ? 'text-white' : 'text-forest'}`} aria-hidden="true" />
                   <span className="min-w-0 flex-1 truncate">{item.label}</span>
                   <ChevronRight size={13} className={`shrink-0 ${activa ? 'text-white/80' : 'text-slate-300'}`} aria-hidden="true" />
                 </button>

@@ -233,3 +233,35 @@ body::before {
   background: #aabbb1;
   background-clip: padding-box;
 }
+
+/* Menú lateral: entra desde la izquierda y el fondo aparece con el mismo clic. */
+@keyframes menu-desde-izquierda {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+@keyframes menu-fondo {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.menu-lateral {
+  animation: menu-desde-izquierda 0.22s ease-out;
+}
+.menu-fondo {
+  animation: menu-fondo 0.22s ease-out;
+}
+
+/* Dentro de la columna estrecha (móvil) el menú es el botón; en un panel ancho, las pestañas. */
+.fleet-cabecera {
+  container-type: inline-size;
+}
+.fleet-cabecera-burger { display: flex; }
+.fleet-cabecera-tabs { display: none; }
+@container (min-width: 640px) {
+  .fleet-cabecera-burger { display: none; }
+  .fleet-cabecera-tabs { display: flex; }
+}
+
+/* El zoom del mapa queda debajo del botón de menú. */
+.fleet-map .leaflet-top.leaflet-left {
+  top: 52px;
+}

@@ -442,17 +442,15 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
       ) : null}
 
       {section === 'mapas' ? (
-        <div className="space-y-4">
-          <SectionHeading
-            title="Mapa de flota"
-            description="Busca una máquina para ver su ubicación o consulta sus recorridos en Ubicaciones Históricas."
-          >
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2 px-1">
+            <h2 className="text-base font-bold text-slate-900">Mapa de flota</h2>
             {conDatosReales ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide">
                 <Database size={12} /> Datos reales
               </span>
             ) : null}
-          </SectionHeading>
+          </div>
           <ErrorBoundary mensaje="No se pudo dibujar el mapa. Revisa la sección y pulsa Reintentar.">
             <FleetMap
               empresaId={empresa_activa_id}

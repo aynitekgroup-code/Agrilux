@@ -1,21 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CircleMarker, GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import { diaMapaPeru } from '../../../lib/fechasMapa';
 import L from 'leaflet';
 import {
   AlertCircle,
   Check,
-  ChevronLeft,
   Info,
   LoaderCircle,
   MapPin,
   MapPinned,
+  Menu,
   Mic,
   MicOff,
-  PanelLeftClose,
-  PanelLeftOpen,
   Search,
-  Table,
   Volume2,
   X,
 } from 'lucide-react';
@@ -487,14 +485,39 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const [mostrarUnidadesEnMapa, setMostrarUnidadesEnMapa] = useState(true);
   const [aislarUnidad, setAislarUnidad] = useState(false);
   const [reinicioBusqueda, setReinicioBusqueda] = useState(0);
-  // Panel de unidades junto al mapa: se puede contraer a una franja de iconos
-  // para que el mapa gane todo el ancho disponible.
-  const [panelUnidadesContraido, setPanelUnidadesContraido] = useState(false);
-  // Panel Flota del mapa: menú de secciones (mismo catálogo que la Consola Principal).
+  // Menú de mapas: cerrado por defecto. Un clic lo abre desde la izquierda
+  // y, al elegir una sección, se oculta solo para dejar el mapa a la vista.
+  const [menuMapasAbierto, setMenuMapasAbierto] = useState(false);
   const [seccionFlota, setSeccionFlota] = useState('localizador');
-  const [mostrandoContenidoFlota, setMostrandoContenidoFlota] = useState(true);
+  const [mostrandoContenidoFlota, setMostrandoContenidoFlota] = useState(false);
   // El panel de Configuración solo se muestra cuando se elige desde el menú lateral.
   const [mostrarConfiguracion, setMostrarConfiguracion] = useState(false);
+  useEffect(() => {
+    if (!menuMapasAbierto) return undefined;
+    const alPulsar = (event) => { if (event.key === 'Escape') setMenuMapasAbierto(false); };
+    const overflowPrevio = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', alPulsar);
+    return () => {
+      document.body.style.overflow = overflowPrevio;
+      window.removeEventListener('keydown', alPulsar);
+    };
+  }, [menuMapasAbierto]);
+  const elegirSeccionMapa = (id) => {
+    setMenuMapasAbierto(false);
+    if (id === 'configuracion') {
+      setSeccionFlota(id);
+      setMostrandoContenidoFlota(false);
+      setMostrarConfiguracion(true);
+      requestAnimationFrame(() => {
+        document.getElementById('configuracion-flota')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      return;
+    }
+    setSeccionFlota(id);
+    setMostrandoContenidoFlota(true);
+    setMostrarConfiguracion(false);
+  };
   // Buscador de geocercas del panel: lista desplegable con chevron (estilo Select).
   const [buscadorGeocercasAbierto, setBuscadorGeocercasAbierto] = useState(false);
   // Consola Principal: sección activa y aviso de apertura externa.
@@ -1785,7 +1808,38 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   };
   applyVoiceRef.current = applyVoiceResult;
 
-  const toggleVoiceSearch = () => {
+  const toggleVoiceSearch = async () => {
+    if (Capacitor.isNativePlatform()) {
+      if (listening) return;
+      const plugin = await loadNativeSpeechRecognition();
+      if (!plugin) {
+        setVoiceMessage('Reconocimiento de voz no disponible en este dispositivo. Puedes escribir el nombre.');
+        return;
+      }
+      try {
+        const { available } = await plugin.available();
+        if (!available) {
+          setVoiceMessage('El reconocimiento de voz no está disponible. Revisa los servicios de voz de Google.');
+          return;
+        }
+        const permiso = await plugin.requestPermissions();
+        if (permiso.speechRecognition !== 'granted') {
+          setVoiceMessage('Activa el micrófono en Ajustes del teléfono → Aplicaciones → Agrilux → Permisos → Micrófono.');
+          return;
+        }
+        setListening(true);
+        setVoiceMessage('Escuchando… di el nombre de la geocerca.');
+        const resultado = await plugin.start({ language: 'es-PE', maxResults: 5, prompt: 'Di el nombre de la geocerca', popup: true, partialResults: false });
+        const texto = (resultado?.matches || []).find((valor) => valor?.trim())?.trim();
+        if (texto) applyVoiceRef.current?.(texto);
+        else setVoiceMessage('No te escuché. Toca el micrófono e inténtalo de nuevo.');
+      } catch {
+        setVoiceMessage('No se pudo reconocer la voz. Revisa el micrófono y la conexión a internet.');
+      } finally {
+        setListening(false);
+      }
+      return;
+    }
     if (!SpeechRecognitionCtor) {
       setVoiceMessage('Tu navegador no soporta búsqueda por voz. Usa Chrome o Edge.');
       return;
@@ -1821,8 +1875,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     };
     recognition.onerror = (event) => {
       const messages = {
-        'not-allowed': 'Permite el acceso al micrófono en el navegador para usar la voz.',
-        'service-not-allowed': 'Permite el acceso al micrófono en el navegador para usar la voz.',
+        'not-allowed': 'En Chrome, toca el icono junto a la dirección → Permisos → Micrófono → Permitir. Después vuelve a tocar el micrófono.',
+        'service-not-allowed': 'El servicio de voz está bloqueado. Revisa el permiso de micrófono del navegador y del teléfono.',
         'no-speech': 'No te escuché. Toca el micrófono e inténtalo de nuevo.',
         'audio-capture': 'No se detectó ningún micrófono.',
         network: 'La búsqueda por voz necesita conexión a internet.',
@@ -2456,114 +2510,23 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           </div> : null}
         </div>
       ) : null}
-      <div
-        className={vehicles.length
-          ? panelUnidadesContraido
-            ? 'grid grid-cols-[minmax(0,56px)_minmax(0,1fr)] items-start gap-2 px-1 sm:px-2 pb-2'
-            : 'grid grid-cols-1 items-start gap-2 px-1 sm:px-2 pb-2 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]'
-          : 'px-1 sm:px-2 pb-2'}
-      >
-        {vehicles.length ? (
-          panelUnidadesContraido ? (
-            <aside
-              className="order-first flex flex-col items-center gap-2 self-start rounded-2xl border border-slate-100 bg-white p-2 shadow-sm"
-              aria-label="Expandir panel de unidades"
-            >
-              <button
-                type="button"
-                onClick={() => setPanelUnidadesContraido(false)}
-                title="Expandir panel de unidades"
-                aria-label="Expandir panel de unidades"
-                className="grid h-9 w-9 place-items-center rounded-xl text-forest hover:bg-emerald-50"
-              >
-                <PanelLeftOpen size={18} />
-              </button>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 [writing-mode:vertical-rl]">
-                Unidades
-              </span>
-              <button
-                type="button"
-                onClick={() => setPanelUnidadesContraido(false)}
-                title="Localizador de unidades"
-                aria-label="Expandir Localizador de unidades"
-                className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 hover:bg-slate-50"
-              >
-                <Search size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setPanelUnidadesContraido(false)}
-                title="Coordenadas de las unidades"
-                aria-label="Expandir Coordenadas de las unidades"
-                className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 hover:bg-slate-50"
-              >
-                <Table size={16} />
-              </button>
-            </aside>
-          ) : (
-            <aside
-              className="order-last min-w-0 space-y-1 max-h-[660px] overflow-y-auto scroll-consola pr-1 lg:order-first"
-              aria-label="Panel de unidades"
-            >
-              <div className="sticky top-0 z-10 flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-white px-2 py-1 shadow-sm">
-                {mostrandoContenidoFlota ? (
-                  <button
-                    type="button"
-                    onClick={() => setMostrandoContenidoFlota(false)}
-                    title="Volver a secciones"
-                    aria-label="Volver a secciones"
-                    className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-forest"
-                  >
-                    <ChevronLeft size={14} /> Menú de mapas
-                  </button>
-                ) : (
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Menú de mapas
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setPanelUnidadesContraido(true)}
-                  title="Contraer panel de unidades"
-                  aria-label="Contraer panel de unidades"
-                  aria-expanded={!panelUnidadesContraido}
-                  className="grid h-8 w-8 place-items-center rounded-lg text-forest hover:bg-emerald-50"
-                >
-                  <PanelLeftClose size={17} />
-                </button>
-              </div>
-              {estadoAvisoNodo ? <div>{estadoAvisoNodo}</div> : null}
-              {mostrandoContenidoFlota ? (
-                contenidoPanelFlota
-              ) : (
-                <div className="rounded-xl border border-slate-100 bg-white p-1.5">
-                  <MenuSecciones
-                    seccionId={seccionFlota}
-                    onSeleccionar={(id) => {
-                      if (id === 'configuracion') {
-                        setSeccionFlota(id);
-                        setMostrandoContenidoFlota(false);
-                        setMostrarConfiguracion(true);
-                        requestAnimationFrame(() => {
-                          document.getElementById('configuracion-flota')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        });
-                        return;
-                      }
-                      setSeccionFlota(id);
-                      setMostrandoContenidoFlota(true);
-                      setMostrarConfiguracion(false);
-                    }}
-                    compacto
-                  />
-                </div>
-              )}
-            </aside>
-          )
-        ) : null}
-        <div id="mapa-flota" className={`${panelUnidadesContraido ? 'order-last' : 'order-first lg:order-last'} relative z-0 isolate scroll-mt-4 min-w-0 overflow-hidden rounded-[14px] border border-[#A7C7AB] bg-white shadow-sm`}>
+      <div className="px-1 sm:px-2 pb-2">
+        <div id="mapa-flota" className="relative z-0 isolate scroll-mt-4 min-w-0 overflow-hidden rounded-[14px] border border-[#A7C7AB] bg-white shadow-sm">
+        <button
+          type="button"
+          onClick={() => setMenuMapasAbierto(true)}
+          aria-expanded={menuMapasAbierto}
+          aria-haspopup="dialog"
+          aria-label="Abrir menú de mapas"
+          title="Menú de mapas"
+          className="absolute left-3 top-3 z-[1000] flex h-11 max-w-[58%] items-center gap-2 rounded-lg bg-forest px-3 text-sm font-semibold text-white shadow-lg"
+        >
+          <Menu size={18} />
+          <span className="truncate">{(SECCIONES_FLOTA.find((s) => s.id === seccionFlota) || SECCIONES_FLOTA[0]).label}</span>
+        </button>
         <button type="button" onClick={mostrarTodasLasUnidades} className="absolute right-3 top-3 z-[1000] rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow">Ver todas las máquinas</button>
         <MapContainer
-          className={`${vistaSatelite ? 'fleet-map fleet-map--satelite' : 'fleet-map'} h-[55vh] min-h-[340px] lg:h-[660px]`}
+          className={`${vistaSatelite ? 'fleet-map fleet-map--satelite' : 'fleet-map'} ${consolaVisible ? 'h-[72dvh] min-h-[480px]' : 'h-[55vh] min-h-[340px] lg:h-[660px]'}`}
           center={[-6.78, -79.83]}
           zoom={12}
           maxZoom={21}
@@ -2863,8 +2826,60 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             unidades={vehiclesConPosicion}
           />
         </MapContainer>
+        {mostrandoContenidoFlota && seccionFlota !== 'configuracion' ? (
+          <div className="absolute inset-x-0 bottom-0 z-[1000] flex max-h-[46%] flex-col rounded-t-2xl border-t border-emerald-200 bg-white shadow-[0_-8px_24px_rgba(15,23,42,0.18)]">
+            <div className="flex items-center justify-between gap-2 px-3 py-1.5">
+              <p className="truncate text-xs font-bold uppercase tracking-wide text-slate-500">Herramienta</p>
+              <button
+                type="button"
+                onClick={() => setMostrandoContenidoFlota(false)}
+                aria-label="Ocultar herramienta"
+                title="Ocultar"
+                className="grid h-9 w-9 place-items-center rounded-lg text-slate-500 hover:bg-slate-100"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+              {contenidoPanelFlota}
+            </div>
+          </div>
+        ) : null}
         </div>
       </div>
+      {menuMapasAbierto ? createPortal(
+        <div className="fixed inset-0 z-[80]" role="dialog" aria-modal="true" aria-label="Menú de mapas">
+          <button
+            type="button"
+            aria-label="Cerrar menú de mapas"
+            onClick={() => setMenuMapasAbierto(false)}
+            className="menu-fondo absolute inset-0 bg-black/45"
+          />
+          <div className="menu-lateral absolute inset-y-0 left-0 flex w-[min(86%,320px)] flex-col bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-2 bg-forest px-4 py-3">
+              <span className="min-w-0 truncate text-sm font-bold text-white">Menú de mapas</span>
+              <button
+                type="button"
+                onClick={() => setMenuMapasAbierto(false)}
+                aria-label="Cerrar menú de mapas"
+                title="Cerrar"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-white hover:bg-white/10"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <nav className="flex-1 overflow-y-auto p-2" aria-label="Secciones del mapa">
+              <MenuSecciones
+                seccionId={seccionFlota}
+                onSeleccionar={elegirSeccionMapa}
+                compacto
+                amplio
+              />
+            </nav>
+          </div>
+        </div>,
+        document.body,
+      ) : null}
 
       {/* 18/11/2026 (observación X): antes, si la lista de unidades no
           cargaba, el localizador, los grupos y las coordenadas desaparecían

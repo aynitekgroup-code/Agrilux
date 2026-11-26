@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   LayoutDashboard,
   Fuel,
@@ -6,27 +7,31 @@ import {
   Map,
   MapPinned,
   FileChartColumn,
+  Menu,
+  X,
+  ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../../../lib/AuthContext';
 import { DEMO_FUNDO } from '../../../mocks/agrotrackData';
 
 /**
  * Secciones de AgroTrack.
- * Los nombres y el orden son los que ya conoce el usuario: el estilo imita al
- * menú superior de Zonar (barra oscura con pestañas) sin cambiar la etiqueta
- * de ninguna sección.
+ * Los nombres y el orden son los que ya conoce el usuario: el estilo imita a
+ * Zonar (barra oscura con pestañas en escritorio; en móvil, menú lateral que
+ * se abre con un clic y se cierra solo al elegir).
  */
 export const FLEET_SECTIONS = [
-  { id: 'consola', label: 'Consola principal', icon: LayoutDashboard },
-  { id: 'mapas', label: 'Mapas', icon: Map },
-  { id: 'reportes', label: 'Reportes', icon: FileChartColumn },
-  { id: 'geocercas', label: 'Geocercas', icon: MapPinned },
-  { id: 'combustible', label: 'Control de combustible', icon: Fuel },
-  { id: 'corte', label: 'Corte remoto', icon: Power },
+  { id: 'consola', label: 'Consola principal', icon: LayoutDashboard, tono: 'bg-sky-100 text-sky-600' },
+  { id: 'mapas', label: 'Mapas', icon: Map, tono: 'bg-emerald-100 text-emerald-600' },
+  { id: 'reportes', label: 'Reportes', icon: FileChartColumn, tono: 'bg-violet-100 text-violet-600' },
+  { id: 'geocercas', label: 'Geocercas', icon: MapPinned, tono: 'bg-amber-100 text-amber-600' },
+  { id: 'combustible', label: 'Control de combustible', icon: Fuel, tono: 'bg-orange-100 text-orange-600' },
+  { id: 'corte', label: 'Corte remoto', icon: Power, tono: 'bg-red-100 text-red-600' },
 ];
 
 export default function FleetHeader({ activeSection, onSectionChange, pendingAlerts = 0, fuente = 'demo' }) {
   const { user, empresa_activa_id, empresas_disponibles } = useAuth();
+  const [menuAbierto, setMenuAbierto] = useState(false);
   const listaEmpresas = Array.isArray(empresas_disponibles) ? empresas_disponibles : [];
   const empresaActiva = listaEmpresas.find((empresa) => empresa.id === empresa_activa_id) || null;
   const empresaNombre = empresaActiva?.nombre || DEMO_FUNDO.empresa;
@@ -39,8 +44,32 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
     : 'bg-amber-50 text-amber-700 border-amber-200';
 
+  const seccionActiva = FLEET_SECTIONS.find((section) => section.id === activeSection) || FLEET_SECTIONS[0];
+
+  // El menú lateral se cierra solo: al elegir una sección o al cambiar la
+  // sección desde otro lugar (por ejemplo ?section=reportes).
+  useEffect(() => { setMenuAbierto(false); }, [activeSection]);
+
+  // Esc lo cierra y, mientras está abierto, la página de atrás no se desplaza.
+  useEffect(() => {
+    if (!menuAbierto) return undefined;
+    const alPulsar = (event) => { if (event.key === 'Escape') setMenuAbierto(false); };
+    const overflowPrevio = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', alPulsar);
+    return () => {
+      document.body.style.overflow = overflowPrevio;
+      window.removeEventListener('keydown', alPulsar);
+    };
+  }, [menuAbierto]);
+
+  const elegirSeccion = (id) => {
+    onSectionChange(id);
+    setMenuAbierto(false);
+  };
+
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+    <section className="fleet-cabecera overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
       {/* ── Identidad ───────────────────────────────────────────── */}
       <div className="flex flex-col gap-2 p-3 sm:gap-4 sm:p-6">
         <div className="flex flex-wrap items-center gap-2 sm:items-start sm:gap-4">
@@ -61,9 +90,32 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
         </div>
       </div>
 
-      {/* ── Menú superior (estilo Zonar): barra oscura con pestañas ── */}
+      {/* ── Columna estrecha: un clic abre el menú lateral ──────── */}
+      <div className="fleet-cabecera-burger items-center gap-2 bg-forest px-2 py-1.5">
+        <button
+          type="button"
+          onClick={() => setMenuAbierto(true)}
+          aria-expanded={menuAbierto}
+          aria-haspopup="dialog"
+          aria-label="Abrir menú de secciones"
+          title="Menú de secciones"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-white transition-colors hover:bg-white/10 active:bg-white/20"
+        >
+          <Menu size={22} />
+        </button>
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white">
+          {seccionActiva.label}
+        </span>
+        {seccionActiva.id === 'consola' && pendingAlerts > 0 ? (
+          <span className="shrink-0 rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold text-white">
+            {pendingAlerts}
+          </span>
+        ) : null}
+      </div>
+
+      {/* ── Escritorio: menú superior (estilo Zonar) con pestañas ── */}
       <nav
-        className="flex gap-1 overflow-x-auto bg-forest px-2 pt-1.5 pb-0 sm:px-4"
+        className="fleet-cabecera-tabs gap-1 overflow-x-auto bg-forest px-4 pt-1.5 pb-0"
         aria-label="Secciones de AgroTrack"
       >
         {FLEET_SECTIONS.map((section) => {
@@ -92,6 +144,68 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
           );
         })}
       </nav>
+
+      {/* ── Menú lateral: entra desde la izquierda y se cierra al elegir ── */}
+      {menuAbierto ? createPortal(
+        <div className="fixed inset-0 z-[80]" role="dialog" aria-modal="true" aria-label="Menú de secciones">
+          <button
+            type="button"
+            aria-label="Cerrar menú de secciones"
+            onClick={() => setMenuAbierto(false)}
+            className="menu-fondo absolute inset-0 bg-black/45"
+          />
+          <div className="menu-lateral absolute inset-y-0 left-0 flex w-[min(86%,320px)] flex-col bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-2 bg-forest px-4 py-3">
+              <span className="min-w-0 truncate text-sm font-bold text-white">Menú de AgroTrack</span>
+              <button
+                type="button"
+                onClick={() => setMenuAbierto(false)}
+                aria-label="Cerrar menú de secciones"
+                title="Cerrar"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white transition-colors hover:bg-white/10"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <nav className="flex-1 overflow-y-auto py-2" aria-label="Secciones de AgroTrack">
+              {FLEET_SECTIONS.map((section) => {
+                const Icon = section.icon;
+                const active = activeSection === section.id;
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    aria-current={active ? 'page' : undefined}
+                    onClick={() => elegirSeccion(section.id)}
+                    className={`flex min-h-12 w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
+                      active ? 'bg-emerald-50' : 'hover:bg-slate-50 active:bg-slate-100'
+                    }`}
+                  >
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${section.tono}`}>
+                      <Icon size={17} />
+                    </span>
+                    <span className={`min-w-0 flex-1 truncate text-sm ${active ? 'font-bold text-forest' : 'font-medium text-slate-700'}`}>
+                      {section.label}
+                    </span>
+                    {section.id === 'consola' && pendingAlerts > 0 ? (
+                      <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                        {pendingAlerts}
+                      </span>
+                    ) : null}
+                    <ChevronRight size={16} className="shrink-0 text-slate-300" />
+                  </button>
+                );
+              })}
+            </nav>
+
+            <p className="border-t border-slate-100 px-4 py-3 text-[11px] text-slate-400">
+              Elige una sección: el menú se cierra solo.
+            </p>
+          </div>
+        </div>,
+        document.body,
+      ) : null}
     </section>
   );
 }
