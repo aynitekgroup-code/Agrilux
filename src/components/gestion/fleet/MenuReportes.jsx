@@ -1,5 +1,6 @@
-import React, { useRef } from 'react';
-import { ChevronDown, FileChartColumn } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ChevronDown, FileChartColumn, X } from 'lucide-react';
 
 const GRUPOS = [
   { nombre: 'Hunter 360', opciones: [
@@ -22,16 +23,29 @@ const GRUPOS = [
 ];
 
 export default function MenuReportes() {
-  const menu = useRef(null);
-  return <details ref={menu} className="relative rounded-xl border border-emerald-200 bg-white" onKeyDown={(e) => { if (e.key === 'Escape') { menu.current.open = false; menu.current.querySelector('summary')?.focus(); } }}>
-    <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-bold text-forest focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700">
+  const [abierto, setAbierto] = useState(false);
+  const boton = useRef(null);
+  useEffect(() => {
+    if (!abierto) return undefined;
+    const alPulsar = (evento) => { if (evento.key === 'Escape') { setAbierto(false); boton.current?.focus(); } };
+    window.addEventListener('keydown', alPulsar);
+    return () => window.removeEventListener('keydown', alPulsar);
+  }, [abierto]);
+  return <>
+    <button ref={boton} type="button" onClick={() => setAbierto(true)} aria-expanded={abierto} aria-haspopup="dialog" className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm font-bold text-forest focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700">
       <FileChartColumn size={18} /> Menú de reportes <ChevronDown className="ml-auto" size={17} />
-    </summary>
-    <nav aria-label="Accesos directos a reportes" className="absolute left-0 top-full z-30 mt-1 max-h-[70vh] w-[min(90vw,360px)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
-      {GRUPOS.map((grupo) => <div key={grupo.nombre}>
-        <p className="px-3 pt-3 pb-1 text-xs font-bold uppercase text-slate-500">{grupo.nombre}</p>
-        {grupo.opciones.map(([id, etiqueta]) => <a key={id} href={`#${id}`} onClick={() => { if (menu.current) menu.current.open = false; }} className="block rounded-lg px-3 py-2.5 text-sm text-slate-700 hover:bg-emerald-50 hover:text-forest focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest">{etiqueta}</a>)}
-      </div>)}
-    </nav>
-  </details>;
+    </button>
+    {abierto ? createPortal(<div className="fixed inset-0 z-[80]" role="dialog" aria-modal="true" aria-label="Menú de reportes">
+      <button type="button" aria-label="Cerrar menú de reportes" onClick={() => setAbierto(false)} className="absolute inset-0 bg-black/45" />
+      <div className="menu-lateral absolute inset-y-0 left-0 flex w-[min(86%,360px)] flex-col bg-white shadow-2xl">
+        <div className="flex items-center justify-between bg-forest px-4 py-3 text-sm font-bold text-white">Menú de reportes <button type="button" aria-label="Cerrar menú de reportes" onClick={() => setAbierto(false)} className="rounded-lg p-2 hover:bg-white/10"><X size={18} /></button></div>
+        <nav aria-label="Accesos directos a reportes" className="flex-1 overflow-y-auto p-2">
+          {GRUPOS.map((grupo) => <details key={grupo.nombre} open>
+            <summary className="cursor-pointer rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold uppercase text-forest">{grupo.nombre}</summary>
+            {grupo.opciones.map(([id, etiqueta]) => <a key={id} href={`#${id}`} onClick={() => setAbierto(false)} className="block rounded-lg px-3 py-2.5 text-sm text-slate-700 hover:bg-emerald-50 hover:text-forest focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest">{etiqueta}</a>)}
+          </details>)}
+        </nav>
+      </div>
+    </div>, document.body) : null}
+  </>;
 }
