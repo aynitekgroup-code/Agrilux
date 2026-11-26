@@ -18,6 +18,7 @@ import VehicleList from '../../components/gestion/fleet/VehicleList';
 import FleetReports from '../../components/gestion/fleet/FleetReports';
 import HunterReports from '../../components/gestion/fleet/HunterReports';
 import HunterActividad from '../../components/gestion/fleet/HunterActividad';
+import FleetKilometrosDiarios from '../../components/gestion/fleet/FleetKilometrosDiarios';
 import HunterEstadoVivo from '../../components/gestion/fleet/HunterEstadoVivo';
 import FleetEventsSummary from '../../components/gestion/fleet/FleetEventsSummary';
 import FleetUnitStatus from '../../components/gestion/fleet/FleetUnitStatus';
@@ -489,6 +490,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
           <HunterReports />
           </div>
           <div id="reportes-zonar" className="scroll-mt-4 space-y-4">
+          <FleetKilometrosDiarios empresaId={empresa_activa_id} vehicles={vehiclesFuente} />
           <FleetReports
             empresaId={empresa_activa_id}
             empresaNombre={empresaActiva?.nombre || ''}
