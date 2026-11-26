@@ -19,6 +19,7 @@ import FleetReports from '../../components/gestion/fleet/FleetReports';
 import HunterReports from '../../components/gestion/fleet/HunterReports';
 import HunterActividad from '../../components/gestion/fleet/HunterActividad';
 import FleetKilometrosDiarios from '../../components/gestion/fleet/FleetKilometrosDiarios';
+import MenuReportes from '../../components/gestion/fleet/MenuReportes';
 import HunterEstadoVivo from '../../components/gestion/fleet/HunterEstadoVivo';
 import FleetEventsSummary from '../../components/gestion/fleet/FleetEventsSummary';
 import FleetUnitStatus from '../../components/gestion/fleet/FleetUnitStatus';
@@ -480,17 +481,19 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
             title="Reportes de flota"
             description="Consulta actividad, estado, unidades sin reportar y estado por geocerca (apagado, ralentí y conduciendo). Los reportes de Hunter y Zonar se muestran por separado."
           />
+          <MenuReportes />
           <nav aria-label="Ir a reportes por proveedor" className="flex flex-wrap gap-2 rounded-xl border border-emerald-100 bg-white p-3 text-sm">
             <a href="#reportes-hunter" className="rounded-lg border border-emerald-300 px-3 py-2 font-semibold text-emerald-800 hover:bg-emerald-50">Hunter 360</a>
             <a href="#reportes-zonar" className="rounded-lg border border-emerald-300 px-3 py-2 font-semibold text-emerald-800 hover:bg-emerald-50">Zonar</a>
           </nav>
           <div id="reportes-hunter" className="scroll-mt-4 space-y-4">
-          <HunterActividad empresaId={empresa_activa_id} />
-          <HunterEstadoVivo empresaId={empresa_activa_id} />
-          <HunterReports empresaId={empresa_activa_id} />
+          <div id="hunter-actividad" className="scroll-mt-24"><HunterActividad empresaId={empresa_activa_id} /></div>
+          <div id="hunter-status" className="scroll-mt-24"><HunterEstadoVivo empresaId={empresa_activa_id} /></div>
+          <div id="hunter-reportes" className="scroll-mt-24"><HunterReports empresaId={empresa_activa_id} /></div>
           </div>
           <div id="reportes-zonar" className="scroll-mt-4 space-y-4">
-          <FleetKilometrosDiarios empresaId={empresa_activa_id} vehicles={vehiclesFuente} />
+          <div id="zonar-kilometros" className="scroll-mt-24"><FleetKilometrosDiarios empresaId={empresa_activa_id} vehicles={vehiclesFuente} /></div>
+          <div id="zonar-actividad" className="scroll-mt-24">
           <FleetReports
             empresaId={empresa_activa_id}
             empresaNombre={empresaActiva?.nombre || ''}
@@ -498,33 +501,45 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
             vehicles={vehiclesFuente}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
+          </div>
+          <div id="zonar-eventos" className="scroll-mt-24">
           <FleetEventsSummary
             empresaId={empresa_activa_id}
             periodo={conDatosReales ? panel.periodo : null}
             vehicles={vehiclesFuente}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
+          </div>
+          <div id="zonar-status" className="scroll-mt-24">
           <FleetUnitStatus
             empresaId={empresa_activa_id}
             periodo={conDatosReales ? panel.periodo : null}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
+          </div>
+          <div id="zonar-sin-reportar" className="scroll-mt-24">
           <FleetSinReportar
             empresaId={empresa_activa_id}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
+          </div>
+          <div id="zonar-geocercas" className="scroll-mt-24">
           <FleetGeofenceStatus
             empresaId={empresa_activa_id}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
           </div>
+          </div>
+          <div id="reportes-vigia" className="scroll-mt-24">
           <VigiaFlota
             empresaId={empresa_activa_id}
             periodo={conDatosReales ? panel.periodo : null}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
+          </div>
           {/* Esquema de módulos arriba del catálogo: en Reportes viven
               Flota y Alertas y eventos. ModulesOverview filtra el catálogo. */}
+          <div id="reportes-catalogo" className="scroll-mt-24">
           <ModulesOverview modulos={['flota', 'alertas']} selectedId={selectedFleetModule} onSelect={setSelectedFleetModule} />
           <ReportesPage
             empresaId={empresa_activa_id}
@@ -533,6 +548,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
             vehicles={vehiclesFuente}
             selectedModuleId={selectedFleetModule}
           />
+          </div>
         </div>
       ) : null}
 
