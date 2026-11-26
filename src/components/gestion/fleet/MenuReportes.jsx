@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, FileChartColumn, X } from 'lucide-react';
 
-const GRUPOS = [
+export const GRUPOS = [
   { nombre: 'Hunter 360', opciones: [
     ['hunter-actividad', 'Reporte de actividad · Hunter 360'],
     ['hunter-status', 'Status de maquinaria · Hunter 360'],

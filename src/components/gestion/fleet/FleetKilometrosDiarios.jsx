@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { obtenerActividadFlota } from '../../../lib/agrotrackFlota';
 import { diaMapaPeru } from '../../../lib/fechasMapa';
 import { matrizKilometros } from '../../../lib/matrizKilometros';
+import { codigoArea } from '../../../lib/agrotrackVisitasDia';
 
 export default function FleetKilometrosDiarios({ empresaId, vehicles = [] }) {
   const [hasta, setHasta] = useState(() => diaMapaPeru(Date.now()));
@@ -31,7 +32,7 @@ export default function FleetKilometrosDiarios({ empresaId, vehicles = [] }) {
     })();
     return () => { cancelado = true; };
   }, [empresaId, hasta, intento]);
-  const filas = matrizKilometros(datos.dias, [], vehicles).map((unidad) => datos.filas.find((f) => f.placa === unidad.placa) || unidad);
+  const filas = matrizKilometros(datos.dias, [], vehicles).map((unidad) => { const medida = datos.filas.find((f) => f.placa === unidad.placa); return medida ? { ...medida, unidad: medida.unidad || unidad.unidad } : unidad; });
   const conocidas = new Set(filas.map((fila) => fila.placa));
   datos.filas.forEach((fila) => { if (!conocidas.has(fila.placa)) filas.push(fila); });
   const visibles = filas.filter((fila) => fila.placa.toLowerCase().includes(busqueda.trim().toLowerCase()));
@@ -44,6 +45,6 @@ export default function FleetKilometrosDiarios({ empresaId, vehicles = [] }) {
     {estado === 'error' && <p role="alert" className="text-red-700">{error} <button type="button" className="underline" onClick={() => setIntento((n) => n + 1)}>Reintentar</button></p>}
     {estado === 'listo' && !datos.filas.length && <p>No hay distancias disponibles en estos días.</p>}
     {estado === 'listo' && !visibles.length && <p>No hay unidades que coincidan con la búsqueda.</p>}
-    {estado === 'listo' && visibles.length > 0 && <div className="overflow-auto"><table className="w-full text-sm text-right"><thead><tr><th className="p-2 text-left">Unidad</th>{datos.dias.map((dia) => <th key={dia} className="p-2 whitespace-nowrap">{dia}</th>)}</tr></thead><tbody>{visibles.map((fila) => <tr key={fila.placa} className="border-t"><th className="p-2 text-left">{fila.placa}</th>{datos.dias.map((dia) => { const km = fila.valores[dia]; return <td key={dia} className={`p-2 tabular-nums ${km == null || km === 0 ? 'bg-red-600 font-bold text-white' : ''}`}>{km == null ? '—' : km.toLocaleString('es-PE', { maximumFractionDigits: 2 })}</td>; })}</tr>)}</tbody></table></div>}
+    {estado === 'listo' && visibles.length > 0 && <div className="max-h-[65vh] overflow-auto"><table className="w-full text-xs text-right"><thead className="sticky top-0 bg-white"><tr><th className="px-2 py-1 text-left">Unidad</th><th className="px-2 py-1 text-left">Área</th>{datos.dias.map((dia) => <th key={dia} className="px-2 py-1 whitespace-nowrap">{dia}</th>)}</tr></thead><tbody>{visibles.map((fila) => <tr key={fila.placa} className="border-t"><th className="px-2 py-1 text-left">{fila.placa}</th><td className="px-2 py-1 text-left">{codigoArea(fila.unidad, fila.placa) || 'Sin dato'}</td>{datos.dias.map((dia) => { const km = fila.valores[dia]; return <td key={dia} className={`px-2 py-1 tabular-nums ${km == null || km === 0 ? 'bg-red-600 font-bold text-white' : ''}`}>{km == null ? '—' : km.toLocaleString('es-PE', { maximumFractionDigits: 2 })}</td>; })}</tr>)}</tbody></table></div>}
   </section>;
 }

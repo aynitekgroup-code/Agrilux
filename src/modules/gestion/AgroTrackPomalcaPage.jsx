@@ -19,7 +19,7 @@ import FleetReports from '../../components/gestion/fleet/FleetReports';
 import HunterReports from '../../components/gestion/fleet/HunterReports';
 import HunterActividad from '../../components/gestion/fleet/HunterActividad';
 import FleetKilometrosDiarios from '../../components/gestion/fleet/FleetKilometrosDiarios';
-import MenuReportes from '../../components/gestion/fleet/MenuReportes';
+import MenuReportes, { GRUPOS } from '../../components/gestion/fleet/MenuReportes';
 import HunterEstadoVivo from '../../components/gestion/fleet/HunterEstadoVivo';
 import FleetEventsSummary from '../../components/gestion/fleet/FleetEventsSummary';
 import FleetUnitStatus from '../../components/gestion/fleet/FleetUnitStatus';
@@ -85,6 +85,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
   const [section, setSection] = useState(() => searchParams.get('section') || initialSection);
   const [destinoInterno, setDestinoInterno] = useState(null);
   const [proveedorReportes, setProveedorReportes] = useState('hunter');
+  const [reporteActivo, setReporteActivo] = useState('hunter-actividad');
   const [selectedFleetModule, setSelectedFleetModule] = useState('flota');
   const [selectedVehicleId, setSelectedVehicleId] = useState(vehicles[0]?.id || '');
   const [readings, setReadings] = useState(mockFuelReadings);
@@ -237,6 +238,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
   const abrirSeccionEn = (seccion, id) => {
     if (seccion === 'reportes') {
       setProveedorReportes(id.startsWith('hunter-') ? 'hunter' : id.startsWith('zonar-') ? 'zonar' : 'otros');
+      setReporteActivo(id);
     }
     setDestinoInterno({ seccion, id });
     setSection(seccion);
@@ -501,16 +503,17 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
           />
           <MenuReportes onSeleccionar={(id) => abrirSeccionEn('reportes', id)} />
           <nav aria-label="Ir a reportes por proveedor" className="flex flex-wrap gap-2 rounded-xl border border-emerald-100 bg-white p-3 text-sm">
-            {[["hunter", "Hunter 360"], ["zonar", "Zonar"], ["otros", "Otros"]].map(([id, etiqueta]) => <button key={id} type="button" aria-pressed={proveedorReportes === id} onClick={() => setProveedorReportes(id)} className={`rounded-lg border border-emerald-300 px-3 py-2 font-semibold ${proveedorReportes === id ? 'bg-forest text-white' : 'text-emerald-800 hover:bg-emerald-50'}`}>{etiqueta}</button>)}
+            {[["hunter", "Hunter 360", "hunter-actividad"], ["zonar", "Zonar", "zonar-kilometros"], ["otros", "Otros", "reportes-vigia"]].map(([id, etiqueta, primero]) => <button key={id} type="button" aria-pressed={proveedorReportes === id} onClick={() => { setProveedorReportes(id); setReporteActivo(primero); }} className={`rounded-lg border border-emerald-300 px-3 py-2 font-semibold ${proveedorReportes === id ? 'bg-forest text-white' : 'text-emerald-800 hover:bg-emerald-50'}`}>{etiqueta}</button>)}
           </nav>
+          {(() => { const opciones = GRUPOS[proveedorReportes === 'hunter' ? 0 : proveedorReportes === 'zonar' ? 1 : 2].opciones; const indice = opciones.findIndex(([id]) => id === reporteActivo); return <nav aria-label="Navegar entre reportes" className="flex items-center justify-between gap-2 rounded-lg border bg-white p-2 text-sm"><button type="button" disabled={indice <= 0} onClick={() => setReporteActivo(opciones[indice - 1][0])} className="rounded border px-3 py-2 disabled:opacity-40">Anterior</button><span className="text-center font-semibold">{opciones[indice]?.[1]}</span><button type="button" disabled={indice < 0 || indice >= opciones.length - 1} onClick={() => setReporteActivo(opciones[indice + 1][0])} className="rounded border px-3 py-2 disabled:opacity-40">Siguiente</button></nav>; })()}
           {proveedorReportes === 'hunter' && <div id="reportes-hunter" className="scroll-mt-4 space-y-4">
-          <div id="hunter-actividad" className="scroll-mt-24"><HunterActividad empresaId={empresa_activa_id} /></div>
-          <div id="hunter-status" className="scroll-mt-24"><HunterEstadoVivo empresaId={empresa_activa_id} /></div>
-          <div id="hunter-reportes" className="scroll-mt-24"><HunterReports empresaId={empresa_activa_id} /></div>
+          {reporteActivo === 'hunter-actividad' && <div id="hunter-actividad" className="scroll-mt-24"><HunterActividad empresaId={empresa_activa_id} /></div>}
+          {reporteActivo === 'hunter-status' && <div id="hunter-status" className="scroll-mt-24"><HunterEstadoVivo empresaId={empresa_activa_id} /></div>}
+          {reporteActivo === 'hunter-reportes' && <div id="hunter-reportes" className="scroll-mt-24"><HunterReports empresaId={empresa_activa_id} /></div>}
           </div>}
           {proveedorReportes === 'zonar' && <div id="reportes-zonar" className="scroll-mt-4 space-y-4">
-          <div id="zonar-kilometros" className="scroll-mt-24"><FleetKilometrosDiarios empresaId={empresa_activa_id} vehicles={vehiclesFuente} /></div>
-          <div id="zonar-actividad" className="scroll-mt-24">
+          {reporteActivo === 'zonar-kilometros' && <div id="zonar-kilometros" className="scroll-mt-24"><FleetKilometrosDiarios empresaId={empresa_activa_id} vehicles={vehiclesFuente} /></div>}
+          {reporteActivo === 'zonar-actividad' && <div id="zonar-actividad" className="scroll-mt-24">
           <FleetReports
             empresaId={empresa_activa_id}
             empresaNombre={empresaActiva?.nombre || ''}
@@ -518,46 +521,46 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
             vehicles={vehiclesFuente}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
-          </div>
-          <div id="zonar-eventos" className="scroll-mt-24">
+          </div>}
+          {reporteActivo === 'zonar-eventos' && <div id="zonar-eventos" className="scroll-mt-24">
           <FleetEventsSummary
             empresaId={empresa_activa_id}
             periodo={conDatosReales ? panel.periodo : null}
             vehicles={vehiclesFuente}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
-          </div>
-          <div id="zonar-status" className="scroll-mt-24">
+          </div>}
+          {reporteActivo === 'zonar-status' && <div id="zonar-status" className="scroll-mt-24">
           <FleetUnitStatus
             empresaId={empresa_activa_id}
             periodo={conDatosReales ? panel.periodo : null}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
-          </div>
-          <div id="zonar-sin-reportar" className="scroll-mt-24">
+          </div>}
+          {reporteActivo === 'zonar-sin-reportar' && <div id="zonar-sin-reportar" className="scroll-mt-24">
           <FleetSinReportar
             empresaId={empresa_activa_id}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
-          </div>
-          <div id="zonar-geocercas" className="scroll-mt-24">
+          </div>}
+          {reporteActivo === 'zonar-geocercas' && <div id="zonar-geocercas" className="scroll-mt-24">
           <FleetGeofenceStatus
             empresaId={empresa_activa_id}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
-          </div>
+          </div>}
           </div>}
           {proveedorReportes === 'otros' && <>
-          <div id="reportes-vigia" className="scroll-mt-24">
+          {reporteActivo === 'reportes-vigia' && <div id="reportes-vigia" className="scroll-mt-24">
             <div className="rounded-xl border border-emerald-200 bg-white p-4">
               <h2 className="font-bold text-slate-900">Vigía de flota</h2>
               <p className="mt-1 text-sm text-slate-600">La revisión automática se encuentra en Consola principal.</p>
               <button type="button" onClick={() => abrirSeccionEn('consola', 'consola-vigia')} className="mt-3 min-h-11 rounded-lg border border-emerald-700 px-4 py-2 text-sm font-semibold text-forest hover:bg-emerald-50">Abrir Vigía de flota</button>
             </div>
-          </div>
+          </div>}
           {/* Esquema de módulos arriba del catálogo: en Reportes viven
               Flota y Alertas y eventos. ModulesOverview filtra el catálogo. */}
-          <div id="reportes-catalogo" className="scroll-mt-24">
+          {reporteActivo === 'reportes-catalogo' && <div id="reportes-catalogo" className="scroll-mt-24">
           <ModulesOverview modulos={['flota', 'alertas']} selectedId={selectedFleetModule} onSelect={setSelectedFleetModule} />
           <ReportesPage
             empresaId={empresa_activa_id}
@@ -566,7 +569,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
             vehicles={vehiclesFuente}
             selectedModuleId={selectedFleetModule}
           />
-          </div>
+          </div>}
           </>}
         </div>
       ) : null}

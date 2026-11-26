@@ -13,3 +13,9 @@ test('incluye el padrón sin inventar posiciones', () => {
   assert.equal(filas[0].placa, 'MOTO 2');
   assert.equal(filas[0].valores['2026-11-25'], undefined);
 });
+
+test('conserva el área disponible sin crear una asignación', () => {
+  const filas = matrizKilometros(['2026-11-25'], [[{ placa: 'MOTO 1', unidad: 'MOTO 1/CAMPO', km_recorridos: 2 }]], [{ placa: 'MOTO 2' }]);
+  assert.equal(filas.find((f) => f.placa === 'MOTO 1').unidad, 'MOTO 1/CAMPO');
+  assert.equal(filas.find((f) => f.placa === 'MOTO 2').unidad, '');
+});
