@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Camera, Leaf, Calendar, ClipboardList, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle, Download, BookOpen, Trash2, Users, Building } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
+import { soloModuloGestion } from '../lib/alcanceNavegacion';
 import { supabase } from '../lib/supabase';
 import SelectorUbicacion from './SelectorUbicacion';
 import OnlineStatus from './OnlineStatus';
@@ -33,6 +34,15 @@ export default function Layout({ children }) {
 
   const ADMIN_EMAIL = 'aynitek.group@gmail.com';
   const esAdmin = user?.email === ADMIN_EMAIL;
+
+  // Pomalca (empresa activa): solo se habilita el módulo Gestión.
+  const itemsNavegacion = soloModuloGestion({
+    empresa_activa_id,
+    empresas_disponibles,
+    email: user?.email,
+  })
+    ? navItems.filter((item) => item.path === '/gestion')
+    : navItems;
 
   const handleLogout = async () => {
     await logout();
@@ -221,7 +231,7 @@ export default function Layout({ children }) {
       </main>
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-gray-100 shadow-lg z-50">
         <div className="flex">
-          {navItems.map(({ path, icon: Icon, label }) => {
+          {itemsNavegacion.map(({ path, icon: Icon, label }) => {
             const active = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
             return (
               <button key={path} onClick={() => {

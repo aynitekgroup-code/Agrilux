@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { AgentProvider } from './lib/AgentContext';
 import { useExperienceType } from './lib/useExperienceType';
+import { soloModuloGestion } from './lib/alcanceNavegacion';
 import WebLayout from './components/layout/WebLayout';
 import MobileLayout from './components/layout/MobileLayout';
 import SelectorUbicacion from './components/SelectorUbicacion';
@@ -63,6 +64,22 @@ function Inicio() {
   if (error) return <div role="alert" className="p-6 text-red-700">{error}</div>;
   if (loading || (user && isAprobado && (!listaCargada || pomalca))) return <div className="p-6 text-center text-green-700" role="status">Abriendo tu mapa…</div>;
   return <Bienvenida />;
+}
+
+/**
+ * Pomalca: los módulos fuera de Gestión (Diagnóstico, Ciclo, Parcela) no están
+ * habilitados y redirigen al mapa de la flota. Las demás empresas no se ven
+ * afectadas. El administrador del sistema conserva el acceso completo.
+ */
+function RutaSoloGestion({ children }) {
+  const { user, empresa_activa_id, empresas_disponibles } = useAuth();
+  const soloGestion = soloModuloGestion({
+    empresa_activa_id,
+    empresas_disponibles,
+    email: user?.email,
+  });
+  if (soloGestion) return <Navigate to="/gestion/vehiculos-flota" replace />;
+  return children;
 }
 
 function PantallaPendiente() {
@@ -246,17 +263,23 @@ function AppRoutes() {
       <Route path="*" element={
         <ExperienceLayout>
           <Routes>
-            {/* Diagnóstico — siempre accesible */}
-            <Route path="/diagnostico" element={<Diagnostico onPlagaDetectada={setPlagaDetectada} />} />
+            {/* Diagnóstico — siempre accesible (excepto Pomalca: solo Gestión) */}
+            <Route path="/diagnostico" element={
+              <RutaSoloGestion><Diagnostico onPlagaDetectada={setPlagaDetectada} /></RutaSoloGestion>
+            } />
 
             {/* Parcela — requiere login + aprobación */}
             <Route path="/parcela" element={
-              user && isAprobado ? <MiParcela /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
+              <RutaSoloGestion>
+                {user && isAprobado ? <MiParcela /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />}
+              </RutaSoloGestion>
             } />
 
             {/* Ciclo — requiere login + aprobación */}
             <Route path="/ciclo" element={
-              user && isAprobado ? <CicloCultivo /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
+              <RutaSoloGestion>
+                {user && isAprobado ? <CicloCultivo /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />}
+              </RutaSoloGestion>
             } />
 
             {/* Gestión — requiere login + aprobación */}

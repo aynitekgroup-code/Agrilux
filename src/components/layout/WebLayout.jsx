@@ -31,6 +31,7 @@ import {
   PanelLeftOpen,
 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
+import { soloModuloGestion } from '../../lib/alcanceNavegacion';
 import OnlineStatus from '../OnlineStatus';
 import AgentStatus from '../AgentStatus';
 import { AdminAccessModal, ChangePasswordModal, EmpresaDataModal, EmpresaSelectorModal, LocationSelectorModal, UserProfileModal } from './SharedModals';
@@ -61,6 +62,15 @@ export default function WebLayout({ children }) {
   const esGestion = location.pathname === '/gestion';
   const empresaActiva = empresas_disponibles.find((empresa) => empresa.id === empresa_activa_id) || null;
   const esAdministradorEmpresa = empresaActiva?.rol === 'administrador';
+  // Pomalca (empresa activa): solo se habilita el módulo Gestión.
+  const soloGestion = soloModuloGestion({
+    empresa_activa_id,
+    empresas_disponibles,
+    email: user?.email,
+  });
+  const itemsNavegacion = soloGestion
+    ? navItems.filter((item) => item.path === '/gestion')
+    : navItems;
 
   const handleLogout = async () => {
     await logout();
@@ -103,7 +113,7 @@ export default function WebLayout({ children }) {
 
         {/* Navegación */}
         <nav className={`flex-1 py-4 space-y-1 overflow-y-auto ${sidebarOpen ? 'px-3' : 'px-2'}`}>
-          {navItems.map(({ path, icon: Icon, label }) => {
+          {itemsNavegacion.map(({ path, icon: Icon, label }) => {
             const active = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
             return (
               <button
@@ -198,7 +208,7 @@ export default function WebLayout({ children }) {
         <header className="sticky top-0 z-40 flex items-center justify-between gap-4 border-b border-emerald-100 bg-emerald-50 px-5 py-2.5 shadow-sm">
           <div className="flex items-center gap-3 min-w-0">
             <h1 className="text-base font-semibold text-forest truncate">
-              {navItems.find((i) =>
+              {itemsNavegacion.find((i) =>
                 i.path === '/' ? location.pathname === '/' : location.pathname.startsWith(i.path)
               )?.label || 'Agrilux'}
             </h1>
