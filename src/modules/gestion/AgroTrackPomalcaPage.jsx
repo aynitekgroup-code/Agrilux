@@ -487,7 +487,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
           <div id="reportes-hunter" className="scroll-mt-4 space-y-4">
           <HunterActividad empresaId={empresa_activa_id} />
           <HunterEstadoVivo empresaId={empresa_activa_id} />
-          <HunterReports />
+          <HunterReports empresaId={empresa_activa_id} />
           </div>
           <div id="reportes-zonar" className="scroll-mt-4 space-y-4">
           <FleetKilometrosDiarios empresaId={empresa_activa_id} vehicles={vehiclesFuente} />
