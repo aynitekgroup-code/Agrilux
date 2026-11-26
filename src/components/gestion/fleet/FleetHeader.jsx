@@ -10,6 +10,12 @@ import {
 import { useAuth } from '../../../lib/AuthContext';
 import { DEMO_FUNDO } from '../../../mocks/agrotrackData';
 
+/**
+ * Secciones de AgroTrack.
+ * Los nombres y el orden son los que ya conoce el usuario: el estilo imita al
+ * menú superior de Zonar (barra oscura con pestañas) sin cambiar la etiqueta
+ * de ninguna sección.
+ */
 export const FLEET_SECTIONS = [
   { id: 'consola', label: 'Consola principal', icon: LayoutDashboard },
   { id: 'mapas', label: 'Mapas', icon: Map },
@@ -35,6 +41,7 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
 
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+      {/* ── Identidad ───────────────────────────────────────────── */}
       <div className="flex flex-col gap-2 p-3 sm:gap-4 sm:p-6">
         <div className="flex flex-wrap items-center gap-2 sm:items-start sm:gap-4">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm sm:h-12 sm:w-12">
@@ -54,15 +61,33 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
         </div>
       </div>
 
-      <nav className="flex gap-1.5 overflow-x-auto border-t border-slate-100 px-3 pb-3 pt-1 sm:px-5" aria-label="Secciones de AgroTrack">
+      {/* ── Menú superior (estilo Zonar): barra oscura con pestañas ── */}
+      <nav
+        className="flex gap-1 overflow-x-auto bg-forest px-2 pt-1.5 pb-0 sm:px-4"
+        aria-label="Secciones de AgroTrack"
+      >
         {FLEET_SECTIONS.map((section) => {
           const Icon = section.icon;
           const active = activeSection === section.id;
           return (
-            <button key={section.id} type="button" aria-current={active ? 'page' : undefined} onClick={() => onSectionChange(section.id)} className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 sm:text-sm ${active ? 'bg-forest text-white shadow-sm' : 'text-slate-700 hover:bg-emerald-50 hover:text-forest'}`}>
+            <button
+              key={section.id}
+              type="button"
+              aria-current={active ? 'page' : undefined}
+              onClick={() => onSectionChange(section.id)}
+              className={`flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-t-md px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:text-sm ${
+                active
+                  ? 'bg-white text-forest shadow-sm'
+                  : 'text-white/85 hover:bg-white/10 hover:text-white'
+              }`}
+            >
               <Icon size={16} />
               {section.label}
-              {section.id === 'consola' && pendingAlerts > 0 ? <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${active ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'}`}>{pendingAlerts}</span> : null}
+              {section.id === 'consola' && pendingAlerts > 0 ? (
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${active ? 'bg-red-100 text-red-700' : 'bg-white/20 text-white'}`}>
+                  {pendingAlerts}
+                </span>
+              ) : null}
             </button>
           );
         })}

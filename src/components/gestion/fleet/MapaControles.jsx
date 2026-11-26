@@ -777,15 +777,17 @@ export function TablaCoordenadas({
         <>
           <div className="max-h-80 overflow-auto scroll-consola">
             <table className="w-full text-xs text-slate-700">
-              <thead className="sticky top-0 z-10 bg-white">
-                <tr className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400">
+              {/* Orden de columnas como en Zonar: Unidad · Dirección · Velocidad
+                  · Evento · Fecha · Último contacto · Geocerca (Lat/Lng al final). */}
+              <thead className="sticky top-0 z-10 bg-slate-100">
+                <tr className="border-b border-slate-200 text-[10px] uppercase tracking-wide text-slate-500">
                   <th className="px-3 py-2.5 font-bold text-left">Unidad</th>
+                  <th className="px-3 py-2.5 font-bold text-left">Dirección</th>
+                  <th className="px-3 py-2.5 font-bold text-right">Velocidad</th>
                   <th className="px-3 py-2.5 font-bold text-left">Evento</th>
                   <th className="px-3 py-2.5 font-bold text-left">Fecha</th>
-                  <th className="px-3 py-2.5 font-bold text-left">Dirección</th>
+                  <th className="px-3 py-2.5 font-bold text-left">Último contacto</th>
                   <th className="px-3 py-2.5 font-bold text-left">Geocerca</th>
-                  <th className="px-3 py-2.5 font-bold text-right">Vel.</th>
-                  <th className="px-3 py-2.5 font-bold text-left">Últ. contacto</th>
                   <th className="px-3 py-2.5 font-bold text-right">Latitud</th>
                   <th className="px-3 py-2.5 font-bold text-right">Longitud</th>
                 </tr>
@@ -809,16 +811,16 @@ export function TablaCoordenadas({
                         ) : null}
                       </button>
                     </td>
-                    <td className="px-3 py-2 text-slate-600">{fila.evento || '—'}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-slate-600">{fila.fechaTexto || '—'}</td>
                     <td className="max-w-[220px] truncate px-3 py-2 text-slate-600" title={fila.direccion || ''}>
                       {fila.direccion || '—'}
                     </td>
+                    <td className="px-3 py-2 text-right tabular-nums">{fila.velocidadTexto}</td>
+                    <td className="px-3 py-2 text-slate-600">{fila.evento || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-slate-600">{fila.fechaTexto || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-slate-500">{fila.contactoTexto || '—'}</td>
                     <td className="max-w-[160px] truncate px-3 py-2 text-slate-600" title={fila.geocerca || '—'}>
                       {fila.geocerca || '—'}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fila.velocidadTexto}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-slate-500">{fila.contactoTexto || '—'}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-slate-500">{fila.latTexto}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-slate-500">{fila.lngTexto}</td>
                   </tr>
