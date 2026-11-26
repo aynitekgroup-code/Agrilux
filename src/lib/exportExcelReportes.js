@@ -15,6 +15,7 @@
 import * as XLSX from 'xlsx';
 import { formatearFechaLarga } from './agrotrackFlota';
 import { codigoArea } from './agrotrackVisitasDia';
+import { ETIQUETAS_ESTADO_GEO } from './estadoGeocerca';
 
 /** Geocerca asignada de la unidad: la actual (RPC, PostGIS) o la última
  *  conocida si está fuera de todas. */
@@ -410,4 +411,91 @@ export function exportarTablaDinamicaGeocercasExcel(visitas, {
 
   const nombre = desdeDia === hastaDia ? desdeDia : `${desdeDia}_a_${hastaDia}`;
   XLSX.writeFile(wb, `Agrilux_Geocercas_Todas_Unidades_${nombre}.xlsx`);
+}
+
+/** "hace 12 h 30 min" para la hoja de detalle del estado por geocerca. */
+function haceDesde(iso, ahora = new Date()) {
+  const t = Date.parse(iso || '');
+  if (!Number.isFinite(t)) return 'sin reporte';
+  const seg = Math.max(0, Math.floor((ahora.getTime() - t) / 1000));
+  const dias = Math.floor(seg / 86400);
+  const horas = Math.floor((seg % 86400) / 3600);
+  const minutos = Math.floor((seg % 3600) / 60);
+  if (dias > 0) return `hace ${dias} d ${horas} h`;
+  if (horas > 0) return `hace ${horas} h ${minutos} min`;
+  if (minutos > 0) return `hace ${minutos} min`;
+  return 'hace instantes';
+}
+
+/**
+ * Reporte "Estado por geocerca" con 3 estados a Excel.
+ * @param {Array} grupos  salida de agruparPorGeocerca() (con `unidades` y
+ *                        conteos ya calculados, para que el archivo coincida
+ *                        con la pantalla)
+ * @param {{generado?: Date|string|null, ahora?: Date, filtro?: string, sinTelemetria?: number}} opciones
+ */
+export function exportarEstadoPorGeocercaExcel(grupos, {
+  generado = null,
+  ahora = new Date(),
+  filtro = '',
+  sinTelemetria = 0,
+} = {}) {
+  const wb = XLSX.utils.book_new();
+  const lista = grupos || [];
+
+  const totales = lista.reduce(
+    (acc, g) => ({
+      apagado: acc.apagado + (g.apagado || 0),
+      ralenti: acc.ralenti + (g.ralenti || 0),
+      conduciendo: acc.conduciendo + (g.conduciendo || 0),
+      sinDato: acc.sinDato + (g.sinDato || 0),
+      total: acc.total + (g.total || 0),
+    }),
+    { apagado: 0, ralenti: 0, conduciendo: 0, sinDato: 0, total: 0 },
+  );
+
+  const resumen = [
+    ['Geocerca', 'Apagado', 'Ralentí', 'Conduciendo', 'Sin dato', 'Total unidades'],
+    ...lista.map((g) => [g.geocerca, g.apagado || 0, g.ralenti || 0, g.conduciendo || 0, g.sinDato || 0, g.total || 0]),
+    ['Total general', totales.apagado, totales.ralenti, totales.conduciendo, totales.sinDato, totales.total],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(resumen);
+  ws['!cols'] = [{ wch: 34 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Por geocerca');
+
+  const detalle = [];
+  lista.forEach((g) => {
+    (g.unidades || []).forEach((u) => {
+      detalle.push({
+        'Geocerca': g.geocerca,
+        'Placa': u.placa || '—',
+        'Área': codigoArea(u.unidad, u.placa) || (u.descripcion && u.descripcion !== u.placa ? u.descripcion : '—'),
+        'Estado': ETIQUETAS_ESTADO_GEO[u.estado] || 'Sin dato',
+        'Velocidad (km/h)': u.ultima_velocidad == null ? '' : Math.round(Number(u.ultima_velocidad)),
+        'Últ. posición': u.ultima_fecha ? formatearFechaLarga(u.ultima_fecha) : 'sin reporte',
+        'Hace': haceDesde(u.ultima_fecha, ahora),
+      });
+    });
+  });
+  const wsDetalle = XLSX.utils.json_to_sheet(detalle);
+  wsDetalle['!cols'] = [
+    { wch: 34 }, { wch: 14 }, { wch: 24 }, { wch: 14 }, { wch: 16 }, { wch: 26 }, { wch: 20 },
+  ];
+  XLSX.utils.book_append_sheet(wb, wsDetalle, 'Detalle');
+
+  agregarCriterio(wb, [
+    { Concepto: 'Reporte', Detalle: 'Estado por geocerca · 3 estados (Agrilux)' },
+    { Concepto: 'Estados', Detalle: 'Apagado = motor apagado/estacionado · Ralentí = encendido y 0 a 5 km/h · Conduciendo = más de 5 km/h' },
+    { Concepto: 'Sin dato', Detalle: 'Última posición mayor a 30 min o fecha inválida. No se suma a los 3 estados (columna aparte).' },
+    { Concepto: 'Agrupación', Detalle: 'Por la geocerca que contiene la última posición (PostGIS). Fuera de todas: "Sin geocerca".' },
+    { Concepto: 'Conteos', Detalle: 'Son unidades en cada estado en este momento, no horas.' },
+    { Concepto: 'Filtro', Detalle: filtro || 'Sin filtro de búsqueda' },
+    { Concepto: 'Sin telemetría', Detalle: `${sinTelemetria} unidad(es) sin posición cargada, excluidas del reporte` },
+    { Concepto: 'Fuente', Detalle: 'agrotrack_estado_vivo_flota (Zonar en vivo) o agrotrack_estado_unidades_flota (histórico) + agrotrack_geocercas_reportes' },
+    { Concepto: 'Horario', Detalle: 'Hora de Perú (UTC-5)' },
+    { Concepto: 'Generado', Detalle: (generado ? new Date(generado) : new Date()).toLocaleString('es-PE') },
+  ]);
+
+  const fecha = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `Agrilux_Estado_por_Geocerca_${fecha}.xlsx`);
 }

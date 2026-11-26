@@ -22,6 +22,7 @@ import HunterEstadoVivo from '../../components/gestion/fleet/HunterEstadoVivo';
 import FleetEventsSummary from '../../components/gestion/fleet/FleetEventsSummary';
 import FleetUnitStatus from '../../components/gestion/fleet/FleetUnitStatus';
 import FleetSinReportar from '../../components/gestion/fleet/FleetSinReportar';
+import FleetGeofenceStatus from '../../components/gestion/fleet/FleetGeofenceStatus';
 import FleetGeofenceReports from '../../components/gestion/fleet/FleetGeofenceReports';
 import FleetGeofenceSummary from '../../components/gestion/fleet/FleetGeofenceSummary';
 import FleetTablaDiariaGeocercas from '../../components/gestion/fleet/FleetTablaDiariaGeocercas';
@@ -478,7 +479,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
         <div className="space-y-4">
           <SectionHeading
             title="Reportes de flota"
-            description="Consulta actividad, estado y unidades sin reportar. Los reportes de Hunter y Zonar se muestran por separado."
+            description="Consulta actividad, estado, unidades sin reportar y estado por geocerca (apagado, ralentí y conduciendo). Los reportes de Hunter y Zonar se muestran por separado."
           />
           <nav aria-label="Ir a reportes por proveedor" className="flex flex-wrap gap-2 rounded-xl border border-emerald-100 bg-white p-3 text-sm">
             <a href="#reportes-hunter" className="rounded-lg border border-emerald-300 px-3 py-2 font-semibold text-emerald-800 hover:bg-emerald-50">Hunter 360</a>
@@ -509,6 +510,10 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
           <FleetSinReportar
+            empresaId={empresa_activa_id}
+            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
+          />
+          <FleetGeofenceStatus
             empresaId={empresa_activa_id}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
