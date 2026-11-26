@@ -1,6 +1,17 @@
 # Hunter 360 → Agrilux: diagnóstico inicial
 
-El comando actual **solo procesa una captura privada**; no inicia sesión en
+La descarga experimental de un día por equipo usa credenciales suministradas
+mediante las variables de entorno `HUNTER_USUARIO` y `HUNTER_PASSWORD`:
+
+```powershell
+node agentes/hunter/descargar-recorrido.mjs <equipo> <AAAA-MM-DD> <archivo-privado.json>
+```
+
+No sobrescribe el archivo y no sincroniza ni liquida horas. El recorrido es una
+respuesta no oficial observada en el portal, sujeto a cambios. La completitud,
+paradas y reglas para pagos requieren contrastarse con Hunter.
+
+El comando `agente.mjs` **solo procesa una captura privada**; no inicia sesión en
 Hunter, no consulta Agrilux ni sube datos. No es todavía una sincronización
 automática ni un agente operativo. Nunca colocar capturas ni contraseñas en Git.
 
