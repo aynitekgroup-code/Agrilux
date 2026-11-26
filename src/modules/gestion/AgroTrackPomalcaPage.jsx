@@ -83,6 +83,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
   // La RLS solo permite DELETE a administradores (FASE 3.7: editor de geocercas).
   const puedeEliminarGeocercas = empresaActiva?.rol === 'administrador';
   const [section, setSection] = useState(() => searchParams.get('section') || initialSection);
+  const [destinoInterno, setDestinoInterno] = useState(null);
   const [selectedFleetModule, setSelectedFleetModule] = useState('flota');
   const [selectedVehicleId, setSelectedVehicleId] = useState(vehicles[0]?.id || '');
   const [readings, setReadings] = useState(mockFuelReadings);
@@ -222,6 +223,20 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
 
   const pendientes = alertList.filter((a) => !a.atendida).length;
   const consumoTotal = readings.reduce((sum, r) => sum + Number(r.galones || 0), 0);
+
+  useEffect(() => {
+    if (!destinoInterno || section !== destinoInterno.seccion) return;
+    const id = requestAnimationFrame(() => {
+      document.getElementById(destinoInterno.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setDestinoInterno(null);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [section, destinoInterno]);
+
+  const abrirSeccionEn = (seccion, id) => {
+    setDestinoInterno({ seccion, id });
+    setSection(seccion);
+  };
 
   // Lleva a las alertas de operación: cambia a la consola (si estaba en otra
   // pestaña) y hace scroll suave hasta el panel de alertas.
@@ -415,19 +430,18 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
               />
             </div>
           </div>
-          {/* Lo que ya funciona con datos reales, también en la pantalla principal. */}
-          <FleetReports
-            empresaId={empresa_activa_id}
-            empresaNombre={empresaActiva?.nombre || ''}
-            periodo={conDatosReales ? panel.periodo : null}
-            vehicles={vehiclesFuente}
-            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
-          />
+          <div className="rounded-xl border border-emerald-200 bg-white p-4">
+            <h2 className="font-bold text-slate-900">Reporte de actividad</h2>
+            <p className="mt-1 text-sm text-slate-600">Consulta el detalle, los filtros y la descarga en Reportes de Zonar.</p>
+            <button type="button" onClick={() => abrirSeccionEn('reportes', 'zonar-actividad')} className="mt-3 min-h-11 rounded-lg bg-forest px-4 py-2 text-sm font-semibold text-white hover:bg-forest-dark">Abrir reporte de actividad</button>
+          </div>
+          <div id="consola-vigia" className="scroll-mt-24">
           <VigiaFlota
             empresaId={empresa_activa_id}
             periodo={conDatosReales ? panel.periodo : null}
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
+          </div>
           <FleetGeofenceSummary
             empresaId={empresa_activa_id}
             periodo={conDatosReales ? panel.periodo : null}
@@ -531,11 +545,11 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
           </div>
           </div>
           <div id="reportes-vigia" className="scroll-mt-24">
-          <VigiaFlota
-            empresaId={empresa_activa_id}
-            periodo={conDatosReales ? panel.periodo : null}
-            fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
-          />
+            <div className="rounded-xl border border-emerald-200 bg-white p-4">
+              <h2 className="font-bold text-slate-900">Vigía de flota</h2>
+              <p className="mt-1 text-sm text-slate-600">La revisión automática se encuentra en Consola principal.</p>
+              <button type="button" onClick={() => abrirSeccionEn('consola', 'consola-vigia')} className="mt-3 min-h-11 rounded-lg border border-emerald-700 px-4 py-2 text-sm font-semibold text-forest hover:bg-emerald-50">Abrir Vigía de flota</button>
+            </div>
           </div>
           {/* Esquema de módulos arriba del catálogo: en Reportes viven
               Flota y Alertas y eventos. ModulesOverview filtra el catálogo. */}
