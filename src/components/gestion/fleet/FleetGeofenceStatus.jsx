@@ -328,18 +328,22 @@ export default function FleetGeofenceStatus({ empresaId, fuente = 'real' }) {
                           <tr
                             className="border-b border-slate-50 hover:bg-slate-50/60 cursor-pointer"
                             onClick={() => alternarGrupo(grupo.clave)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                alternarGrupo(grupo.clave);
+                              }
+                            }}
+                            role="button"
+                            tabIndex={0}
+                            aria-expanded={abierta}
                           >
                             <td className="px-3 py-2">
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); alternarGrupo(grupo.clave); }}
-                                aria-expanded={abierta}
-                                className="inline-flex items-center gap-1.5 text-left font-semibold text-slate-800 hover:text-forest"
-                              >
+                              <span className="inline-flex items-center gap-1.5 text-left font-semibold text-slate-800">
                                 {abierta ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
                                 <span className={grupo.clave === '__sin_geocerca__' ? 'text-slate-400' : ''}>{grupo.geocerca}</span>
                                 <span className="text-[10px] font-normal text-slate-400">({grupo.total})</span>
-                              </button>
+                              </span>
                             </td>
                             <td className="px-3 py-2 text-right font-bold text-emerald-700">{grupo.conduciendo || '—'}</td>
                             <td className="px-3 py-2 text-right font-bold text-amber-700">{grupo.ralenti || '—'}</td>
