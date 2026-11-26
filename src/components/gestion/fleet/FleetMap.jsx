@@ -501,6 +501,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // Menú de mapas: cerrado por defecto. Un clic lo abre desde la izquierda
   // y, al elegir una sección, se oculta solo para dejar el mapa a la vista.
   const [menuMapasAbierto, setMenuMapasAbierto] = useState(false);
+  const [localizadorLateralAbierto, setLocalizadorLateralAbierto] = useState(true);
   const [seccionFlota, setSeccionFlota] = useState('localizador');
   const [mostrandoContenidoFlota, setMostrandoContenidoFlota] = useState(false);
   useEffect(() => {
@@ -2496,8 +2497,19 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </div>
       ) : null}
       </div>
-      <div className="px-1 sm:px-2 pb-2">
+      <div className={`px-1 sm:px-2 pb-2 lg:grid lg:items-start lg:gap-2 ${localizadorLateralAbierto ? 'lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]' : 'lg:grid-cols-1'}`}>
+        {localizadorLateralAbierto ? (
+          <aside className="hidden min-w-0 max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-xl border border-emerald-200 bg-white p-2 lg:block" aria-label="Localizador de Unidades">
+            <div className="flex items-center justify-between gap-2 px-2 py-2">
+              <h3 className="text-sm font-bold text-forest">Localizador de Unidades</h3>
+              <button type="button" onClick={() => setLocalizadorLateralAbierto(false)} aria-label="Ocultar localizador de unidades" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"><X size={17} /></button>
+            </div>
+            <button type="button" onClick={mostrarTodasLasUnidades} className="mb-2 w-full rounded-lg border border-emerald-700 px-3 py-2 text-sm font-semibold text-forest hover:bg-emerald-50">Ver todas las máquinas</button>
+            {localizadorNodo || <p className="p-3 text-sm text-slate-600">{fuentePosiciones === 'cargando' ? 'Cargando unidades…' : 'No hay unidades con posición disponibles.'}</p>}
+          </aside>
+        ) : null}
         <div id="mapa-flota" className="relative z-0 isolate scroll-mt-4 min-w-0 overflow-hidden rounded-[14px] border border-[#A7C7AB] bg-white shadow-sm">
+        {!localizadorLateralAbierto ? <button type="button" onClick={() => setLocalizadorLateralAbierto(true)} className="absolute left-3 top-16 z-[1000] hidden rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow lg:block">Mostrar localizador</button> : null}
         <button
           type="button"
           onClick={() => setMenuMapasAbierto(true)}
@@ -2537,7 +2549,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
 
           <ZoomRutaTracker onZoom={setZoomRuta} />
 
-          <AjustarTamanoMapa panelAbierto={mostrandoContenidoFlota} />
+          <AjustarTamanoMapa panelAbierto={`${mostrandoContenidoFlota}-${localizadorLateralAbierto}`} />
 
           <CerrarTooltipGeocerca tooltipRef={tooltipGeocercaRef} />
 
