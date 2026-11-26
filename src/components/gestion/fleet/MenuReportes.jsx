@@ -22,7 +22,7 @@ const GRUPOS = [
   ] },
 ];
 
-export default function MenuReportes() {
+export default function MenuReportes({ onSeleccionar }) {
   const [abierto, setAbierto] = useState(false);
   const boton = useRef(null);
   useEffect(() => {
@@ -42,7 +42,7 @@ export default function MenuReportes() {
         <nav aria-label="Accesos directos a reportes" className="flex-1 overflow-y-auto p-2">
           {GRUPOS.map((grupo) => <details key={grupo.nombre} open>
             <summary className="cursor-pointer rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold uppercase text-forest">{grupo.nombre}</summary>
-            {grupo.opciones.map(([id, etiqueta]) => <a key={id} href={`#${id}`} onClick={() => setAbierto(false)} className="block rounded-lg px-3 py-2.5 text-sm text-slate-700 hover:bg-emerald-50 hover:text-forest focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest">{etiqueta}</a>)}
+            {grupo.opciones.map(([id, etiqueta]) => <button type="button" key={id} onClick={() => { setAbierto(false); onSeleccionar(id); }} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-emerald-50 hover:text-forest focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest">{etiqueta}</button>)}
           </details>)}
         </nav>
       </div>

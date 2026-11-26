@@ -84,6 +84,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
   const puedeEliminarGeocercas = empresaActiva?.rol === 'administrador';
   const [section, setSection] = useState(() => searchParams.get('section') || initialSection);
   const [destinoInterno, setDestinoInterno] = useState(null);
+  const [proveedorReportes, setProveedorReportes] = useState('hunter');
   const [selectedFleetModule, setSelectedFleetModule] = useState('flota');
   const [selectedVehicleId, setSelectedVehicleId] = useState(vehicles[0]?.id || '');
   const [readings, setReadings] = useState(mockFuelReadings);
@@ -234,6 +235,9 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
   }, [section, destinoInterno]);
 
   const abrirSeccionEn = (seccion, id) => {
+    if (seccion === 'reportes') {
+      setProveedorReportes(id.startsWith('hunter-') ? 'hunter' : id.startsWith('zonar-') ? 'zonar' : 'otros');
+    }
     setDestinoInterno({ seccion, id });
     setSection(seccion);
   };
@@ -495,17 +499,16 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
             title="Reportes de flota"
             description="Consulta actividad, estado, unidades sin reportar y estado por geocerca (apagado, ralentí y conduciendo). Los reportes de Hunter y Zonar se muestran por separado."
           />
-          <MenuReportes />
+          <MenuReportes onSeleccionar={(id) => abrirSeccionEn('reportes', id)} />
           <nav aria-label="Ir a reportes por proveedor" className="flex flex-wrap gap-2 rounded-xl border border-emerald-100 bg-white p-3 text-sm">
-            <a href="#reportes-hunter" className="rounded-lg border border-emerald-300 px-3 py-2 font-semibold text-emerald-800 hover:bg-emerald-50">Hunter 360</a>
-            <a href="#reportes-zonar" className="rounded-lg border border-emerald-300 px-3 py-2 font-semibold text-emerald-800 hover:bg-emerald-50">Zonar</a>
+            {[["hunter", "Hunter 360"], ["zonar", "Zonar"], ["otros", "Otros"]].map(([id, etiqueta]) => <button key={id} type="button" aria-pressed={proveedorReportes === id} onClick={() => setProveedorReportes(id)} className={`rounded-lg border border-emerald-300 px-3 py-2 font-semibold ${proveedorReportes === id ? 'bg-forest text-white' : 'text-emerald-800 hover:bg-emerald-50'}`}>{etiqueta}</button>)}
           </nav>
-          <div id="reportes-hunter" className="scroll-mt-4 space-y-4">
+          {proveedorReportes === 'hunter' && <div id="reportes-hunter" className="scroll-mt-4 space-y-4">
           <div id="hunter-actividad" className="scroll-mt-24"><HunterActividad empresaId={empresa_activa_id} /></div>
           <div id="hunter-status" className="scroll-mt-24"><HunterEstadoVivo empresaId={empresa_activa_id} /></div>
           <div id="hunter-reportes" className="scroll-mt-24"><HunterReports empresaId={empresa_activa_id} /></div>
-          </div>
-          <div id="reportes-zonar" className="scroll-mt-4 space-y-4">
+          </div>}
+          {proveedorReportes === 'zonar' && <div id="reportes-zonar" className="scroll-mt-4 space-y-4">
           <div id="zonar-kilometros" className="scroll-mt-24"><FleetKilometrosDiarios empresaId={empresa_activa_id} vehicles={vehiclesFuente} /></div>
           <div id="zonar-actividad" className="scroll-mt-24">
           <FleetReports
@@ -543,7 +546,8 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
             fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
           />
           </div>
-          </div>
+          </div>}
+          {proveedorReportes === 'otros' && <>
           <div id="reportes-vigia" className="scroll-mt-24">
             <div className="rounded-xl border border-emerald-200 bg-white p-4">
               <h2 className="font-bold text-slate-900">Vigía de flota</h2>
@@ -563,6 +567,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
             selectedModuleId={selectedFleetModule}
           />
           </div>
+          </>}
         </div>
       ) : null}
 
