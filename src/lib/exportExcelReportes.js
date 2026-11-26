@@ -455,7 +455,7 @@ export function exportarEstadoPorGeocercaExcel(grupos, {
   );
 
   const resumen = [
-    ['Geocerca', 'Apagado', 'Ralentí', 'Conduciendo', 'Sin dato', 'Total unidades'],
+    ['Geocerca', 'Apagado', 'Encendido lento (ralentí)', 'Conduciendo', 'Sin dato', 'Total unidades'],
     ...lista.map((g) => [g.geocerca, g.apagado || 0, g.ralenti || 0, g.conduciendo || 0, g.sinDato || 0, g.total || 0]),
     ['Total general', totales.apagado, totales.ralenti, totales.conduciendo, totales.sinDato, totales.total],
   ];
@@ -485,7 +485,7 @@ export function exportarEstadoPorGeocercaExcel(grupos, {
 
   agregarCriterio(wb, [
     { Concepto: 'Reporte', Detalle: 'Estado por geocerca · 3 estados (Agrilux)' },
-    { Concepto: 'Estados', Detalle: 'Apagado = motor apagado/estacionado · Ralentí = encendido y 0 a 5 km/h · Conduciendo = más de 5 km/h' },
+    { Concepto: 'Estados', Detalle: 'Apagado = motor apagado/estacionado · Encendido lento (ralentí) = encendido y 0 a 5 km/h · Conduciendo = más de 5 km/h' },
     { Concepto: 'Sin dato', Detalle: 'Última posición mayor a 30 min o fecha inválida. No se suma a los 3 estados (columna aparte).' },
     { Concepto: 'Agrupación', Detalle: 'Por la geocerca que contiene la última posición (PostGIS). Fuera de todas: "Sin geocerca".' },
     { Concepto: 'Conteos', Detalle: 'Son unidades en cada estado en este momento, no horas.' },

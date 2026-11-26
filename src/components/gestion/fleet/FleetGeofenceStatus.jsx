@@ -24,7 +24,7 @@ import {
  * Reporte "Estado por geocerca" (3 estados), pedido por el Ing. Carlos Perez.
  *
  * Una fila por geocerca con la cantidad de unidades en cada estado de la
- * última posición: Apagado · Ralentí (encendido y 0 a 5 km/h) · Conduciendo
+ * última posición: Apagado · Encendido lento (ralentí, 0 a 5 km/h) · Conduciendo
  * (más de 5 km/h). Al abrir la geocerca se listan sus placas con el estado,
  * la velocidad y la última posición. Usa la misma data en vivo que el Punto 3
  * (Status de maquinaria): agrotrack_estado_vivo_flota + Realtime + respaldo
@@ -181,7 +181,7 @@ export default function FleetGeofenceStatus({ empresaId, fuente = 'real' }) {
   return (
     <div className="min-w-0">
       <h3 className="text-sm font-bold uppercase tracking-wide text-emerald-800 mb-3">
-        Punto 5 · Estado por geocerca (apagado · ralentí · conduciendo)
+        Punto 5 · Estado por geocerca (apagado · encendido lento · conduciendo)
       </h3>
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm min-w-0">
         <div className="p-4 sm:p-5 border-b border-slate-50 space-y-3">
@@ -248,7 +248,7 @@ export default function FleetGeofenceStatus({ empresaId, fuente = 'real' }) {
             </span>
             <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap ${TONOS.ralenti}`}>
               <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
-              Ralentí {numero(totales.ralenti, 0)}
+              Encendido lento (ralentí) {numero(totales.ralenti, 0)}
             </span>
             <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap ${TONOS.apagado}`}>
               <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
@@ -263,7 +263,7 @@ export default function FleetGeofenceStatus({ empresaId, fuente = 'real' }) {
           </div>
 
           <p className="text-[10px] text-slate-400 leading-relaxed">
-            Apagado = motor apagado/estacionado · Ralentí = encendido y 0 a 5 km/h · Conduciendo = más de 5 km/h.
+            Apagado = motor apagado/estacionado · Encendido lento (ralentí) = encendido y 0 a 5 km/h · Conduciendo = más de 5 km/h.
             {' '}Sin dato = última posición mayor a {UMBRAL_SIN_DATO_MINUTOS} min o fecha inválida (no se suma a los 3 estados).
           </p>
 
@@ -306,7 +306,7 @@ export default function FleetGeofenceStatus({ empresaId, fuente = 'real' }) {
                     <tr className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400">
                       <th className="px-3 py-2.5 font-bold text-left">Geocerca</th>
                       <th className="px-3 py-2.5 font-bold text-right text-emerald-700">Conduciendo</th>
-                      <th className="px-3 py-2.5 font-bold text-right text-amber-700">Ralentí</th>
+                      <th className="px-3 py-2.5 font-bold text-right text-amber-700">Encendido lento (ralentí)</th>
                       <th className="px-3 py-2.5 font-bold text-right text-slate-600">Apagado</th>
                       <th className="px-3 py-2.5 font-bold text-right text-rose-600">Sin dato</th>
                       <th className="px-3 py-2.5 font-bold text-right">Total</th>

@@ -18,7 +18,7 @@ export const UMBRAL_SIN_DATO_MINUTOS = 30;
 
 export const ETIQUETAS_ESTADO_GEO = {
   apagado: 'Apagado',
-  ralenti: 'Ralentí',
+  ralenti: 'Encendido lento (ralentí)',
   conduciendo: 'Conduciendo',
   sin_dato: 'Sin dato',
 };
