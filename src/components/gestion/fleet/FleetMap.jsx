@@ -310,7 +310,7 @@ function FitMapToGeofences({ geoJson, vehicles = [], focusRequest, fitToken = 0,
     });
     if (bounds.isValid()) {
       map.fitBounds(bounds.pad(0.08), { maxZoom: 16, animate: false });
-      if (panelAbierto) map.panBy([0, map.getSize().y * 0.23], { animate: false });
+      if (panelAbierto) map.panBy([0, map.getSize().y * 0.25], { animate: false });
     } else {
       map.setView([-6.78, -79.83], 13, { animate: false });
     }
@@ -393,7 +393,7 @@ function FocusUnidad({ unidadFocus, marcadores, panelAbierto = false }) {
     let ajustado = false;
     const abrirFicha = () => {
       if (panelAbierto && !ajustado) {
-        map.panBy([0, map.getSize().y * 0.23], { animate: false });
+        map.panBy([0, map.getSize().y * 0.25], { animate: false });
         ajustado = true;
       }
       if (placa) marcadores?.get(placa)?.openPopup?.();
@@ -437,6 +437,16 @@ function ZoomRutaTracker({ onZoom }) {
       map.off('zoomend', handleZoom);
     };
   }, [map, onZoom]);
+  return null;
+}
+
+// El panel de herramientas reduce la altura del mapa para que ambos encajen
+// en la pantalla. Leaflet necesita recalcular su viewport tras ese cambio CSS.
+function AjustarTamanoMapa({ panelAbierto }) {
+  const map = useMap();
+  useEffect(() => {
+    map.invalidateSize({ pan: false });
+  }, [map, panelAbierto]);
   return null;
 }
 
@@ -2306,8 +2316,6 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
 
   const contenidoPanelFlota = (() => {
     const seccion = SECCIONES_FLOTA.find((s) => s.id === seccionFlota) || SECCIONES_FLOTA[0];
-    const IconoSeccion = seccion.Icon;
-    const listo = ['localizador', 'historicas', 'zonas', 'configuracion', 'geocercas'].includes(seccionFlota);
     const cuerpo = seccionFlota === 'localizador'
       ? localizadorNodo
       : seccionFlota === 'historicas'
@@ -2319,26 +2327,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               : seccionFlota === 'configuracion'
                 ? <ConfiguracionPrincipal empresaId={empresaId} userId={userId} puedePosiciones={canImport} />
                 : null;
-    return (
-      <div className="min-w-0 space-y-3 rounded-xl border border-[#B8D8BE] bg-[#E3F3E6] p-3 shadow-sm">
-        <header className="flex flex-wrap items-start justify-between gap-2 border-b border-[#B8D8BE] pb-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-primary">{seccion.group}</p>
-            <h4 className="mt-0.5 text-sm font-bold text-forest">{seccion.label}</h4>
-          </div>
-          <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-            <IconoSeccion size={12} className="mr-1.5" />
-            {listo ? <Check size={11} className="mr-1" strokeWidth={3} /> : null}
-            {listo ? 'Listo' : 'En preparación'}
-          </span>
-        </header>
-        {cuerpo ? (
-          <div className="space-y-3">{cuerpo}</div>
-        ) : (
-          <Proximamente etiqueta={seccion.label} />
-        )}
-      </div>
-    );
+    return cuerpo || <Proximamente etiqueta={seccion.label} />;
   })();
 
   const nodoRecorrido = rutaPlan && mostrandoContenidoFlota && seccionFlota === 'historicas' ? (
@@ -2523,7 +2512,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </button>
         <button type="button" onClick={mostrarTodasLasUnidades} className="absolute right-3 top-3 z-[1000] rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow">Ver todas las máquinas</button>
         <MapContainer
-          className={`${vistaSatelite ? 'fleet-map fleet-map--satelite' : 'fleet-map'} ${consolaVisible ? 'h-[72dvh] min-h-[520px] lg:h-[720px]' : 'h-[60vh] min-h-[440px] lg:h-[680px]'}`}
+          className={`${vistaSatelite ? 'fleet-map fleet-map--satelite' : 'fleet-map'} h-[calc(100dvh-2.8rem)] min-h-[250px]`}
           center={[-6.78, -79.83]}
           zoom={12}
           maxZoom={21}
@@ -2547,6 +2536,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           />
 
           <ZoomRutaTracker onZoom={setZoomRuta} />
+
+          <AjustarTamanoMapa panelAbierto={mostrandoContenidoFlota} />
 
           <CerrarTooltipGeocerca tooltipRef={tooltipGeocercaRef} />
 
@@ -2824,7 +2815,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           />
         </MapContainer>
         {mostrandoContenidoFlota ? (
-          <div className="absolute inset-x-0 bottom-0 z-[1000] flex max-h-[46%] flex-col rounded-t-2xl border-t border-emerald-200 bg-white shadow-[0_-8px_24px_rgba(15,23,42,0.18)]">
+          <div className="absolute inset-x-0 bottom-0 z-[1000] flex max-h-[50%] flex-col rounded-t-2xl border-t border-emerald-200 bg-white shadow-[0_-8px_24px_rgba(15,23,42,0.18)]">
             <div className="flex items-center justify-between gap-2 px-3 py-1.5">
               <p className="truncate text-xs font-bold uppercase tracking-wide text-slate-500">Herramienta</p>
               <button
@@ -2840,7 +2831,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                 <X size={16} />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
               {contenidoPanelFlota}
             </div>
           </div>

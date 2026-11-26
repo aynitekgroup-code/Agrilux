@@ -178,7 +178,7 @@ export function ControlVistaSatelite({ satelite, onToggle }) {
       type="button"
       onClick={onToggle}
       aria-pressed={satelite}
-      className={`absolute left-16 top-[68px] z-[1100] flex items-center gap-1.5 rounded-xl px-3 py-2 text-[12px] font-bold shadow-[0_4px_16px_rgba(15,23,42,0.25)] ring-1 ring-black/5 transition-all hover:scale-[1.03] ${
+      className={`absolute left-3 top-[132px] z-[1100] flex items-center gap-1.5 rounded-xl px-3 py-2 text-[12px] font-bold shadow-[0_4px_16px_rgba(15,23,42,0.25)] ring-1 ring-black/5 transition-all hover:scale-[1.03] ${
         satelite
           ? 'bg-slate-900 text-white'
           : 'bg-white/95 text-slate-700 backdrop-blur'
