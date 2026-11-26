@@ -391,15 +391,7 @@ export function rangoMesLima(mesInput) {
   };
 }
 
-/** Segundos -> "8 h 12 min" · "45 min" · "12 s" (para los reportes). */
-export function formatearDuracion(segundos) {
-  const s = Math.max(0, Math.round(Number(segundos || 0)));
-  if (s < 60) return `${s} s`;
-  const horas = Math.floor(s / 3600);
-  const minutos = Math.round((s % 3600) / 60);
-  if (!horas) return `${minutos} min`;
-  return `${horas} h ${String(minutos).padStart(2, '0')} min`;
-}
+export { formatearDuracion } from './duracionReporte.js';
 
 /**
  * Etiqueta legible del período de una fila del reporte:

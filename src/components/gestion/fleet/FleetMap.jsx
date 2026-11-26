@@ -469,6 +469,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const [confirmarEliminar, setConfirmarEliminar] = useState(false);
   const [dibujo, setDibujo] = useState([]);               // [[lat, lng], ...]
   const [geofenceSearch, setGeofenceSearch] = useState('');
+  const [mostrarBusquedaMovil, setMostrarBusquedaMovil] = useState(false);
   const [resultsOpen, setResultsOpen] = useState(false);
   const [selectedGeofenceId, setSelectedGeofenceId] = useState('');
   const [focusRequest, setFocusRequest] = useState(null);
@@ -2402,6 +2403,10 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </p>
       ) : null}
 
+      <button type="button" onClick={() => setMostrarBusquedaMovil((abierto) => !abierto)} aria-expanded={mostrarBusquedaMovil} aria-controls="busquedas-mapa" className="mx-2 my-1 inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-semibold text-forest lg:hidden">
+        <Search size={16} /> {mostrarBusquedaMovil ? 'Ocultar búsqueda' : 'Buscar máquina o geocerca'}
+      </button>
+      <div id="busquedas-mapa" className={mostrarBusquedaMovil ? '' : 'hidden lg:block'}>
       {geofences.length > 0 ? (
         <div className="px-4 sm:px-5 pb-3">
           <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-100">
@@ -2441,10 +2446,10 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
               }`}
               aria-label={listening ? 'Detener búsqueda por voz' : 'Buscar geocerca por voz'}
               aria-pressed={listening}
-              title={SpeechRecognitionCtor ? 'Buscar por voz' : 'Tu navegador no soporta voz'}
+              title={SpeechRecognitionCtor || Capacitor.isNativePlatform() ? 'Buscar por voz' : 'Tu navegador no soporta voz'}
             >
-              {SpeechRecognitionCtor ? <Mic size={21} /> : <MicOff size={21} />}
-              {!listening && SpeechRecognitionCtor ? (
+              {SpeechRecognitionCtor || Capacitor.isNativePlatform() ? <Mic size={21} /> : <MicOff size={21} />}
+              {!listening && (SpeechRecognitionCtor || Capacitor.isNativePlatform()) ? (
                 <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/30" aria-hidden="true" />
               ) : null}
             </button>
@@ -2510,6 +2515,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           </div> : null}
         </div>
       ) : null}
+      </div>
       <div className="px-1 sm:px-2 pb-2">
         <div id="mapa-flota" className="relative z-0 isolate scroll-mt-4 min-w-0 overflow-hidden rounded-[14px] border border-[#A7C7AB] bg-white shadow-sm">
         <button

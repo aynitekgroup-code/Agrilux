@@ -1132,6 +1132,9 @@ function CardLotes({ empresaId, periodo, fuente, vehicles = [] }) {
         </div>
       </div>
 
+      <p className="mx-4 sm:mx-5 my-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="note">
+        Para pagar maquinaria, valida estos tiempos con los reportes originales y los ingenieros de campo. La cobertura GPS y la clasificación de estados pueden afectar el cálculo; no son una liquidación confirmada.
+      </p>
       {avisoLotes && estado === 'ok' ? (
         <p className="mx-4 sm:mx-5 mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800" role="status">
           {avisoLotes}
