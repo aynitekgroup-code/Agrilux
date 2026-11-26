@@ -855,7 +855,7 @@ async function llamarProviderMapa(url, apiKey, headersExtra, body) {
   return texto;
 }
 
-async function handlerMapa(req, res, { OPENROUTER_API_KEY, DEEPSEEK_API_KEY, GITHUB_TOKEN }) {
+async function handlerMapa(req, res, { OPENROUTER_API_KEY }) {
   const { mensaje, historial = [], geocercas = [], unidades = [], seleccion = null } = req.body || {};
   if (!mensaje || typeof mensaje !== 'string') {
     return res.status(400).json({ error: 'Falta el campo mensaje' });
@@ -873,27 +873,11 @@ async function handlerMapa(req, res, { OPENROUTER_API_KEY, DEEPSEEK_API_KEY, GIT
 
   const intentos = [];
   if (OPENROUTER_API_KEY) {
-    intentos.push(['openrouter', () => llamarProviderMapa(
+    intentos.push(['openrouter-gratis', () => llamarProviderMapa(
       'https://openrouter.ai/api/v1/chat/completions',
       OPENROUTER_API_KEY,
       { 'HTTP-Referer': 'https://www.vitalfarmbright.store', 'X-Title': 'Agrilux-Map-JARVIS' },
-      { model: 'google/gemini-2.5-flash', messages, max_tokens: 700, temperature: 0.4 },
-    )]);
-  }
-  if (DEEPSEEK_API_KEY) {
-    intentos.push(['deepseek', () => llamarProviderMapa(
-      'https://api.deepseek.com/chat/completions',
-      DEEPSEEK_API_KEY,
-      {},
-      { model: 'deepseek-chat', messages, max_tokens: 700, temperature: 0.4 },
-    )]);
-  }
-  if (GITHUB_TOKEN) {
-    intentos.push(['github', () => llamarProviderMapa(
-      'https://models.inference.ai.azure.com/chat/completions',
-      GITHUB_TOKEN,
-      {},
-      { model: 'Phi-4-multimodal-instruct', messages, max_tokens: 700, temperature: 0.4 },
+      { model: 'openrouter/free', messages, max_tokens: 700, temperature: 0.4 },
     )]);
   }
 
@@ -921,7 +905,7 @@ async function handlerMapa(req, res, { OPENROUTER_API_KEY, DEEPSEEK_API_KEY, GIT
   }
 
   return res.status(200).json({
-    respuesta: 'No pude conectar con la IA en este momento. Intenta de nuevo en unos segundos.',
+    respuesta: 'La IA gratuita no está disponible. Revisa la configuración o inténtalo de nuevo más tarde.',
     acciones: [],
     provider: null,
   });
@@ -1088,7 +1072,7 @@ function validarDatosGestion(modo, obj) {
   return null;
 }
 
-async function handlerGestion(req, res, { OPENROUTER_API_KEY, DEEPSEEK_API_KEY, GITHUB_TOKEN }) {
+async function handlerGestion(req, res, { OPENROUTER_API_KEY }) {
   const { modo, contexto } = req.body || {};
   if (!MODOS_GESTION.has(modo)) {
     return res.status(400).json({ error: `Modo de gestión no válido: ${String(modo)}` });
@@ -1103,42 +1087,19 @@ async function handlerGestion(req, res, { OPENROUTER_API_KEY, DEEPSEEK_API_KEY, 
     { role: 'user', content: prepararContextoGestion(contexto) },
   ];
 
-  // Cadena de proveedores. El primero es el más barato (gpt-4o-mini): estas
-  // llamadas son cortas y frecuentes (briefing, alertas, reportes).
+  // Solo el router gratuito: nunca caer automáticamente en modelos de pago.
   const intentos = [];
   if (OPENROUTER_API_KEY) {
-    intentos.push(['openrouter-mini', () => llamarProviderMapa(
+    intentos.push(['openrouter-gratis', () => llamarProviderMapa(
       'https://openrouter.ai/api/v1/chat/completions',
       OPENROUTER_API_KEY,
       { 'HTTP-Referer': 'https://www.vitalfarmbright.store', 'X-Title': 'Agrilux-Gestion' },
-      { model: 'openai/gpt-4o-mini', messages, max_tokens: 900, temperature: 0.3 },
-    )]);
-    intentos.push(['openrouter-flash', () => llamarProviderMapa(
-      'https://openrouter.ai/api/v1/chat/completions',
-      OPENROUTER_API_KEY,
-      { 'HTTP-Referer': 'https://www.vitalfarmbright.store', 'X-Title': 'Agrilux-Gestion' },
-      { model: 'google/gemini-2.5-flash', messages, max_tokens: 900, temperature: 0.3 },
-    )]);
-  }
-  if (DEEPSEEK_API_KEY) {
-    intentos.push(['deepseek', () => llamarProviderMapa(
-      'https://api.deepseek.com/chat/completions',
-      DEEPSEEK_API_KEY,
-      {},
-      { model: 'deepseek-chat', messages, max_tokens: 900, temperature: 0.3 },
-    )]);
-  }
-  if (GITHUB_TOKEN) {
-    intentos.push(['github', () => llamarProviderMapa(
-      'https://models.inference.ai.azure.com/chat/completions',
-      GITHUB_TOKEN,
-      {},
-      { model: 'Phi-4-multimodal-instruct', messages, max_tokens: 900, temperature: 0.3 },
+      { model: 'openrouter/free', messages, max_tokens: 900, temperature: 0.3 },
     )]);
   }
 
   if (!intentos.length) {
-    return res.status(500).json({ error: 'No hay proveedores de IA configurados en el servidor.' });
+    return res.status(503).json({ error: 'La IA gratuita no está configurada en el servidor.' });
   }
 
   let ultimoError = null;
