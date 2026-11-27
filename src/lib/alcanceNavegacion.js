@@ -32,3 +32,14 @@ export function soloModuloGestion({ empresa_activa_id, empresas_disponibles, ema
   const activa = lista.find((empresa) => empresa?.id === empresa_activa_id);
   return EMPRESAS_SOLO_GESTION.includes(normalizar(activa?.nombre));
 }
+
+// La sección piloto no está habilitada para Carlos ni para miembros de Pomalca,
+// incluso cuando el usuario cambie de empresa activa. Fallar cerrado mientras
+// se cargan las membresías; esto no sustituye la autorización de datos en RLS.
+export function puedeVerInvernadero({ user, empresas_disponibles, empresasCargadasUsuario, empresa_activa_id } = {}) {
+  if (!user?.uid || empresasCargadasUsuario !== user.uid || !empresa_activa_id) return false;
+  if (normalizar(user.email) === 'visionario2306@gmail.com') return false;
+  const empresas = Array.isArray(empresas_disponibles) ? empresas_disponibles : [];
+  if (!empresas.some((e) => e.id === empresa_activa_id)) return false;
+  return !empresas.some((e) => normalizar(e.nombre) === 'pomalca');
+}

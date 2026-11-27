@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, Leaf, Calendar, ClipboardList, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle, Download, BookOpen, Trash2, Users, Building } from 'lucide-react';
+import { Camera, Leaf, Calendar, ClipboardList, Sprout, LogOut, Menu, X, MapPin, Shield, User, Sparkles, Key, Loader2, CheckCircle, Download, BookOpen, Trash2, Users, Building } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
-import { soloModuloGestion } from '../lib/alcanceNavegacion';
+import { puedeVerInvernadero, soloModuloGestion } from '../lib/alcanceNavegacion';
 import { supabase } from '../lib/supabase';
 import SelectorUbicacion from './SelectorUbicacion';
 import OnlineStatus from './OnlineStatus';
@@ -13,12 +13,13 @@ const navItems = [
   { path: '/ciclo',   icon: Calendar, label: 'Ciclo' },
   { path: '/parcela', icon: Leaf,    label: 'Parcela' },
   { path: '/gestion', icon: ClipboardList, label: 'Gestión' },
+  { path: '/invernadero', icon: Sprout, label: 'Invernadero' },
 ];
 
 export default function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, empresa_activa_id, empresas_disponibles, setEmpresaActiva } = useAuth();
+  const { user, logout, empresa_activa_id, empresas_disponibles, empresasCargadasUsuario, setEmpresaActiva } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mostrarUbicacion, setMostrarUbicacion] = useState(false);
   const [adminModal, setAdminModal] = useState(false);
@@ -36,13 +37,13 @@ export default function Layout({ children }) {
   const esAdmin = user?.email === ADMIN_EMAIL;
 
   // Pomalca (empresa activa): solo se habilita el módulo Gestión.
-  const itemsNavegacion = soloModuloGestion({
+  const itemsNavegacion = (soloModuloGestion({
     empresa_activa_id,
     empresas_disponibles,
     email: user?.email,
   })
     ? navItems.filter((item) => item.path === '/gestion')
-    : navItems;
+    : navItems).filter((item) => item.path !== '/invernadero' || puedeVerInvernadero({ user, empresa_activa_id, empresas_disponibles, empresasCargadasUsuario }));
 
   const handleLogout = async () => {
     await logout();

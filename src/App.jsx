@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { AgentProvider } from './lib/AgentContext';
 import { useExperienceType } from './lib/useExperienceType';
-import { soloModuloGestion } from './lib/alcanceNavegacion';
+import { puedeVerInvernadero, soloModuloGestion } from './lib/alcanceNavegacion';
 import WebLayout from './components/layout/WebLayout';
 import MobileLayout from './components/layout/MobileLayout';
 import SelectorUbicacion from './components/SelectorUbicacion';
@@ -34,6 +34,7 @@ const Diagnostico = lazy(() => import('./modules/diagnostico/DiagnosticoPage'));
 const MiParcela = lazy(() => import('./modules/parcela/ParcelaPage'));
 const CicloCultivo = lazy(() => import('./modules/ciclo/CicloPage'));
 const Gestion = lazy(() => import('./modules/gestion/GestionPage'));
+const Invernadero = lazy(() => import('./modules/invernadero/InvernaderoPage'));
 const AgroTrackPomalca = lazy(() => import('./modules/gestion/AgroTrackPomalcaPage'));
 const Admin = lazy(() => import('./pages/admin/Admin'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
@@ -80,6 +81,15 @@ function RutaSoloGestion({ children }) {
   });
   if (soloGestion) return <Navigate to="/gestion/vehiculos-flota" replace />;
   return children;
+}
+
+function RutaInvernadero() {
+  const { user, isAprobado, empresa_activa_id, empresas_disponibles, empresasCargadasUsuario } = useAuth();
+  if (!user) return <Navigate to="/registro" replace />;
+  if (!isAprobado) return <PantallaPendiente />;
+  if (empresasCargadasUsuario !== user.uid) return <div role="status" className="p-6">Comprobando acceso…</div>;
+  if (!puedeVerInvernadero({ user, empresa_activa_id, empresas_disponibles, empresasCargadasUsuario })) return <Navigate to="/gestion" replace />;
+  return <Invernadero />;
 }
 
 function PantallaPendiente() {
@@ -286,6 +296,7 @@ function AppRoutes() {
             <Route path="/gestion" element={
               user && isAprobado ? <Gestion /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />
+            <Route path="/invernadero" element={<RutaInvernadero />} />
             <Route path="/gestion/sensores-agricolas" element={
               user && isAprobado ? <AgroTrackPomalca /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />

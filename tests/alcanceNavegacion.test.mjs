@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { soloModuloGestion } from '../src/lib/alcanceNavegacion.js';
+import { puedeVerInvernadero, soloModuloGestion } from '../src/lib/alcanceNavegacion.js';
 
 const EMPRESAS = [
   { id: 'e-pomalca', nombre: 'Pomalca' },
@@ -16,6 +16,15 @@ test('Pomalca como empresa activa habilita solo Gestión', () => {
     }),
     true,
   );
+});
+
+test('Invernadero excluye toda membresía Pomalca y a Carlos aunque cambien de empresa', () => {
+  const base = { user: { uid: 'u', email: 'otro@ejemplo.com' }, empresasCargadasUsuario: 'u', empresa_activa_id: 'e-otra' };
+  assert.equal(puedeVerInvernadero({ ...base, empresas_disponibles: EMPRESAS }), false);
+  assert.equal(puedeVerInvernadero({ ...base, user: { uid: 'u', email: ' VISIONARIO2306@GMAIL.COM ' }, empresas_disponibles: [EMPRESAS[1]] }), false);
+  assert.equal(puedeVerInvernadero({ ...base, empresas_disponibles: [EMPRESAS[1]] }), true);
+  assert.equal(puedeVerInvernadero({ ...base, empresasCargadasUsuario: null, empresas_disponibles: [EMPRESAS[1]] }), false);
+  assert.equal(puedeVerInvernadero({ ...base, empresa_activa_id: null, empresas_disponibles: [EMPRESAS[1]] }), false);
 });
 
 test('Otras empresas conservan la navegación completa', () => {

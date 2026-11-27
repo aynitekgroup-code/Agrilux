@@ -29,9 +29,10 @@ import {
   Building,
   PanelLeftClose,
   PanelLeftOpen,
+  Sprout,
 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
-import { soloModuloGestion } from '../../lib/alcanceNavegacion';
+import { puedeVerInvernadero, soloModuloGestion } from '../../lib/alcanceNavegacion';
 import OnlineStatus from '../OnlineStatus';
 import AgentStatus from '../AgentStatus';
 import { AdminAccessModal, ChangePasswordModal, EmpresaDataModal, EmpresaSelectorModal, LocationSelectorModal, UserProfileModal } from './SharedModals';
@@ -41,6 +42,7 @@ const navItems = [
   { path: '/ciclo', icon: Calendar, label: 'Ciclo' },
   { path: '/parcela', icon: Leaf, label: 'Parcela' },
   { path: '/gestion', icon: ClipboardList, label: 'Gestión' },
+  { path: '/invernadero', icon: Sprout, label: 'Invernadero' },
 ];
 
 const ADMIN_EMAIL = 'aynitek.group@gmail.com';
@@ -48,7 +50,7 @@ const ADMIN_EMAIL = 'aynitek.group@gmail.com';
 export default function WebLayout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, empresa_activa_id, empresas_disponibles, setEmpresaActiva, updateEmpresaActiva, updatePerfil } = useAuth();
+  const { user, logout, empresa_activa_id, empresas_disponibles, empresasCargadasUsuario, setEmpresaActiva, updateEmpresaActiva, updatePerfil } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mostrarUbicacion, setMostrarUbicacion] = useState(false);
   const [adminModal, setAdminModal] = useState(false);
@@ -68,9 +70,9 @@ export default function WebLayout({ children }) {
     empresas_disponibles,
     email: user?.email,
   });
-  const itemsNavegacion = soloGestion
+  const itemsNavegacion = (soloGestion
     ? navItems.filter((item) => item.path === '/gestion')
-    : navItems;
+    : navItems).filter((item) => item.path !== '/invernadero' || puedeVerInvernadero({ user, empresa_activa_id, empresas_disponibles, empresasCargadasUsuario }));
 
   const handleLogout = async () => {
     await logout();
