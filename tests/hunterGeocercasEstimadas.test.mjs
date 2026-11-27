@@ -23,6 +23,18 @@ test('balance histórico cubre 24 horas incluyendo tiempo sin determinar', () =>
   const r = coberturaHunter(p, estimarHunterPorGeocerca(p, geo), '2026-11-25T05:00:00Z', '2026-11-26T05:00:00Z', Date.parse('2026-11-27T05:00:00Z'));
   assert.equal(r.total, 86400);
   assert.equal(r.asignado + r.sinAsignar, 86400);
+  assert.equal(r.pendiente, 0);
+});
+test('día en curso distingue tiempo futuro y completa 24 horas', () => {
+  const p = [punto('2026-11-25T05:00:00Z'), punto('2026-11-25T05:01:00Z')];
+  const r = coberturaHunter(p, estimarHunterPorGeocerca(p, geo), '2026-11-25T05:00:00Z', '2026-11-26T05:00:00Z', Date.parse('2026-11-25T17:00:00Z'));
+  assert.equal(r.total, 43200);
+  assert.equal(r.pendiente, 43200);
+  assert.equal(r.asignado + r.sinAsignar + r.pendiente, 86400);
+});
+test('cobertura rechaza asignaciones superiores al periodo transcurrido', () => {
+  const r = coberturaHunter([], { filas: [{ apagado: 7200, detenido: 0, ralenti: 0, movimiento: 0 }] }, '2026-11-25T05:00:00Z', '2026-11-26T05:00:00Z', Date.parse('2026-11-25T06:00:00Z'));
+  assert.equal(r, null);
 });
 test('no asigna tiempo con ignición desconocida ni geocercas solapadas', () => {
   const p = [punto('2026-11-25T00:00:00Z', { ignicion: null }), punto('2026-11-25T00:01:00Z')];

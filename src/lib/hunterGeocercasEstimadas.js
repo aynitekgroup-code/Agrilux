@@ -48,11 +48,13 @@ export function estimarHunterPorGeocerca(puntos, geocercas, maxIntervaloSegundos
 /** Cobertura del periodo solicitado: nunca interpretar huecos como cero medido. */
 export function coberturaHunter(puntos, estimacion, desde, hasta, ahora = Date.now()) {
   const inicio = Date.parse(desde);
-  const fin = Math.min(Date.parse(hasta), ahora);
-  if (!Number.isFinite(inicio) || !Number.isFinite(fin) || fin <= inicio) return null;
+  const finDia = Date.parse(hasta);
+  const fin = Math.max(inicio, Math.min(finDia, ahora));
+  if (!Number.isFinite(inicio) || !Number.isFinite(finDia) || !Number.isFinite(ahora) || finDia <= inicio) return null;
   const total = (fin - inicio) / 1000;
   const asignado = (estimacion?.filas || []).reduce((s, f) => s + f.apagado + f.detenido + f.ralenti + f.movimiento, 0);
   const instantes = puntos.map((p) => Date.parse(p.fecha)).filter((t) => Number.isFinite(t) && t >= inicio && t <= fin).sort((a, b) => a - b);
   const entre = instantes.length >= 2 ? Math.max(0, (instantes.at(-1) - instantes[0]) / 1000) : 0;
-  return { total, asignado, inciertoEntre: estimacion?.incierto ?? 0, sinCoberturaExterna: Math.max(0, total - entre), sinAsignar: Math.max(0, total - asignado), porcentaje: Math.min(100, 100 * asignado / total) };
+  if (!Number.isFinite(asignado) || asignado > total || asignado < 0) return null;
+  return { total, totalDia: (finDia - inicio) / 1000, pendiente: (finDia - fin) / 1000, corte: fin, asignado, inciertoEntre: estimacion?.incierto ?? 0, sinCoberturaExterna: Math.max(0, total - entre), sinAsignar: total - asignado, porcentaje: total ? 100 * asignado / total : 0 };
 }

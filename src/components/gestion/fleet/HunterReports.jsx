@@ -53,7 +53,7 @@ export function HunterDetalle({ empresaId, equipoInicial = '', diaInicial = '' }
           const geocercas = await listarGeocercas(empresaId);
           const validas = geocercas.filter((g) => ['Polygon', 'MultiPolygon'].includes(g.geometria?.type) && Array.isArray(g.geometria?.coordinates));
           if (!validas.length) throw new Error('No hay geocercas activas con geometría disponible.');
-          if (activo) setEstimacion(estimarHunterPorGeocerca(procesado.puntos, validas));
+          if (activo) setEstimacion(estimarHunterPorGeocerca(procesado.puntos.filter((p) => Date.parse(p.fecha) <= Date.now()), validas));
         } catch (e) { if (activo) setErrorGeocerca(e.message || 'No se pudo calcular la estimación por geocerca.'); }
       } catch (e) { if (activo) setError(e.message || 'No se pudo cargar Hunter.'); }
       finally { if (activo) setCargando(false); }
@@ -68,7 +68,7 @@ export function HunterDetalle({ empresaId, equipoInicial = '', diaInicial = '' }
       const geocercas = await listarGeocercas(empresaId);
       const validas = geocercas.filter((g) => ['Polygon', 'MultiPolygon'].includes(g.geometria?.type) && Array.isArray(g.geometria?.coordinates));
       if (!validas.length) throw new Error('No hay geocercas activas con geometría disponible.');
-      setEstimacion(estimarHunterPorGeocerca(resultado.puntos, validas));
+      setEstimacion(estimarHunterPorGeocerca(resultado.puntos.filter((p) => Date.parse(p.fecha) <= Date.now()), validas));
     } catch (e) { setErrorGeocerca(e.message || 'No se pudo calcular la estimación.'); }
     finally { setCalculando(false); }
   }
