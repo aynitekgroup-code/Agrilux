@@ -19,7 +19,7 @@ function contiene(punto, geometria) {
 }
 function estado(punto) {
   if (punto.ignicion === false) return 'apagado';
-  if (punto.ignicion !== true || punto.velocidad_kmh == null) return null;
+  if (punto.ignicion !== true || punto.velocidad_kmh == null || !Number.isFinite(punto.velocidad_kmh) || punto.velocidad_kmh < 0) return null;
   return punto.velocidad_kmh > 5 ? 'movimiento' : 'ralenti';
 }
 
