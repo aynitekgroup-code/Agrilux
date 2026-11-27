@@ -55,18 +55,18 @@ test('separa apagado, encendido lento y movimiento sin sumar intervalos incierto
   assert.deepEqual([r.filas[0].apagado, r.filas[0].detenido, r.filas[0].ralenti, r.filas[0].movimiento, r.incierto], [60, 60, 60, 60, 180]);
 });
 
-test('hueco largo con ignición apagada en ambos extremos y misma geocerca se asigna como apagado', () => {
+test('hueco largo con ignición apagada en ambos extremos permanece incierto', () => {
   const p = [punto('2026-11-25T00:00:00Z', { ignicion: false }), punto('2026-11-25T01:00:00Z', { ignicion: false })];
   const r = estimarHunterPorGeocerca(p, geo);
-  assert.equal(r.filas[0].apagado, 3600);
-  assert.equal(r.incierto, 0);
+  assert.equal(r.filas.length, 0);
+  assert.equal(r.incierto, 3600);
 });
 
-test('hueco largo que termina con evento Ignición ON se asigna como apagado', () => {
+test('hueco largo que termina con evento Ignición ON permanece incierto', () => {
   const p = [punto('2026-11-25T00:00:00Z', { ignicion: false }), punto('2026-11-25T01:00:00Z', { evento: 'Ignición ON' })];
   const r = estimarHunterPorGeocerca(p, geo);
-  assert.equal(r.filas[0].apagado, 3600);
-  assert.equal(r.incierto, 0);
+  assert.equal(r.filas.length, 0);
+  assert.equal(r.incierto, 3600);
 });
 
 test('hueco largo con encendido al final sin evento de ignición sigue sin determinar', () => {

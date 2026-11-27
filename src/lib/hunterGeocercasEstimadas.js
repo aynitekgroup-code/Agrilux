@@ -22,18 +22,6 @@ function estado(punto) {
   if (punto.ignicion !== true || punto.velocidad_kmh == null || !Number.isFinite(punto.velocidad_kmh) || punto.velocidad_kmh < 0) return null;
   return punto.velocidad_kmh === 0 ? 'detenido' : punto.velocidad_kmh <= 5 ? 'ralenti' : 'movimiento';
 }
-function distanciaMetros(a, b) {
-  const rad = Math.PI / 180;
-  const dLat = (b.latitud - a.latitud) * rad;
-  const dLon = (b.longitud - a.longitud) * rad;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.latitud * rad) * Math.cos(b.latitud * rad) * Math.sin(dLon / 2) ** 2;
-  return 2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-// Un hueco largo solo se asigna como apagado cuando Hunter demuestra que el
-// motor estuvo apagado durante todo el intervalo: ignición apagada al inicio y
-// apagada o un evento «Ignición ON» al final, sin movimiento en los extremos y
-// con ambos extremos en la misma geocerca única. Cualquier otro caso es incierto.
-const MAX_DISTANCIA_ESTACIONADO_METROS = 100;
 
 export function estimarHunterPorGeocerca(puntos, geocercas, maxIntervaloSegundos = 300) {
   const ordenados = [...puntos].sort((a, b) => Date.parse(a.fecha) - Date.parse(b.fecha));
@@ -49,11 +37,6 @@ export function estimarHunterPorGeocerca(puntos, geocercas, maxIntervaloSegundos
     let clasificado = null;
     if (segundos <= maxIntervaloSegundos) {
       if (mismaGeocerca && ea && ea === eb) clasificado = ea;
-    } else if (mismaGeocerca && ea === 'apagado'
-      && (eb === 'apagado' || b.evento === 'Ignición ON')
-      && a.velocidad_kmh === 0 && b.velocidad_kmh === 0
-      && distanciaMetros(a, b) <= MAX_DISTANCIA_ESTACIONADO_METROS) {
-      clasificado = 'apagado';
     }
     if (!clasificado) { incierto += segundos; continue; }
     const g = ga[0];
