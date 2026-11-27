@@ -2497,7 +2497,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </div>
       ) : null}
       </div>
-      <div className={`px-1 sm:px-2 pb-2 lg:grid lg:items-start lg:gap-2 ${localizadorLateralAbierto ? 'lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]' : 'lg:grid-cols-1'}`}>
+      <div className={`px-1 sm:px-2 pb-2 lg:grid lg:items-start lg:gap-2 ${localizadorLateralAbierto ? 'lg:grid-cols-[minmax(200px,15%)_minmax(0,1fr)]' : 'lg:grid-cols-1'}`}>
         {localizadorLateralAbierto ? (
           <aside className="hidden min-w-0 max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-xl border border-emerald-200 bg-white p-2 lg:block" aria-label="Localizador de Unidades">
             <div className="flex items-center justify-between gap-2 px-2 py-2">

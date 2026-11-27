@@ -6,7 +6,7 @@ const geo = [{ id: 'a', nombre: 'Campo', geometria: { type: 'Polygon', coordinat
 const punto = (fecha, extra = {}) => ({ fecha, latitud: 1, longitud: 1, ignicion: true, velocidad_kmh: 0, ...extra });
 test('computa solo intervalos coherentes y acotados', () => {
   const r = estimarHunterPorGeocerca([punto('2026-11-25T00:00:00Z'), punto('2026-11-25T00:01:00Z'), punto('2026-11-25T00:20:00Z')], geo);
-  assert.equal(r.filas[0].ralenti, 60);
+  assert.equal(r.filas[0].detenido, 60);
   assert.equal(r.incierto, 1140);
 });
 
@@ -17,6 +17,12 @@ test('cobertura incluye extremos sin datos y no cuenta horas futuras', () => {
   assert.equal(r.asignado, 60);
   assert.equal(r.sinCoberturaExterna, 1740);
   assert.equal(r.sinAsignar, 1740);
+});
+test('balance histórico cubre 24 horas incluyendo tiempo sin determinar', () => {
+  const p = [punto('2026-11-25T05:00:00Z'), punto('2026-11-25T05:01:00Z')];
+  const r = coberturaHunter(p, estimarHunterPorGeocerca(p, geo), '2026-11-25T05:00:00Z', '2026-11-26T05:00:00Z', Date.parse('2026-11-27T05:00:00Z'));
+  assert.equal(r.total, 86400);
+  assert.equal(r.asignado + r.sinAsignar, 86400);
 });
 test('no asigna tiempo con ignición desconocida ni geocercas solapadas', () => {
   const p = [punto('2026-11-25T00:00:00Z', { ignicion: null }), punto('2026-11-25T00:01:00Z')];
@@ -29,11 +35,12 @@ test('separa apagado, encendido lento y movimiento sin sumar intervalos incierto
   const base = '2026-11-25T00:';
   const p = [
     punto(`${base}00:00Z`, { ignicion: false }), punto(`${base}01:00Z`, { ignicion: false }),
-    punto(`${base}02:00Z`), punto(`${base}03:00Z`, { velocidad_kmh: 5 }),
-    punto(`${base}04:00Z`, { velocidad_kmh: 6 }), punto(`${base}05:00Z`, { velocidad_kmh: 8 }),
+    punto(`${base}02:00Z`), punto(`${base}03:00Z`),
+    punto(`${base}04:00Z`, { velocidad_kmh: 1 }), punto(`${base}05:00Z`, { velocidad_kmh: 5 }),
+    punto(`${base}06:00Z`, { velocidad_kmh: 6 }), punto(`${base}07:00Z`, { velocidad_kmh: 8 }),
   ];
   const r = estimarHunterPorGeocerca(p, geo);
-  assert.deepEqual([r.filas[0].apagado, r.filas[0].ralenti, r.filas[0].movimiento, r.incierto], [60, 60, 60, 120]);
+  assert.deepEqual([r.filas[0].apagado, r.filas[0].detenido, r.filas[0].ralenti, r.filas[0].movimiento, r.incierto], [60, 60, 60, 60, 180]);
 });
 
 test('ignición encendida con velocidad inválida no se clasifica como encendido lento', () => {
