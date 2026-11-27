@@ -32,6 +32,7 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
   const { user, empresa_activa_id, empresas_disponibles } = useAuth();
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [modulosAbiertos, setModulosAbiertos] = useState('');
+  const [posicionMenu, setPosicionMenu] = useState(null);
   const listaEmpresas = Array.isArray(empresas_disponibles) ? empresas_disponibles : [];
   const empresaActiva = listaEmpresas.find((empresa) => empresa.id === empresa_activa_id) || null;
   const empresaNombre = empresaActiva?.nombre || 'Flota';
@@ -63,11 +64,40 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
     };
   }, [menuAbierto]);
 
+  useEffect(() => {
+    if (!modulosAbiertos) return undefined;
+    const cerrar = (event) => {
+      if (event.type === 'keydown' && event.key !== 'Escape') return;
+      if (event.type === 'scroll' && event.target instanceof Element && event.target.closest('nav[aria-label^="Módulos de"]')) return;
+      setModulosAbiertos(''); setPosicionMenu(null);
+    };
+    window.addEventListener('keydown', cerrar);
+    window.addEventListener('resize', cerrar);
+    window.addEventListener('scroll', cerrar, true);
+    return () => { window.removeEventListener('keydown', cerrar); window.removeEventListener('resize', cerrar); window.removeEventListener('scroll', cerrar, true); };
+  }, [modulosAbiertos]);
+
   const elegirSeccion = (id) => {
     onSectionChange(id);
     setMenuAbierto(false);
     setModulosAbiertos((actual) => modulos[id] ? (actual === id ? '' : id) : '');
+    setPosicionMenu(null);
   };
+
+  const abrirDesdeBarra = (id, boton) => {
+    if (!modulos[id]) { elegirSeccion(id); return; }
+    if (modulosAbiertos === id && posicionMenu) { setModulosAbiertos(''); setPosicionMenu(null); return; }
+    const rect = boton.getBoundingClientRect();
+    setPosicionMenu({ top: rect.bottom, left: Math.max(8, Math.min(rect.left, window.innerWidth - 328)) });
+    setModulosAbiertos(id);
+  };
+
+  const listaModulos = modulosAbiertos && modulos[modulosAbiertos] && <nav aria-label={`Módulos de ${modulosAbiertos}`} className="max-h-[min(65vh,480px)] overflow-y-auto rounded-lg border border-emerald-200 bg-white p-2 shadow-xl">
+    {modulos[modulosAbiertos].map((grupo) => <div key={grupo.nombre}>
+      <p className="rounded bg-emerald-50 px-3 py-2 text-xs font-bold uppercase text-emerald-800">{grupo.nombre}</p>
+      {grupo.opciones.map(([id, label]) => <button key={id} type="button" onClick={() => { onModuloChange(modulosAbiertos, id); setModulosAbiertos(''); setPosicionMenu(null); }} className="block w-full rounded px-3 py-2 text-left text-sm text-slate-800 hover:bg-emerald-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700">{label}</button>)}
+    </div>)}
+  </nav>;
 
   return (
     <section className="fleet-cabecera overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
@@ -127,7 +157,7 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
               key={section.id}
               type="button"
               aria-current={active ? 'page' : undefined}
-              onClick={() => elegirSeccion(section.id)}
+              onClick={(event) => abrirDesdeBarra(section.id, event.currentTarget)}
               aria-expanded={modulos[section.id] ? modulosAbiertos === section.id : undefined}
               className={`flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-t-md px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:text-sm ${
                 active
@@ -147,12 +177,7 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
           );
         })}
       </nav>
-      {modulosAbiertos && modulos[modulosAbiertos] && <nav aria-label={`Módulos de ${modulosAbiertos}`} className="flex max-h-64 flex-wrap gap-2 overflow-y-auto border-t border-emerald-200 bg-emerald-50 p-3">
-        {modulos[modulosAbiertos].map((grupo) => <div key={grupo.nombre} className="min-w-48 flex-1">
-          <p className="px-2 py-1 text-xs font-bold uppercase text-emerald-800">{grupo.nombre}</p>
-          {grupo.opciones.map(([id, label]) => <button key={id} type="button" onClick={() => { onModuloChange(modulosAbiertos, id); setModulosAbiertos(''); }} className="block w-full rounded px-2 py-2 text-left text-sm text-slate-800 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700">{label}</button>)}
-        </div>)}
-      </nav>}
+      {listaModulos && (posicionMenu ? createPortal(<div className="fixed inset-0 z-[2000]" onClick={() => { setModulosAbiertos(''); setPosicionMenu(null); }}><div style={{ position: 'fixed', top: posicionMenu.top, left: posicionMenu.left, width: 'min(320px, calc(100vw - 16px))' }} onClick={(event) => event.stopPropagation()}>{listaModulos}</div></div>, document.body) : <div className="p-2">{listaModulos}</div>)}
 
       {/* ── Menú lateral: entra desde la izquierda y se cierra al elegir ── */}
       {menuAbierto ? createPortal(
