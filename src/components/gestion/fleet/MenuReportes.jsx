@@ -4,9 +4,9 @@ import { ChevronDown, FileChartColumn, X } from 'lucide-react';
 
 export const GRUPOS = [
   { nombre: 'Hunter 360', opciones: [
+    ['hunter-reportes', 'Horas por geocerca · Hunter 360'],
     ['hunter-actividad', 'Reporte de actividad · Hunter 360'],
     ['hunter-status', 'Status de maquinaria · Hunter 360'],
-    ['hunter-reportes', 'Reportes Hunter 360'],
   ] },
   { nombre: 'Zonar', opciones: [
     ['zonar-kilometros', 'Kilómetros diarios por unidad · Zonar'],

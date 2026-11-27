@@ -85,7 +85,8 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
   const [section, setSection] = useState(() => searchParams.get('section') || initialSection);
   const [destinoInterno, setDestinoInterno] = useState(null);
   const [proveedorReportes, setProveedorReportes] = useState('hunter');
-  const [reporteActivo, setReporteActivo] = useState('hunter-actividad');
+  const [reporteActivo, setReporteActivo] = useState('hunter-reportes');
+  const [vistaGeocercas, setVistaGeocercas] = useState('diaria');
   const [selectedFleetModule, setSelectedFleetModule] = useState('flota');
   const [selectedVehicleId, setSelectedVehicleId] = useState(vehicles[0]?.id || '');
   const [readings, setReadings] = useState(mockFuelReadings);
@@ -503,7 +504,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
           />
           <MenuReportes onSeleccionar={(id) => abrirSeccionEn('reportes', id)} />
           <nav aria-label="Ir a reportes por proveedor" className="flex flex-wrap gap-2 rounded-xl border border-emerald-100 bg-white p-3 text-sm">
-            {[["hunter", "Hunter 360", "hunter-actividad"], ["zonar", "Zonar", "zonar-kilometros"], ["otros", "Otros", "reportes-vigia"]].map(([id, etiqueta, primero]) => <button key={id} type="button" aria-pressed={proveedorReportes === id} onClick={() => { setProveedorReportes(id); setReporteActivo(primero); }} className={`rounded-lg border border-emerald-300 px-3 py-2 font-semibold ${proveedorReportes === id ? 'bg-forest text-white' : 'text-emerald-800 hover:bg-emerald-50'}`}>{etiqueta}</button>)}
+            {[["hunter", "Hunter 360", "hunter-reportes"], ["zonar", "Zonar", "zonar-kilometros"], ["otros", "Otros", "reportes-vigia"]].map(([id, etiqueta, primero]) => <button key={id} type="button" aria-pressed={proveedorReportes === id} onClick={() => { setProveedorReportes(id); setReporteActivo(primero); }} className={`rounded-lg border border-emerald-300 px-3 py-2 font-semibold ${proveedorReportes === id ? 'bg-forest text-white' : 'text-emerald-800 hover:bg-emerald-50'}`}>{etiqueta}</button>)}
           </nav>
           {(() => { const opciones = GRUPOS[proveedorReportes === 'hunter' ? 0 : proveedorReportes === 'zonar' ? 1 : 2].opciones; const indice = opciones.findIndex(([id]) => id === reporteActivo); return <nav aria-label="Navegar entre reportes" className="flex items-center justify-between gap-2 rounded-lg border bg-white p-2 text-sm"><button type="button" disabled={indice <= 0} onClick={() => setReporteActivo(opciones[indice - 1][0])} className="rounded border px-3 py-2 disabled:opacity-40">Anterior</button><span className="text-center font-semibold">{opciones[indice]?.[1]}</span><button type="button" disabled={indice < 0 || indice >= opciones.length - 1} onClick={() => setReporteActivo(opciones[indice + 1][0])} className="rounded border px-3 py-2 disabled:opacity-40">Siguiente</button></nav>; })()}
           {proveedorReportes === 'hunter' && <div id="reportes-hunter" className="scroll-mt-4 space-y-4">
@@ -580,25 +581,31 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
             title="Reportes de geocercas"
             description="Consulta entradas, salidas y tiempo dentro de los lotes, según los datos disponibles de Zonar."
           />
+          <label className="block rounded-xl border border-emerald-200 bg-white p-3 text-sm font-semibold text-forest">Elegir módulo de geocercas
+            <select value={vistaGeocercas} onChange={(e) => setVistaGeocercas(e.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 p-2 text-slate-800">
+              <option value="diaria">Tabla diaria de geocercas</option><option value="eventos">Entradas y salidas</option><option value="lotes">Tiempo en cada lote</option><option value="visitas">Visitas por geocerca</option><option value="catalogo">Catálogo de geocercas y rutas</option>
+            </select>
+          </label>
           {/* 14/11/2026: todas las unidades juntas + tabla dinámica de las 6:30. */}
-          <ErrorBoundary mensaje="No se pudo dibujar la tabla diaria de geocercas.">
+          {vistaGeocercas === 'diaria' && <ErrorBoundary mensaje="No se pudo dibujar la tabla diaria de geocercas.">
             <FleetTablaDiariaGeocercas
               empresaId={empresa_activa_id}
               periodo={conDatosReales ? panel.periodo : null}
               fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
               vehicles={vehiclesFuente}
             />
-          </ErrorBoundary>
-          <ErrorBoundary mensaje="No se pudo dibujar el reporte de tiempo en cada lote. Prueba con otro rango o pulsa Reintentar.">
+          </ErrorBoundary>}
+          {['eventos', 'lotes', 'visitas'].includes(vistaGeocercas) && <ErrorBoundary mensaje="No se pudo dibujar el reporte de geocercas. Prueba con otro rango o pulsa Reintentar.">
             <FleetGeofenceReports
               empresaId={empresa_activa_id}
               periodo={conDatosReales ? panel.periodo : null}
               fuente={fuentePosiciones === 'real' ? 'real' : 'demo'}
               vehicles={vehiclesFuente}
+              vista={vistaGeocercas}
             />
-          </ErrorBoundary>
+          </ErrorBoundary>}
           {/* El módulo "Geocercas y rutas" vive aquí, arriba del catálogo. */}
-          <ModulesOverview modulos={['geocercas']} selectedId="geocercas" onSelect={() => {}} />
+          {vistaGeocercas === 'catalogo' && <><ModulesOverview modulos={['geocercas']} selectedId="geocercas" onSelect={() => {}} />
           <ReportesPage
             empresaId={empresa_activa_id}
             periodo={conDatosReales ? panel.periodo : null}
@@ -606,6 +613,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
             vehicles={vehiclesFuente}
             selectedModuleId="geocercas"
           />
+          </>}
         </div>
       ) : null}
 

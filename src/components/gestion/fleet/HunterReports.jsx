@@ -24,7 +24,16 @@ export default function HunterReports({ empresaId }) {
     setResultado(null); setEstimacion(null); setErrorGeocerca(''); setError(''); setCargando(true); setPagina(0);
     try {
       if (archivo.size > 20 * 1024 * 1024) throw new Error('La captura supera el límite de 20 MB.');
-      setResultado(prepararRecorrido(JSON.parse(await archivo.text())));
+      const procesado = prepararRecorrido(JSON.parse(await archivo.text()));
+      setResultado(procesado);
+      setCalculando(true);
+      try {
+        const geocercas = await listarGeocercas(empresaId);
+        const validas = geocercas.filter((g) => ['Polygon', 'MultiPolygon'].includes(g.geometria?.type) && Array.isArray(g.geometria?.coordinates));
+        if (!validas.length) throw new Error('No hay geocercas activas con geometría disponible.');
+        setEstimacion(estimarHunterPorGeocerca(procesado.puntos, validas));
+      } catch (e) { setErrorGeocerca(e.message || 'No se pudo calcular la estimación.'); }
+      finally { setCalculando(false); }
     } catch (err) {
       setError(err instanceof SyntaxError ? 'El archivo no contiene JSON válido.' : err.message);
     } finally { setCargando(false); }
@@ -50,7 +59,7 @@ export default function HunterReports({ empresaId }) {
   }
 
   return <section className="rounded-xl border border-emerald-200 bg-white p-4 space-y-4">
-    <div><h2 className="text-lg font-semibold">Reportes Hunter 360</h2>
+    <div><h2 className="text-lg font-semibold">Horas diarias por geocerca · Hunter 360</h2>
       <p className="text-sm font-semibold text-amber-800">Reporte diario Hunter por geocerca para pagos: todavía no disponible. El historial automático no está conectado y esta estimación no es apta para liquidaciones.</p>
       <p className="text-sm text-slate-600">Carga manual de una captura JSON validada. Los datos se procesan en este navegador, no se guardan ni se sincronizan con Agrilux y no se mezclan con Zonar.</p>
       <p className="text-sm text-amber-700">Hunter agrupa algunas paradas: se cuentan por separado y no se duplican como puntos GPS. El detalle de viajes y paradas se muestra solo si la captura lo incluye; los eventos dentro de una parada pueden no estar disponibles. El resumen conserva los valores de Hunter y no usa los criterios de Zonar.</p></div>
@@ -62,9 +71,9 @@ export default function HunterReports({ empresaId }) {
       <p className="text-sm">Equipo: {resultado.equipo_id} · {resultado.desde} a {resultado.hasta} · {resultado.puntos.length} puntos válidos · {resultado.descartes.paradas_agrupadas} paradas agrupadas · {resultado.descartes.invalidos} inválidos · {resultado.descartes.duplicados} duplicados</p>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">{Object.entries(etiquetas).map(([k, titulo]) => <div className="rounded bg-slate-50 p-2 text-sm" key={k}><div className="text-slate-500">{titulo}</div><strong>{valor(resultado.resumen_hunter[k])}</strong></div>)}</div>
       <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-        <h3 className="font-semibold">Estimación experimental por geocerca</h3>
+        <h3 className="font-semibold">Tabla de revisión · tiempos estimados por geocerca</h3>
         <p className="text-sm">No es el tiempo oficial de Hunter ni una liquidación. Solo se asignan intervalos de hasta 5 minutos cuando ambos puntos tienen el mismo estado y coinciden en una única geocerca. Los cambios, solapamientos, datos faltantes y huecos mayores quedan sin asignar. Los períodos antes del primer punto y después del último no están incluidos. Contrasta con Hunter antes de cualquier pago.</p>
-        <button type="button" disabled={calculando || !empresaId || resultado.puntos.length < 2} onClick={calcularGeocercas} className="rounded bg-forest px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{calculando ? 'Calculando…' : 'Estimar tiempo por geocerca'}</button>
+        <button type="button" disabled={calculando || !empresaId || resultado.puntos.length < 2} onClick={calcularGeocercas} className="rounded bg-forest px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{calculando ? 'Calculando…' : 'Recalcular tiempo por geocerca'}</button>
         {resultado.puntos.length < 2 && <p>Se necesitan al menos dos puntos GPS válidos.</p>}
         {errorGeocerca && <p role="alert" className="text-red-700">{errorGeocerca}</p>}
         {estimacion && <><p role="status">Tiempo sin asignar entre puntos: {formatearDuracion(estimacion.incierto)}.</p>{!estimacion.filas.length ? <p>No hay intervalos que cumplan las condiciones de esta estimación.</p> : <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr>{['Geocerca', 'Apagado', 'Encendido lento / detenido', 'Movimiento'].map((t) => <th className="p-2" key={t}>{t}</th>)}</tr></thead><tbody>{estimacion.filas.map((f) => <tr className="border-t" key={f.id}><td className="p-2">{f.geocerca}</td><td className="p-2">{formatearDuracion(f.apagado)}</td><td className="p-2">{formatearDuracion(f.ralenti)}</td><td className="p-2">{formatearDuracion(f.movimiento)}</td></tr>)}</tbody></table></div>}</>}

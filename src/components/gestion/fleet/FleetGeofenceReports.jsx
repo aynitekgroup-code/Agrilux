@@ -1875,12 +1875,12 @@ function CardVisitas({ empresaId, periodo, fuente, vehicles = [] }) {
   );
 }
 
-export default function FleetGeofenceReports({ empresaId, periodo = null, fuente = 'real', vehicles = [] }) {
+export default function FleetGeofenceReports({ empresaId, periodo = null, fuente = 'real', vehicles = [], vista = 'todos' }) {
   return (
     <div className="space-y-4">
-      <CardEventos empresaId={empresaId} periodo={periodo} fuente={fuente} vehicles={vehicles} />
-      <CardLotes empresaId={empresaId} periodo={periodo} fuente={fuente} vehicles={vehicles} />
-      <CardVisitas empresaId={empresaId} periodo={periodo} fuente={fuente} vehicles={vehicles} />
+      {(vista === 'todos' || vista === 'eventos') && <CardEventos empresaId={empresaId} periodo={periodo} fuente={fuente} vehicles={vehicles} />}
+      {(vista === 'todos' || vista === 'lotes') && <CardLotes empresaId={empresaId} periodo={periodo} fuente={fuente} vehicles={vehicles} />}
+      {(vista === 'todos' || vista === 'visitas') && <CardVisitas empresaId={empresaId} periodo={periodo} fuente={fuente} vehicles={vehicles} />}
     </div>
   );
 }
