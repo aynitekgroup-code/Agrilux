@@ -85,11 +85,11 @@ const SpeechRecognitionCtor =
 let nativeSpeechRecognition = null;
 const loadNativeSpeechRecognition = async () => {
   if (!Capacitor.isNativePlatform()) return null;
-  if (nativeSpeechRecognition) return nativeSpeechRecognition;
+  if (nativeSpeechRecognition) return { plugin: nativeSpeechRecognition };
   try {
     const mod = await import('@capacitor-community/speech-recognition');
     nativeSpeechRecognition = mod.SpeechRecognition;
-    return nativeSpeechRecognition;
+    return { plugin: nativeSpeechRecognition };
   } catch {
     return null;
   }
@@ -313,15 +313,19 @@ function FitMapToGeofences({ geoJson, vehicles = [], focusRequest, fitToken = 0,
   useEffect(() => {
     const bounds = L.latLngBounds([]);
     try {
-      const geoBounds = L.geoJSON(geoJson).getBounds();
+      // Los límites distritales pueden abarcar regiones enteras y ocultar los
+      // campos operativos. Se conservan en el mapa, pero no dominan el encuadre.
+      const operativas = (geoJson?.features || []).filter((f) => tipoDeGeocerca(f) !== 'distrito');
+      const geoBounds = L.geoJSON(operativas.length ? { type: 'FeatureCollection', features: operativas } : geoJson).getBounds();
       if (geoBounds.isValid()) bounds.extend(geoBounds);
     } catch {
       // Una geometría inválida no debe tumbar el encuadre del mapa.
     }
+    const zonaOperativa = bounds.isValid() ? bounds.pad(0.5) : null;
     vehicles.forEach((v) => {
       const lat = Number(v?.lat);
       const lng = Number(v?.lng);
-      if (Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0) {
+      if (Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0 && (!zonaOperativa || zonaOperativa.contains([lat, lng]))) {
         bounds.extend([lat, lng]);
       }
     });
@@ -1197,7 +1201,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   // Buscador de unidad para el recorrido histórico: escribe y aparecen las
   // coincidencias; al pulsar una unidad la selecciona y la centra en el mapa.
   const resultadosRuta = useMemo(() => {
-    const term = busquedaRuta.trim().toLowerCase();
+    const term = normalizeText(busquedaRuta.trim());
+    const placaBuscada = normalizarVozPlaca(busquedaRuta);
     if (!term) return [];
     // 18/11/2026 (obs. VII/X): además de las unidades con posición del panel,
     // las del padrón maestro (44): el recorrido histórico se puede pedir
@@ -1208,9 +1213,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       ...unidadesMaestro.filter((u) => !conocidas.has(u.placa)),
     ];
     return candidatas
-      .filter((v) => [v.placa, v.descripcion, v.modelo, v.conductor_nombre, v.ultimo_evento]
+      .filter((v) => [v.placa, v.descripcion, v.modelo, v.conductor_nombre, v.ultimo_evento, v.area, v.area_operativa, v.grupo]
         .filter(Boolean)
-        .some((campo) => String(campo).toLowerCase().includes(term)))
+        .some((campo) => normalizeText(campo).includes(term) || (placaBuscada.length >= 3 && normalizarVozPlaca(campo).includes(placaBuscada))))
       .slice(0, 8);
   }, [busquedaRuta, vehiclesConPosicion, unidadesMaestro]);
 
@@ -1390,7 +1395,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         setListeningUnit(false);
         return;
       }
-      const plugin = await loadNativeSpeechRecognition();
+      const plugin = (await loadNativeSpeechRecognition())?.plugin;
       if (!plugin) {
         setVoiceUnitMessage('Reconocimiento de voz no disponible en este dispositivo.');
         return;
@@ -1831,7 +1836,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const toggleVoiceSearch = async () => {
     if (Capacitor.isNativePlatform()) {
       if (listening) return;
-      const plugin = await loadNativeSpeechRecognition();
+      const plugin = (await loadNativeSpeechRecognition())?.plugin;
       if (!plugin) {
         setVoiceMessage('Reconocimiento de voz no disponible en este dispositivo. Puedes escribir el nombre.');
         return;
@@ -2507,7 +2512,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       {consolaVisible && vehicles.length ? (
         <div className="relative px-3 pb-2 lg:hidden">
           <label className="sr-only" htmlFor="busqueda-maquina-movil">Buscar máquina o placa</label>
-          <input id="busqueda-maquina-movil" type="search" value={busquedaRuta} onChange={(e) => setBusquedaRuta(e.target.value)} placeholder="Buscar máquina o placa…" autoComplete="off" className="min-h-11 w-full rounded-xl border border-emerald-300 bg-white px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" />
+          <input id="busqueda-maquina-movil" type="search" value={busquedaRuta} onChange={(e) => setBusquedaRuta(e.target.value)} placeholder="Buscar máquina, placa o área…" autoComplete="off" className="min-h-11 w-full rounded-xl border border-emerald-300 bg-white px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" />
           {busquedaRuta.trim() ? <div className="absolute left-3 right-3 top-full z-[1001] max-h-60 overflow-auto rounded-xl border border-slate-200 bg-white shadow-lg">
             {resultadosRuta.length ? resultadosRuta.map((v) => <button key={v.placa} type="button" onClick={() => selectUnidadRuta(v.placa)} className="block min-h-11 w-full border-b border-slate-100 px-3 py-2 text-left text-sm text-slate-800 hover:bg-emerald-50">{v.placa}{v.descripcion ? ` · ${v.descripcion}` : ''}</button>) : <p className="p-3 text-sm text-slate-600">No encontramos máquinas con ese nombre.</p>}
           </div> : null}

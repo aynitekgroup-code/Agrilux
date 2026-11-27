@@ -35,11 +35,11 @@ const SpeechRecognitionCtor =
 let nativeSpeechRecognition = null;
 const loadNativeSpeech = async () => {
   if (!Capacitor.isNativePlatform()) return null;
-  if (nativeSpeechRecognition) return nativeSpeechRecognition;
+  if (nativeSpeechRecognition) return { plugin: nativeSpeechRecognition };
   try {
     const mod = await import('@capacitor-community/speech-recognition');
     nativeSpeechRecognition = mod.SpeechRecognition;
-    return nativeSpeechRecognition;
+    return { plugin: nativeSpeechRecognition };
   } catch {
     return null;
   }
@@ -536,7 +536,7 @@ export default function ConsolaPrincipal({
         setEscuchandoUnidad(false);
         return;
       }
-      const plugin = await loadNativeSpeech();
+      const plugin = (await loadNativeSpeech())?.plugin;
       if (!plugin) {
         setMensaje('Reconocimiento de voz no disponible en este dispositivo.');
         return;

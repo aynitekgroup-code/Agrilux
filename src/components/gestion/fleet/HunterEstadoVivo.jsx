@@ -9,6 +9,7 @@ import { ControlesFiltroUnidadGrupo } from './reportesComunes';
 
 const COLUMNAS = ['Unidad', 'Área', 'Última posición', 'Estado', 'Velocidad', 'Geocerca', 'Dirección', 'Sincronización'];
 const fecha = (valor) => valor ? new Date(valor).toLocaleString('es-PE', { timeZone: 'America/Lima', dateStyle: 'short', timeStyle: 'short' }) : '—';
+const normalizarBusqueda = (valor) => String(valor ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es');
 export default function HunterEstadoVivo({ empresaId }) {
   const [filas, setFilas] = useState([]);
   const [estadoCarga, setEstadoCarga] = useState('cargando');
@@ -87,10 +88,12 @@ export default function HunterEstadoVivo({ empresaId }) {
   const ordenadas = useMemo(() => [...filas].sort(compararUnidades), [filas]);
   const opciones = useMemo(() => opcionesFiltrosHunter(ordenadas), [ordenadas]);
   const visibles = useMemo(() => {
-    const consulta = busqueda.trim().toLocaleLowerCase('es');
+    const consulta = normalizarBusqueda(busqueda.trim());
+    const placa = consulta.replace(/[^a-z0-9]/g, '');
     return filtrarUnidadesHunter(ordenadas, { mostrar, opcionFiltro, filtroGeocerca, filtroArea }).filter((f) => {
-      const texto = `${f.unidad || ''} ${f.equipo_id} ${f.direccion || ''}`.toLocaleLowerCase('es');
-      return texto.includes(consulta) && (filtroEstado === 'todos' || estado(f, ahora) === filtroEstado);
+      const texto = normalizarBusqueda(`${f.unidad || ''} ${f.equipo_id || ''} ${f.direccion || ''} ${f.area_operativa || ''} ${(f.grupos_operativos || []).join(' ')} ${geocercaHunter(f) || ''}`);
+      const coincide = texto.includes(consulta) || (placa.length >= 3 && [f.unidad, f.equipo_id].some((v) => normalizarBusqueda(v).replace(/[^a-z0-9]/g, '').includes(placa)));
+      return coincide && (filtroEstado === 'todos' || estado(f, ahora) === filtroEstado);
     });
   }, [ordenadas, ahora, busqueda, filtroEstado, mostrar, opcionFiltro, filtroGeocerca, filtroArea]);
   // Conserva el filtro visible si un refresco deja su geocerca o grupo vacío.
@@ -152,16 +155,16 @@ export default function HunterEstadoVivo({ empresaId }) {
         </label>
         <label className="relative block w-full max-w-xs sm:w-64">
           <Search size={14} aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <span className="sr-only">Buscar unidad o dirección</span>
+          <span className="sr-only">Buscar unidad, placa, área o geocerca</span>
           <input
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar unidad o dirección"
+            placeholder="Buscar unidad, placa o área"
             className="w-full rounded-lg border border-slate-200 py-1.5 pl-9 pr-3 text-xs outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
           />
         </label>
-        {(opcionFiltro || filtroGeocerca || filtroArea) && (
-          <button type="button" onClick={() => { setOpcionFiltro(''); setFiltroGeocerca(''); setFiltroArea(''); }} className="rounded-lg px-2 py-1.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-700">
+        {(opcionFiltro || filtroGeocerca || filtroArea || busqueda || filtroEstado !== 'todos') && (
+          <button type="button" onClick={() => { setOpcionFiltro(''); setFiltroGeocerca(''); setFiltroArea(''); setBusqueda(''); setFiltroEstado('todos'); }} className="rounded-lg px-2 py-1.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-700">
             Quitar filtros
           </button>
         )}
@@ -190,7 +193,16 @@ export default function HunterEstadoVivo({ empresaId }) {
     {estadoCarga === 'listo' && filas.length > 0 && !visibles.length && <p className="p-5 text-sm text-slate-500">Ninguna unidad coincide con los filtros.</p>}
     {estadoCarga === 'listo' && visibles.length > 0 && (
       <div className="max-h-[65vh] overflow-auto">
-        <table className="w-full text-left text-xs text-slate-600">
+        <div className="space-y-3 p-3 lg:hidden">
+          {grupos.map(([grupo, unidades]) => <section key={grupo} className="space-y-2">
+            {agrupar !== 'ninguno' && <h3 className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-900">{grupo} · {unidades.length} unidades</h3>}
+            <div className="grid gap-2 sm:grid-cols-2">{unidades.map((f) => { const categoria = estado(f, ahora); return <article key={f.equipo_id} className="min-w-0 rounded-lg border border-slate-200 p-3 text-xs text-slate-700">
+              <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm text-slate-900">{f.unidad || f.equipo_id}</strong><span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${tonos[categoria]}`}>{categoria}</span></div>
+              <p className="mt-1">Área: {f.area_operativa || 'Sin área asignada'}</p><p>Geocerca: {geocercaHunter(f)}</p><p>Velocidad: {f.velocidad_kmh == null ? '—' : `${f.velocidad_kmh} km/h`}</p><p>Última posición: {fecha(f.fecha)} (Perú)</p><p className="break-words">Dirección: {f.direccion || '—'}</p><p>Sincronización: {fecha(f.actualizado_en)}</p>
+            </article>; })}</div>
+          </section>)}
+        </div>
+        <table className="hidden w-full text-left text-xs text-slate-600 lg:table">
           <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400 shadow-sm">
             <tr>
               {COLUMNAS.map((titulo) => <th key={titulo} scope="col" className="whitespace-nowrap px-3 py-2.5 font-bold">{titulo}</th>)}
