@@ -294,6 +294,9 @@ function AppRoutes() {
 
             {/* Gestión — requiere login + aprobación */}
             <Route path="/gestion" element={
+              user && isAprobado ? <Navigate to="/gestion/vehiculos-flota" replace /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
+            } />
+            <Route path="/gestion/configuracion" element={
               user && isAprobado ? <Gestion /> : user ? <PantallaPendiente /> : <Navigate to="/registro" />
             } />
             <Route path="/invernadero" element={<RutaInvernadero />} />

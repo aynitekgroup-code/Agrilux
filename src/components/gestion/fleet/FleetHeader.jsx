@@ -12,7 +12,6 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../../../lib/AuthContext';
-import { DEMO_FUNDO } from '../../../mocks/agrotrackData';
 
 /**
  * Secciones de AgroTrack.
@@ -34,7 +33,7 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
   const [menuAbierto, setMenuAbierto] = useState(false);
   const listaEmpresas = Array.isArray(empresas_disponibles) ? empresas_disponibles : [];
   const empresaActiva = listaEmpresas.find((empresa) => empresa.id === empresa_activa_id) || null;
-  const empresaNombre = empresaActiva?.nombre || DEMO_FUNDO.empresa;
+  const empresaNombre = empresaActiva?.nombre || 'Flota';
   const inicial = String(user?.nombre || user?.email || 'A').trim().charAt(0).toUpperCase();
   const esReal = fuente === 'real';
   const etiquetaFuente = esReal ? 'Datos reales'

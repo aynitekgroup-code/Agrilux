@@ -79,6 +79,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
   const [searchParams] = useSearchParams();
   const { user, empresa_activa_id, empresas_disponibles } = useAuth();
   const empresaActiva = (empresas_disponibles || []).find((empresa) => empresa.id === empresa_activa_id);
+  const esPomalca = String(empresaActiva?.nombre || '').trim().toLowerCase() === 'pomalca';
   const puedeImportarGeocercas = ['administrador', 'ingeniero'].includes(empresaActiva?.rol);
   // La RLS solo permite DELETE a administradores (FASE 3.7: editor de geocercas).
   const puedeEliminarGeocercas = empresaActiva?.rol === 'administrador';
@@ -200,10 +201,10 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
   // Fuente compartida por tarjetas, alertas y marcadores del mapa.
   const vehiclesFuente = conDatosReales
     ? unidadesConVivo
-    : usaRespaldoVivo ? unidadesSoloVivo : sinDatosReales ? vehicles : [];
-  const alertasBase = conDatosReales ? panel.alertas : sinDatosReales ? mockAlerts : [];
+    : usaRespaldoVivo ? unidadesSoloVivo : sinDatosReales && esPomalca ? vehicles : [];
+  const alertasBase = conDatosReales ? panel.alertas : sinDatosReales && esPomalca ? mockAlerts : [];
   const alertList = alertasBase.map((alerta) => (ackIds.includes(alerta.id) ? { ...alerta, atendida: true } : alerta));
-  const fuentePosiciones = conDatosReales || usaRespaldoVivo ? 'real' : enCarga ? 'cargando' : hayErrorPanel ? 'ninguna' : 'demo';
+  const fuentePosiciones = conDatosReales || usaRespaldoVivo ? 'real' : enCarga ? 'cargando' : hayErrorPanel || !esPomalca ? 'ninguna' : 'demo';
 
   const recargarPanel = useCallback(async () => {
     if (!empresa_activa_id) {
@@ -368,10 +369,9 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
               <span className="flex shrink-0 items-center justify-center w-8 h-8 rounded-full bg-amber-200 text-amber-700 font-bold text-xs">!</span>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-amber-800">Datos de demostración</p>
+                <p className="text-sm font-semibold text-amber-800">{esPomalca ? 'Datos de demostración' : 'Sin datos de flota'}</p>
                 <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
-                  Esta empresa todavía no tiene filas en agrotrack_posiciones, así que ves datos de ejemplo (vehículos,
-                  conductores, telemetría y combustible). Carga un reporte de Zonar con “Cargar reporte de unidades” para ver la flota real.
+                  {esPomalca ? 'Esta empresa todavía no tiene posiciones cargadas; se muestran datos de ejemplo.' : 'Esta empresa todavía no tiene posiciones de flota disponibles.'} Carga un reporte de Zonar con “Cargar reporte de unidades” para ver la flota real.
                 </p>
               </div>
             </div>
