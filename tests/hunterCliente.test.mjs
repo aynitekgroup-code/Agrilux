@@ -35,6 +35,21 @@ test('Hunter: consulta un día por equipo y conserva el recorrido separado', asy
   const captura = await leerRecorridoHunter('u', 'p', { equipo: '123', dia: '2026-11-25' }, fetchFn);
   assert.match(llamadas[2].url, /Recorridos\/trazarRecorridos$/);
   assert.equal(llamadas[2].opts.body.get('IdVehiculos'), '123');
+  assert.equal(llamadas[2].opts.body.get('AllowCreateStops'), 'denied');
+  assert.equal(llamadas[3].opts.body.get('AllowCreateStops'), 'allow');
   assert.equal(prepararRecorrido(captura).equipo_id, '123');
   await assert.rejects(() => leerRecorridoHunter('u', 'p', { equipo: '123', dia: '2026-02-30' }, fetchFn), /inválidos/);
+});
+
+test('Hunter conserva puntos sin agrupar si falla el resumen agrupado', async () => {
+  let n = 0;
+  const datos = await leerRecorridoHunter('u', 'p', { equipo: '123', dia: '2026-11-25' }, async () => {
+    n++;
+    if (n === 1) return respuesta(200, [], null);
+    if (n === 2) return respuesta(302, [], null);
+    if (n === 3) return respuesta(200, [], { 123: { data: [] } });
+    return respuesta(503, [], null);
+  });
+  assert.equal(datos.agrupado, null);
+  assert.deepEqual(datos.recorrido.data, []);
 });

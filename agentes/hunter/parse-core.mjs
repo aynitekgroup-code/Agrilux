@@ -42,7 +42,7 @@ export function prepararRecorrido(captura, claveFuente = () => null) {
     });
   }
   puntos.sort((a, b) => Date.parse(a.fecha) - Date.parse(b.fecha) || a.punto_id.localeCompare(b.punto_id));
-  const r = captura.recorrido;
+  const r = captura.agrupado || captura.recorrido;
   const viajes = Array.isArray(r.data_trips) ? r.data_trips.map((v) => ({
     tipo: v.type === 'stop' ? 'Parada' : v.type === 'trip' ? 'Viaje' : 'Desconocido',
     inicio: v.start ?? null, fin: v.end ?? null, duracion: v.time ?? null,

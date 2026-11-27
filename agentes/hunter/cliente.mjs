@@ -54,11 +54,20 @@ export async function leerRecorridoHunter(usuario, password, { equipo, dia }, fe
   const cookies = await iniciarSesion(usuario, password, fetchFn);
   const fecha = dia.replaceAll('-', '/');
   const body = new URLSearchParams({ IdVehiculos: String(equipo), FechaIni: fecha, HoraIni: '00:00:00', FechaFin: fecha, HoraFin: '23:59:59', Puntos: 'true', Orientacion: 'false', Paradas: 'true', CellID: 'false', Panicos: 'false', Ignicion: 'true', Lugar: 'false', TiempoMinParada: '600', PuntosDescartados: 'false', AllowCreateStops: 'allow', Optimizar: 'denied', calc_use_engine: '0', average_speed: '0', calc_fuel_cons: '0', nueva_vista_activos: 'true', ShowMarkers: '1', SensorForTravel: 'velocidad', SensorId: '71', 'eventosPermitidos[all]': 'all', 'alertasPermitidos[all]': 'all' });
-  const respuesta = await pedir(fetchFn, `${BASE}/Recorridos/trazarRecorridos`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: cookies.join('; '), accept: 'application/json' }, body });
-  if (!respuesta.ok) throw new Error('Hunter rechazó la consulta del recorrido.');
-  let datos;
-  try { datos = await respuesta.json(); } catch { throw new Error('Hunter no devolvió un recorrido JSON válido.'); }
-  const recorrido = datos?.[String(equipo)];
-  if (!recorrido || !Array.isArray(recorrido.data)) throw new Error('Hunter no devolvió el recorrido esperado para el equipo.');
-  return { fuente: 'hunter360', equipo: String(equipo), desde: `${dia}T00:00:00-05:00`, hasta: `${dia}T23:59:59-05:00`, recorrido };
+  async function consultar(agrupar) {
+    const parametros = new URLSearchParams(body);
+    parametros.set('AllowCreateStops', agrupar ? 'allow' : 'denied');
+    const respuesta = await pedir(fetchFn, `${BASE}/Recorridos/trazarRecorridos`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: cookies.join('; '), accept: 'application/json' }, body: parametros });
+    if (!respuesta.ok) throw new Error('Hunter rechazó la consulta del recorrido.');
+    let datos;
+    try { datos = await respuesta.json(); } catch { throw new Error('Hunter no devolvió un recorrido JSON válido.'); }
+    const recorrido = datos?.[String(equipo)];
+    if (!recorrido || !Array.isArray(recorrido.data)) throw new Error('Hunter no devolvió el recorrido esperado para el equipo.');
+    return recorrido;
+  }
+  const recorrido = await consultar(false);
+  // El resumen agrupado es evidencia separada; nunca añadir sus paradas como GPS.
+  let agrupado = null;
+  try { agrupado = await consultar(true); } catch { /* El recorrido sin agrupar sigue disponible. */ }
+  return { fuente: 'hunter360', equipo: String(equipo), desde: `${dia}T00:00:00-05:00`, hasta: `${dia}T23:59:59-05:00`, recorrido, agrupado };
 }
