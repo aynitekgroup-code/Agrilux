@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { prepararRecorrido } from '../../../../agentes/hunter/parse-core.mjs';
 import { generarReportesCsv } from '../../../../agentes/hunter/reportes.mjs';
 import { listarGeocercas } from '../../../lib/agrotrackGeocercas';
 import { estimarHunterPorGeocerca } from '../../../lib/hunterGeocercasEstimadas';
 import { formatearDuracion } from '../../../lib/duracionReporte';
+import { supabase } from '../../../lib/supabase';
 
 const etiquetas = { distancia: 'Distancia', velocidad_maxima: 'Velocidad máxima', velocidad_promedio: 'Velocidad promedio', detenido: 'Tiempo detenido', movimiento: 'Movimiento', estacionado: 'Estacionado', ralenti: 'Ralentí', motor: 'Uso de motor', total: 'Tiempo total', parada_minima: 'Parada mínima' };
 const valor = (v) => v == null ? 'No disponible' : typeof v === 'object' ? (v.maxSpeed ?? v.total_hours ?? JSON.stringify(v)) : String(v);
@@ -16,28 +17,42 @@ export default function HunterReports({ empresaId }) {
   const [estimacion, setEstimacion] = useState(null);
   const [errorGeocerca, setErrorGeocerca] = useState('');
   const [calculando, setCalculando] = useState(false);
+  const [unidades, setUnidades] = useState([]);
+  const [equipo, setEquipo] = useState('');
+  const [dia, setDia] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
+  const [errorUnidades, setErrorUnidades] = useState('');
 
-  async function cargar(e) {
-    const archivo = e.target.files?.[0];
-    e.target.value = '';
-    if (!archivo) return;
-    setResultado(null); setEstimacion(null); setErrorGeocerca(''); setError(''); setCargando(true); setPagina(0);
-    try {
-      if (archivo.size > 20 * 1024 * 1024) throw new Error('La captura supera el límite de 20 MB.');
-      const procesado = prepararRecorrido(JSON.parse(await archivo.text()));
-      setResultado(procesado);
-      setCalculando(true);
+  useEffect(() => {
+    if (!empresaId) return undefined;
+    let activo = true;
+    (async () => {
+      const { data, error: e } = await supabase.from('agrotrack_hunter_estado_vivo').select('equipo_id,unidad').eq('empresa_id', empresaId).order('unidad').limit(1000);
+      if (!activo) return;
+      if (e) { setErrorUnidades('No se pudo cargar la lista de equipos Hunter.'); return; }
+      setUnidades(data || []);
+      setEquipo((data || [])[0]?.equipo_id || '');
+    })();
+    return () => { activo = false; };
+  }, [empresaId]);
+
+  useEffect(() => {
+    if (!empresaId || !equipo || !dia) return undefined;
+    let activo = true;
+    setResultado(null); setEstimacion(null); setError(''); setErrorGeocerca(''); setCargando(true);
+    (async () => {
       try {
+        const { data, error: e } = await supabase.functions.invoke('hunter-recorrido', { body: { equipo, dia } });
+        if (e) throw new Error('No se pudo consultar el recorrido en Hunter.');
+        const procesado = prepararRecorrido(data);
         const geocercas = await listarGeocercas(empresaId);
         const validas = geocercas.filter((g) => ['Polygon', 'MultiPolygon'].includes(g.geometria?.type) && Array.isArray(g.geometria?.coordinates));
         if (!validas.length) throw new Error('No hay geocercas activas con geometría disponible.');
-        setEstimacion(estimarHunterPorGeocerca(procesado.puntos, validas));
-      } catch (e) { setErrorGeocerca(e.message || 'No se pudo calcular la estimación.'); }
-      finally { setCalculando(false); }
-    } catch (err) {
-      setError(err instanceof SyntaxError ? 'El archivo no contiene JSON válido.' : err.message);
-    } finally { setCargando(false); }
-  }
+        if (activo) { setResultado(procesado); setEstimacion(estimarHunterPorGeocerca(procesado.puntos, validas)); setPagina(0); }
+      } catch (e) { if (activo) setError(e.message || 'No se pudo cargar Hunter.'); }
+      finally { if (activo) setCargando(false); }
+    })();
+    return () => { activo = false; };
+  }, [empresaId, equipo, dia]);
 
   async function calcularGeocercas() {
     if (!empresaId || !resultado) return;
@@ -60,13 +75,14 @@ export default function HunterReports({ empresaId }) {
 
   return <section className="rounded-xl border border-emerald-200 bg-white p-4 space-y-4">
     <div><h2 className="text-lg font-semibold">Horas diarias por geocerca · Hunter 360</h2>
-      <p className="text-sm font-semibold text-amber-800">Reporte diario Hunter por geocerca para pagos: todavía no disponible. El historial automático no está conectado y esta estimación no es apta para liquidaciones.</p>
-      <p className="text-sm text-slate-600">Carga manual de una captura JSON validada. Los datos se procesan en este navegador, no se guardan ni se sincronizan con Agrilux y no se mezclan con Zonar.</p>
+      <p className="text-sm font-semibold text-amber-800">Estimación para revisión, no apta para liquidaciones sin contrastar con los partes diarios y resolver intervalos inciertos.</p>
+      <p className="text-sm text-slate-600">Consulta directa por equipo y día a Hunter; el cálculo se procesa en este navegador y no se mezcla con Zonar.</p>
       <p className="text-sm text-amber-700">Hunter agrupa algunas paradas: se cuentan por separado y no se duplican como puntos GPS. El detalle de viajes y paradas se muestra solo si la captura lo incluye; los eventos dentro de una parada pueden no estar disponibles. El resumen conserva los valores de Hunter y no usa los criterios de Zonar.</p></div>
-    <label className="block text-sm font-medium">Captura Hunter <input className="block mt-1" type="file" accept=".json,application/json" onChange={cargar} /></label>
+    <div className="flex flex-wrap gap-3 text-sm"><label>Unidad Hunter<select className="block rounded border p-2" value={equipo} onChange={(e) => setEquipo(e.target.value)}><option value="">Selecciona unidad</option>{unidades.map((u) => <option key={u.equipo_id} value={u.equipo_id}>{u.unidad || u.equipo_id}</option>)}</select></label><label>Fecha (Perú)<input className="block rounded border p-2" type="date" value={dia} onChange={(e) => setDia(e.target.value)} /></label></div>
+    {errorUnidades && <p role="alert" className="text-red-700">{errorUnidades}</p>}
     {cargando && <p role="status">Procesando captura…</p>}
     {error && <p role="alert" className="text-red-700">{error}</p>}
-    {!resultado && !cargando && !error && <p className="text-sm text-slate-500">Selecciona una captura para ver el reporte.</p>}
+    {!resultado && !cargando && !error && <p className="text-sm text-slate-500">Selecciona una unidad y una fecha para consultar el reporte.</p>}
     {resultado && <>
       <p className="text-sm">Equipo: {resultado.equipo_id} · {resultado.desde} a {resultado.hasta} · {resultado.puntos.length} puntos válidos · {resultado.descartes.paradas_agrupadas} paradas agrupadas · {resultado.descartes.invalidos} inválidos · {resultado.descartes.duplicados} duplicados</p>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">{Object.entries(etiquetas).map(([k, titulo]) => <div className="rounded bg-slate-50 p-2 text-sm" key={k}><div className="text-slate-500">{titulo}</div><strong>{valor(resultado.resumen_hunter[k])}</strong></div>)}</div>
