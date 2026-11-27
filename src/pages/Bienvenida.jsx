@@ -3,12 +3,12 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, BarChart3, BrainCircuit, Cable, Droplets, Leaf, Mail, MapPin, Phone, Radio, Sprout, Tractor } from 'lucide-react';
 
 const soluciones = [
-  { icon: Sprout, titulo: 'Monitoreo de cultivos', texto: 'Información del campo y herramientas de apoyo para el seguimiento de cultivos.' },
-  { icon: Droplets, titulo: 'Riego inteligente', texto: 'Sensores y herramientas para conocer las condiciones del campo y gestionar el agua.' },
-  { icon: BrainCircuit, titulo: 'Inteligencia artificial', texto: 'Asistentes y diagnóstico de apoyo para transformar información en decisiones.' },
-  { icon: Tractor, titulo: 'Maquinaria y flota', texto: 'Ubicación, recorridos y reportes operativos mediante AgroTrack e integraciones.' },
-  { icon: BarChart3, titulo: 'Gestión de recursos', texto: 'Datos para organizar operaciones y aprovechar mejor los recursos agrícolas.' },
-  { icon: Cable, titulo: 'Soluciones a medida', texto: 'Integración de hardware, software, sensores y plataformas existentes.' },
+  { icon: Sprout, titulo: 'Monitoreo de cultivos', texto: 'Información del campo y herramientas de apoyo para el seguimiento de cultivos.', imagen: 'cultivos', alt: 'Tierra y materiales para el cuidado de cultivos', pasos: ['Campo', 'Seguimiento', 'Información'] },
+  { icon: Droplets, titulo: 'Riego inteligente', texto: 'Sensores y herramientas para conocer las condiciones del campo y gestionar el agua.', imagen: 'riego', alt: 'Mano cuidando plántulas en un vivero', pasos: ['Suelo', 'Sensores', 'Agua'] },
+  { icon: BrainCircuit, titulo: 'Inteligencia artificial', texto: 'Asistentes y diagnóstico de apoyo para transformar información en decisiones.', imagen: 'datos', alt: 'Pantalla con gráficos de análisis de datos', pasos: ['Datos', 'Análisis', 'Apoyo'] },
+  { icon: Tractor, titulo: 'Maquinaria y flota', texto: 'Ubicación, recorridos y reportes operativos mediante AgroTrack e integraciones.', imagen: 'maquinaria', alt: 'Vista aérea de campos agrícolas', pasos: ['Unidades', 'Recorridos', 'Reportes'] },
+  { icon: BarChart3, titulo: 'Gestión de recursos', texto: 'Datos para organizar operaciones y aprovechar mejor los recursos agrícolas.', imagen: 'campo', alt: 'Campo agrícola al atardecer', pasos: ['Medición', 'Planificación', 'Gestión'] },
+  { icon: Cable, titulo: 'Soluciones a medida', texto: 'Integración de hardware, software, sensores y plataformas existentes.', imagen: 'tecnologia', alt: 'Persona diseñando una solución técnica', pasos: ['Hardware', 'Conexión', 'Plataforma'] },
 ];
 
 export default function Bienvenida() {
@@ -58,7 +58,7 @@ export default function Bienvenida() {
           <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#153d2e] sm:text-4xl">Soluciones para una agricultura más inteligente</h2>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">Combinamos herramientas digitales y tecnología de campo para responder a las necesidades de cada operación agrícola.</p>
           <div className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {soluciones.map(({ icon: Icon, titulo, texto }) => <article key={titulo} className="rounded-2xl border border-emerald-900/10 bg-white p-6 shadow-sm"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><Icon size={21} /></div><h3 className="mt-5 text-lg font-bold text-[#153d2e]">{titulo}</h3><p className="mt-2 text-sm leading-6 text-slate-600">{texto}</p></article>)}
+            {soluciones.map(({ icon: Icon, titulo, texto, imagen, alt, pasos }) => <article key={titulo} className="group overflow-hidden rounded-2xl border border-emerald-900/10 bg-white shadow-sm transition-shadow hover:shadow-lg"><div className="relative h-44 overflow-hidden bg-emerald-50"><img src={`/images/soluciones/${imagen}.jpg`} alt={alt} loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" /><span className="absolute bottom-3 right-3 rounded-full bg-slate-900/65 px-2.5 py-1 text-[10px] font-semibold text-white">Imagen referencial</span></div><div className="p-5 sm:p-6"><div className="flex items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><Icon size={20} /></div><h3 className="text-lg font-bold text-[#153d2e]">{titulo}</h3></div><p className="mt-3 min-h-12 text-sm leading-6 text-slate-600">{texto}</p><div className="mt-4 flex flex-wrap items-center gap-1.5 border-t border-emerald-50 pt-4 text-[11px] font-semibold text-emerald-800" aria-label={`Flujo de ${titulo}`}>{pasos.map((paso, i) => <React.Fragment key={paso}>{i > 0 && <ArrowRight size={12} className="text-emerald-400" aria-hidden="true" />}<span className="rounded-md bg-emerald-50 px-2 py-1">{paso}</span></React.Fragment>)}</div></div></article>)}
           </div>
           <p className="mt-5 text-xs leading-5 text-slate-500">Las soluciones pueden estar disponibles, desarrollarse a medida o encontrarse en evolución. Contáctanos para conocer su alcance.</p>
         </section>
