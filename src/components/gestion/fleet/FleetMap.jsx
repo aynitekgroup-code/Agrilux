@@ -105,6 +105,10 @@ function normalizeText(value) {
     .trim();
 }
 
+function normalizarVozPlaca(value) {
+  return normalizeText(value).replace(/[^a-z0-9]/g, '');
+}
+
 function iconoPuntoRuta(numero, tipo) {
   return L.divIcon({
     className: 'fleet-ruta-numero-icon',
@@ -1308,10 +1312,6 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   };
 
   /* ----- Voz · unidad/placa y lectura del popup ----- */
-
-  const normalizarVozPlaca = (value) => (
-    normalizeText(value).replace(/[^a-z0-9]/g, '')
-  );
 
   const geocercaActualUnidad = (vehicle) => {
     if (!vehicle) return '';
