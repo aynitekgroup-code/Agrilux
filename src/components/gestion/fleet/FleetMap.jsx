@@ -6,6 +6,7 @@ import L from 'leaflet';
 import {
   AlertCircle,
   Check,
+  ChevronLeft,
   Info,
   LoaderCircle,
   MapPin,
@@ -255,6 +256,22 @@ function stripVoiceCommand(transcript) {
 
 /* ---------- Mapa ---------- */
 
+function useEscritorio() {
+  const [escritorio, setEscritorio] = useState(() => (
+    typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
+  ));
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(min-width: 1024px)');
+    const actualizar = () => setEscritorio(mediaQuery.matches);
+    actualizar();
+    mediaQuery.addEventListener('change', actualizar);
+    return () => mediaQuery.removeEventListener('change', actualizar);
+  }, []);
+
+  return escritorio;
+}
+
 /** Mensaje de éxito de la importación por grupos (FASE 3.7). */
 function textoResumenImportacion(resumen) {
   const partes = (resumen?.grupos || []).map((grupo) => {
@@ -458,6 +475,7 @@ function AjustarTamanoMapa({ panelAbierto }) {
 let solicitudRecorridoMapas = null;
 
 export default function FleetMap({ empresaId, userId, canImport = false, canDelete = false, vehicles = [], selectedId, onSelect, fuentePosiciones = 'demo', periodo = null, consolaVisible = false, mostrarTablasAlFinal = true, actualizarMapaCada = 30 * 1000, onActualizarMapaCada = null, errorUnidades = null, onReintentarUnidades = null, onIrAMapas = null, sateliteInicial = false }) {
+  const esEscritorio = useEscritorio();
   const [rawGeofences, setRawGeofences] = useState([]);
   const [loading, setLoading] = useState(Boolean(empresaId));
   const [importing, setImporting] = useState(false);
@@ -502,6 +520,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const [menuMapasAbierto, setMenuMapasAbierto] = useState(false);
   const [seccionFlota, setSeccionFlota] = useState('localizador');
   const [mostrandoContenidoFlota, setMostrandoContenidoFlota] = useState(false);
+  const panelInferiorAbierto = mostrandoContenidoFlota && !esEscritorio;
   useEffect(() => {
     if (!menuMapasAbierto) return undefined;
     const alPulsar = (event) => { if (event.key === 'Escape') setMenuMapasAbierto(false); };
@@ -2495,20 +2514,43 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         </div>
       ) : null}
       </div>
-      <div className="px-1 pb-2 sm:px-2 lg:grid lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] lg:items-start lg:gap-2">
-        <aside className="hidden min-w-0 overflow-hidden rounded-xl border border-emerald-200 bg-white lg:flex lg:max-h-[calc(100dvh-3rem)] lg:flex-col" aria-label="Menú de mapas">
-          <div className="flex items-center gap-2 border-b border-emerald-100 bg-forest px-3 py-3 text-white">
-            <Menu size={18} aria-hidden="true" />
-            <h3 className="text-sm font-bold">Menú de mapas</h3>
-          </div>
-          <nav className="min-h-0 flex-1 overflow-y-auto p-2" aria-label="Secciones del mapa">
-            <MenuSecciones
-              seccionId={seccionFlota}
-              onSeleccionar={elegirSeccionMapa}
-              compacto
-              amplio
-            />
-          </nav>
+      <div className="px-1 pb-2 sm:px-2 lg:grid lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)] lg:items-start lg:gap-2">
+        <aside className="hidden min-w-0 overflow-hidden rounded-xl border border-emerald-200 bg-white lg:flex lg:h-[calc(100dvh-2.8rem)] lg:flex-col" aria-label="Menú de mapas">
+          {mostrandoContenidoFlota ? (
+            <section className="flex min-h-0 flex-1 flex-col" aria-label="Herramienta del mapa">
+              <div className="border-b border-emerald-100 bg-forest px-2 py-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMostrandoContenidoFlota(false);
+                    setMostrarLeyendaGeocercas(true);
+                  }}
+                  className="flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-white hover:bg-white/10"
+                >
+                  <ChevronLeft size={18} aria-hidden="true" />
+                  Volver al menú
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-2">
+                {contenidoPanelFlota}
+              </div>
+            </section>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 border-b border-emerald-100 bg-forest px-3 py-3 text-white">
+                <Menu size={18} aria-hidden="true" />
+                <h3 className="text-sm font-bold">Menú de mapas</h3>
+              </div>
+              <nav className="min-h-0 flex-1 overflow-y-auto p-2" aria-label="Secciones del mapa">
+                <MenuSecciones
+                  seccionId={seccionFlota}
+                  onSeleccionar={elegirSeccionMapa}
+                  compacto
+                  amplio
+                />
+              </nav>
+            </>
+          )}
         </aside>
         <div id="mapa-flota" className="relative z-0 isolate scroll-mt-4 min-w-0 overflow-hidden rounded-[14px] border border-[#A7C7AB] bg-white shadow-sm">
         <button
@@ -2550,7 +2592,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
 
           <ZoomRutaTracker onZoom={setZoomRuta} />
 
-          <AjustarTamanoMapa panelAbierto={mostrandoContenidoFlota} />
+          <AjustarTamanoMapa panelAbierto={panelInferiorAbierto} />
 
           <CerrarTooltipGeocerca tooltipRef={tooltipGeocercaRef} />
 
@@ -2622,9 +2664,9 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             />
           ) : null}
           {geoJsonBase.features.length > 0 || vehicles.length > 0 ? (
-            <FitMapToGeofences geoJson={geoJsonBase} vehicles={vehicles} focusRequest={focusRequest} fitToken={fitToken} panelAbierto={mostrandoContenidoFlota} />
+            <FitMapToGeofences geoJson={geoJsonBase} vehicles={vehicles} focusRequest={focusRequest} fitToken={fitToken} panelAbierto={panelInferiorAbierto} />
           ) : null}
-          <FocusUnidad unidadFocus={focusUnidadRequest} marcadores={markerRefs.current} panelAbierto={mostrandoContenidoFlota} />
+          <FocusUnidad unidadFocus={focusUnidadRequest} marcadores={markerRefs.current} panelAbierto={panelInferiorAbierto} />
           {rutaValidos.length > 0 ? (
             <>
               <Polyline positions={rutaValidos.map((punto) => [Number(punto.latitud), Number(punto.longitud)])} pathOptions={{ color: '#ffffff', weight: 8, opacity: 1 }} />
@@ -2821,7 +2863,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           />
         </MapContainer>
         {mostrandoContenidoFlota ? (
-          <div className="absolute inset-x-0 bottom-0 z-[1000] flex max-h-[50%] flex-col rounded-t-2xl border-t border-emerald-200 bg-white shadow-[0_-8px_24px_rgba(15,23,42,0.18)]">
+          <div className="absolute inset-x-0 bottom-0 z-[1000] flex max-h-[50%] flex-col rounded-t-2xl border-t border-emerald-200 bg-white shadow-[0_-8px_24px_rgba(15,23,42,0.18)] lg:hidden">
             <div className="flex items-center justify-between gap-2 px-3 py-1.5">
               <p className="truncate text-xs font-bold uppercase tracking-wide text-slate-500">Herramienta</p>
               <button
