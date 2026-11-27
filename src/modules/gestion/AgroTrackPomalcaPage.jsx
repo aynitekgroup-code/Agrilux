@@ -488,6 +488,7 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
               fuentePosiciones={fuentePosiciones}
               periodo={conDatosReales ? panel.periodo : null}
               consolaVisible
+              sateliteInicial={esPomalca}
               mostrarTablasAlFinal={false}
               errorUnidades={hayErrorPanel ? panel.error : null}
               onReintentarUnidades={recargarPanel}

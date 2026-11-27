@@ -86,7 +86,7 @@ export default function WebLayout({ children }) {
 
       <div className="flex flex-1 min-h-0">
         {/* ── Sidebar ─────────────────────────────────────────────── */}
-        <aside
+        {!soloGestion && <aside
           className={`hidden md:flex shrink-0 bg-emerald-50/70 border-r border-emerald-100 flex-col sticky top-0 h-screen transition-[width] duration-300 ease-in-out ${
             sidebarOpen ? 'w-64' : 'w-16'
           }`}
@@ -202,7 +202,7 @@ export default function WebLayout({ children }) {
             </div>
           )}
         </div>
-      </aside>
+      </aside>}
 
       {/* ── Contenido principal ──────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -260,6 +260,7 @@ export default function WebLayout({ children }) {
                     <>
                       <div className="border-t border-gray-100 pt-3 mb-2"></div>
                       <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 px-4">Empresa</h3>
+                      {soloGestion && <button type="button" onClick={() => { setMenuOpen(false); setEmpresaModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-primary/5 hover:text-primary transition-colors text-sm font-medium rounded-lg"><Building size={18} /> Cambiar empresa</button>}
                       <button
                         onClick={() => {
                           setMenuOpen(false);

@@ -37,11 +37,12 @@ export default function Layout({ children }) {
   const esAdmin = user?.email === ADMIN_EMAIL;
 
   // Pomalca (empresa activa): solo se habilita el módulo Gestión.
-  const itemsNavegacion = (soloModuloGestion({
+  const soloGestion = soloModuloGestion({
     empresa_activa_id,
     empresas_disponibles,
     email: user?.email,
-  })
+  });
+  const itemsNavegacion = (soloGestion
     ? navItems.filter((item) => item.path === '/gestion')
     : navItems).filter((item) => item.path !== '/invernadero' || puedeVerInvernadero({ user, empresa_activa_id, empresas_disponibles, empresasCargadasUsuario }));
 
@@ -108,7 +109,7 @@ export default function Layout({ children }) {
       <div className="flex justify-between items-center px-4 py-0.3 bg-white border-b border-gray-100 sticky top-0 z-40">
         <div className="flex items-center gap-2 min-w-0">
           <div className="text-sm font-semibold text-gray-700 truncate">
-            {user?.nombre ? (
+            {soloGestion ? 'Gestión' : user?.nombre ? (
               `Hola, ${user.nombre.split(' ')[0]}`
             ) : (
               <img
@@ -224,13 +225,13 @@ export default function Layout({ children }) {
         </div>
       </div>
 
-      <main className="flex-1 pb-28 overflow-y-auto">
+      <main className={`flex-1 ${soloGestion ? 'pb-4' : 'pb-28'} overflow-y-auto`}>
         <div className="px-4 pt-2">
           <AgentStatus />
         </div>
         {children}
       </main>
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-gray-100 shadow-lg z-50">
+      {!soloGestion && <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-gray-100 shadow-lg z-50">
         <div className="flex">
           {itemsNavegacion.map(({ path, icon: Icon, label }) => {
             const active = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
@@ -249,7 +250,7 @@ export default function Layout({ children }) {
             );
           })}
         </div>
-      </nav>
+      </nav>}
 
       {mostrarUbicacion && (
         <div className="fixed inset-0 z-50 bg-white/95 flex items-center justify-center" style={{ backdropFilter: 'blur(4px)' }}>

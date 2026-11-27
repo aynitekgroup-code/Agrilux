@@ -457,7 +457,7 @@ function AjustarTamanoMapa({ panelAbierto }) {
 // consume el FleetMap de Mapas al montarse.
 let solicitudRecorridoMapas = null;
 
-export default function FleetMap({ empresaId, userId, canImport = false, canDelete = false, vehicles = [], selectedId, onSelect, fuentePosiciones = 'demo', periodo = null, consolaVisible = false, mostrarTablasAlFinal = true, actualizarMapaCada = 30 * 1000, onActualizarMapaCada = null, errorUnidades = null, onReintentarUnidades = null, onIrAMapas = null }) {
+export default function FleetMap({ empresaId, userId, canImport = false, canDelete = false, vehicles = [], selectedId, onSelect, fuentePosiciones = 'demo', periodo = null, consolaVisible = false, mostrarTablasAlFinal = true, actualizarMapaCada = 30 * 1000, onActualizarMapaCada = null, errorUnidades = null, onReintentarUnidades = null, onIrAMapas = null, sateliteInicial = false }) {
   const [rawGeofences, setRawGeofences] = useState([]);
   const [loading, setLoading] = useState(Boolean(empresaId));
   const [importing, setImporting] = useState(false);
@@ -489,7 +489,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
   const [voiceUnitMessage, setVoiceUnitMessage] = useState('');
   // FASE 3.8: mapa llamativo — filtro por grupo (leyenda / JARVIS) y vista satélite.
   const [filtroGrupo, setFiltroGrupo] = useState('');
-  const [vistaSatelite, setVistaSatelite] = useState(false);
+  const [vistaSatelite, setVistaSatelite] = useState(sateliteInicial);
   // Zonas → checkbox «Mostrar Unidades Dentro»: oculta/muestra los marcadores
   // de las unidades en el mapa (los datos del recorrido histórico no se ocultan).
   const [mostrarUnidadesEnMapa, setMostrarUnidadesEnMapa] = useState(true);
@@ -2801,15 +2801,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
             );
           })}
           {/* FASE 3.8: controles flotantes del mapa (leyenda, ficha, satélite, JARVIS). */}
-          {geofences.length > 0 ? (
-            <>
-              {mostrarLeyendaGeocercas ? <LeyendaGrupos geofences={geofences} /> : null}
-              <ControlVistaSatelite
-                satelite={vistaSatelite}
-                onToggle={() => setVistaSatelite((valor) => !valor)}
-              />
-            </>
-          ) : null}
+          {geofences.length > 0 && mostrarLeyendaGeocercas ? <LeyendaGrupos geofences={geofences} /> : null}
+          <ControlVistaSatelite satelite={vistaSatelite} onToggle={() => setVistaSatelite((valor) => !valor)} />
           <FichaGeocerca
             geocerca={selectedGeofence}
             onCerrar={() => setSelectedGeofenceId('')}
