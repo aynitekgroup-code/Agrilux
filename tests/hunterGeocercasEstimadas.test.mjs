@@ -55,6 +55,41 @@ test('separa apagado, encendido lento y movimiento sin sumar intervalos incierto
   assert.deepEqual([r.filas[0].apagado, r.filas[0].detenido, r.filas[0].ralenti, r.filas[0].movimiento, r.incierto], [60, 60, 60, 60, 180]);
 });
 
+test('hueco largo con ignición apagada en ambos extremos y misma geocerca se asigna como apagado', () => {
+  const p = [punto('2026-11-25T00:00:00Z', { ignicion: false }), punto('2026-11-25T01:00:00Z', { ignicion: false })];
+  const r = estimarHunterPorGeocerca(p, geo);
+  assert.equal(r.filas[0].apagado, 3600);
+  assert.equal(r.incierto, 0);
+});
+
+test('hueco largo que termina con evento Ignición ON se asigna como apagado', () => {
+  const p = [punto('2026-11-25T00:00:00Z', { ignicion: false }), punto('2026-11-25T01:00:00Z', { evento: 'Ignición ON' })];
+  const r = estimarHunterPorGeocerca(p, geo);
+  assert.equal(r.filas[0].apagado, 3600);
+  assert.equal(r.incierto, 0);
+});
+
+test('hueco largo con encendido al final sin evento de ignición sigue sin determinar', () => {
+  const p = [punto('2026-11-25T00:00:00Z', { ignicion: false }), punto('2026-11-25T01:00:00Z')];
+  const r = estimarHunterPorGeocerca(p, geo);
+  assert.equal(r.filas.length, 0);
+  assert.equal(r.incierto, 3600);
+});
+
+test('hueco largo con extremos en geocercas distintas, lejanos, con velocidad o solapadas no se asigna', () => {
+  const apagado = { ignicion: false };
+  const a = punto('2026-11-25T00:00:00Z', apagado);
+  const geoB = [{ id: 'b', nombre: 'Otro', geometria: { type: 'Polygon', coordinates: [[[3,0],[5,0],[5,2],[3,2],[3,0]]] } }];
+  const otro = punto('2026-11-25T01:00:00Z', { ...apagado, longitud: 4 });
+  assert.equal(estimarHunterPorGeocerca([a, otro], [...geo, ...geoB]).incierto, 3600);
+  const lejos = punto('2026-11-25T01:00:00Z', { ...apagado, longitud: 1.01 });
+  assert.equal(estimarHunterPorGeocerca([a, lejos], geo).incierto, 3600);
+  const conVelocidad = punto('2026-11-25T01:00:00Z', { ...apagado, velocidad_kmh: 3 });
+  assert.equal(estimarHunterPorGeocerca([a, conVelocidad], geo).incierto, 3600);
+  const solapadas = [...geo, { ...geo[0], id: 'b' }];
+  assert.equal(estimarHunterPorGeocerca([a, punto('2026-11-25T01:00:00Z', apagado)], solapadas).incierto, 3600);
+});
+
 test('ignición encendida con velocidad inválida no se clasifica como encendido lento', () => {
   for (const velocidad_kmh of [-1, NaN, null]) {
     const r = estimarHunterPorGeocerca([punto('2026-11-25T00:00:00Z', { velocidad_kmh }), punto('2026-11-25T00:01:00Z')], geo);
