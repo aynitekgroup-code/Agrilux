@@ -23,10 +23,20 @@ function estado(punto) {
   return punto.velocidad_kmh === 0 ? 'detenido' : punto.velocidad_kmh <= 5 ? 'ralenti' : 'movimiento';
 }
 
+// Hipótesis de continuidad, no comprobación de los eventos intermedios.
+function distanciaMetros(a, b) {
+  if (![a.latitud, a.longitud, b.latitud, b.longitud].every(Number.isFinite)) return Infinity;
+  const rad = Math.PI / 180;
+  const dLat = (b.latitud - a.latitud) * rad, dLon = (b.longitud - a.longitud) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.latitud * rad) * Math.cos(b.latitud * rad) * Math.sin(dLon / 2) ** 2;
+  return 12742000 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
 export function estimarHunterPorGeocerca(puntos, geocercas, maxIntervaloSegundos = 300) {
   const ordenados = [...puntos].sort((a, b) => Date.parse(a.fecha) - Date.parse(b.fecha));
   const asignar = (p) => geocercas.filter((g) => contiene(p, g.geometria));
   const grupos = new Map();
+  const hipotesis = [];
   let incierto = 0;
   for (let i = 1; i < ordenados.length; i++) {
     const a = ordenados[i - 1], b = ordenados[i];
@@ -38,13 +48,21 @@ export function estimarHunterPorGeocerca(puntos, geocercas, maxIntervaloSegundos
     if (segundos <= maxIntervaloSegundos) {
       if (mismaGeocerca && ea && ea === eb) clasificado = ea;
     }
-    if (!clasificado) { incierto += segundos; continue; }
+    if (!clasificado) {
+      incierto += segundos;
+      if (segundos > maxIntervaloSegundos && segundos <= 5400 && mismaGeocerca
+        && a.ignicion === false && (b.ignicion === false || (b.ignicion === true && b.evento === 'Ignición ON'))
+        && a.velocidad_kmh === 0 && b.velocidad_kmh === 0 && distanciaMetros(a, b) <= 100) {
+        hipotesis.push({ inicio: a.fecha, fin: b.fecha, segundos, geocerca: ga[0].nombre, geocerca_id: ga[0].id });
+      }
+      continue;
+    }
     const g = ga[0];
     const fila = grupos.get(g.id) || { id: g.id, geocerca: g.nombre, apagado: 0, detenido: 0, ralenti: 0, movimiento: 0 };
     fila[clasificado] += segundos;
     grupos.set(g.id, fila);
   }
-  return { filas: [...grupos.values()], incierto };
+  return { filas: [...grupos.values()], incierto, hipotesisApagado: hipotesis };
 }
 
 /** Cobertura del periodo solicitado: nunca interpretar huecos como cero medido. */

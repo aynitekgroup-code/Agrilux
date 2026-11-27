@@ -60,6 +60,8 @@ test('hueco largo con ignición apagada en ambos extremos permanece incierto', (
   const r = estimarHunterPorGeocerca(p, geo);
   assert.equal(r.filas.length, 0);
   assert.equal(r.incierto, 3600);
+  assert.equal(r.hipotesisApagado[0].segundos, 3600);
+  assert.equal(r.hipotesisApagado[0].geocerca, 'Campo');
 });
 
 test('hueco largo que termina con evento Ignición ON permanece incierto', () => {
@@ -67,6 +69,7 @@ test('hueco largo que termina con evento Ignición ON permanece incierto', () =>
   const r = estimarHunterPorGeocerca(p, geo);
   assert.equal(r.filas.length, 0);
   assert.equal(r.incierto, 3600);
+  assert.equal(r.hipotesisApagado.length, 1);
 });
 
 test('hueco largo con encendido al final sin evento de ignición sigue sin determinar', () => {
@@ -74,6 +77,15 @@ test('hueco largo con encendido al final sin evento de ignición sigue sin deter
   const r = estimarHunterPorGeocerca(p, geo);
   assert.equal(r.filas.length, 0);
   assert.equal(r.incierto, 3600);
+  assert.equal(r.hipotesisApagado.length, 0);
+});
+
+test('hipótesis no incluye huecos excesivos, distantes ni geocercas solapadas', () => {
+  const a = punto('2026-11-25T00:00:00Z', { ignicion: false });
+  const fin = (fecha, extra = {}) => punto(fecha, { ignicion: false, ...extra });
+  assert.equal(estimarHunterPorGeocerca([a, fin('2026-11-25T01:30:01Z')], geo).hipotesisApagado.length, 0);
+  assert.equal(estimarHunterPorGeocerca([a, fin('2026-11-25T01:00:00Z', { longitud: 1.01 })], geo).hipotesisApagado.length, 0);
+  assert.equal(estimarHunterPorGeocerca([a, fin('2026-11-25T01:00:00Z')], [...geo, { ...geo[0], id: 'b' }]).hipotesisApagado.length, 0);
 });
 
 test('hueco largo con extremos en geocercas distintas, lejanos, con velocidad o solapadas no se asigna', () => {
