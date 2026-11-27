@@ -178,7 +178,7 @@ export function ControlVistaSatelite({ satelite, onToggle }) {
       type="button"
       onClick={onToggle}
       aria-pressed={satelite}
-      className={`absolute left-3 top-[132px] z-[1100] flex items-center gap-1.5 rounded-xl px-3 py-2 text-[12px] font-bold shadow-[0_4px_16px_rgba(15,23,42,0.25)] ring-1 ring-black/5 transition-all hover:scale-[1.03] ${
+      className={`absolute left-3 top-[132px] z-[1100] flex items-center gap-1.5 rounded-xl px-3 py-2 text-[12px] font-bold shadow-[0_4px_16px_rgba(15,23,42,0.25)] ring-1 ring-black/5 transition-all hover:scale-[1.03] lg:top-3 ${
         satelite
           ? 'bg-slate-900 text-white'
           : 'bg-white/95 text-slate-700 backdrop-blur'
@@ -325,8 +325,13 @@ export function PanelGruposUnidades({
   onGuardar = () => {},
 }) {
   const [busqueda, setBusqueda] = useState('');
-  useEffect(() => { setBusqueda(''); }, [reinicioBusqueda]);
   const [colapsados, setColapsados] = useState({});
+  const [filtroActivo, setFiltroActivo] = useState(null);
+  useEffect(() => {
+    setBusqueda('');
+    setColapsados({});
+    setFiltroActivo(null);
+  }, [reinicioBusqueda]);
   // Desglose visible por defecto: el panel muestra directamente la información.
   const [desgloseAbierto] = useState(true);
   const [escuchandoVoz, setEscuchandoVoz] = useState(false);
@@ -338,11 +343,24 @@ export function PanelGruposUnidades({
     [unidades, gruposPorPlaca, modoDescripcion],
   );
 
+  const gruposFiltrados = useMemo(() => {
+    if (!filtroActivo) return grupos;
+    if (filtroActivo.tipo === 'grupo') {
+      return grupos.filter((grupo) => grupo.clave === filtroActivo.clave);
+    }
+    return grupos
+      .map((grupo) => ({
+        ...grupo,
+        unidades: grupo.unidades.filter((unidad) => String(unidad?.estado || 'sin_estado') === filtroActivo.clave),
+      }))
+      .filter((grupo) => grupo.unidades.length);
+  }, [grupos, filtroActivo]);
+
   const visibles = useMemo(() => {
     const consulta = normalizarTexto(busqueda);
     const consultaAlnum = soloAlnum(busqueda);
-    if (!consulta && !consultaAlnum) return grupos;
-    return grupos
+    if (!consulta && !consultaAlnum) return gruposFiltrados;
+    return gruposFiltrados
       .map((grupo) => ({
         ...grupo,
         unidades: grupo.unidades.filter((unidad) => {
@@ -352,7 +370,7 @@ export function PanelGruposUnidades({
         }),
       }))
       .filter((grupo) => grupo.unidades.length);
-  }, [grupos, busqueda]);
+  }, [gruposFiltrados, busqueda]);
 
   const totalVisibles = visibles.reduce((suma, grupo) => suma + grupo.unidades.length, 0);
 
@@ -380,6 +398,20 @@ export function PanelGruposUnidades({
     });
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
   }, [unidades]);
+
+  const aplicarFiltro = (filtro) => {
+    setBusqueda('');
+    setColapsados({});
+    setFiltroActivo((actual) => (
+      actual?.tipo === filtro.tipo && actual?.clave === filtro.clave ? null : filtro
+    ));
+  };
+
+  const limpiarFiltro = () => {
+    setBusqueda('');
+    setColapsados({});
+    setFiltroActivo(null);
+  };
 
   const aplicarVoz = (transcript) => {
     if (!transcript) return;
@@ -549,26 +581,49 @@ export function PanelGruposUnidades({
       {desgloseAbierto ? (
         <>
       <div className="flex flex-wrap gap-1.5 border-b border-slate-100 px-4 py-2">
-        <span className="inline-flex items-center gap-1 rounded-full border border-forest/30 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-forest">
+        <button
+          type="button"
+          onClick={limpiarFiltro}
+          aria-pressed={!filtroActivo}
+          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold transition-colors ${
+            !filtroActivo
+              ? 'border-forest/30 bg-emerald-50 text-forest'
+              : 'border-slate-200 bg-slate-50 text-[#426C50] hover:border-emerald-300 hover:bg-emerald-50'
+          }`}
+        >
           Total: {unidades.length}
-        </span>
+        </button>
         {desgloseGrupos.map((g) => (
-          <span
+          <button
             key={g.clave}
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-[#426C50]"
+            type="button"
+            onClick={() => aplicarFiltro({ tipo: 'grupo', clave: g.clave, etiqueta: g.etiqueta })}
+            aria-pressed={filtroActivo?.tipo === 'grupo' && filtroActivo.clave === g.clave}
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+              filtroActivo?.tipo === 'grupo' && filtroActivo.clave === g.clave
+                ? 'border-forest/30 bg-emerald-50 text-forest'
+                : 'border-slate-200 bg-slate-50 text-[#426C50] hover:border-emerald-300 hover:bg-emerald-50'
+            }`}
             title={`${g.unidades.length} unidad(es) en el grupo ${g.etiqueta}`}
           >
             {g.etiqueta}: <b className="text-forest">{g.unidades.length}</b>
-          </span>
+          </button>
         ))}
         {desgloseEstados.map(([estado, total]) => (
-          <span
+          <button
             key={estado}
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-[#537665]"
+            type="button"
+            onClick={() => aplicarFiltro({ tipo: 'estado', clave: estado, etiqueta: estado.replace(/_/g, ' ') })}
+            aria-pressed={filtroActivo?.tipo === 'estado' && filtroActivo.clave === estado}
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+              filtroActivo?.tipo === 'estado' && filtroActivo.clave === estado
+                ? 'border-forest/30 bg-emerald-50 text-forest'
+                : 'border-slate-200 bg-slate-50 text-[#537665] hover:border-emerald-300 hover:bg-emerald-50'
+            }`}
             title={`${total} unidad(es) en estado ${estado}`}
           >
             {estado.replace(/_/g, ' ')}: <b className="text-[#285D3B]">{total}</b>
-          </span>
+          </button>
         ))}
       </div>
       <datalist id="grupos-unidades-datalist">
@@ -588,7 +643,9 @@ export function PanelGruposUnidades({
           </p>
         ) : !visibles.length ? (
           <p className="p-6 text-center text-xs text-[#537665]">
-            Ninguna unidad coincide con “{busqueda}”.
+            {filtroActivo
+              ? `No hay unidades para ${filtroActivo.etiqueta}.`
+              : `Ninguna unidad coincide con “${busqueda}”.`}
           </p>
         ) : (
           visibles.map((grupo) => {
@@ -635,7 +692,7 @@ export function PanelGruposUnidades({
       </div>
 
       <p className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-[10px] text-[#537665]">
-        {busqueda
+        {busqueda || filtroActivo
           ? `Mostrando ${totalVisibles} de ${unidades.length} unidades`
           : 'Clic en la unidad para llevar el mapa hasta su posición.'}
         {editable ? ' Escribe un grupo y pulsa ✓ para guardarlo (vacío = quitar).' : ''}
