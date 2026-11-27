@@ -16,7 +16,7 @@ import FleetKpis from '../../components/gestion/fleet/FleetKpis';
 import FleetMap from '../../components/gestion/fleet/FleetMap';
 import VehicleList from '../../components/gestion/fleet/VehicleList';
 import FleetReports from '../../components/gestion/fleet/FleetReports';
-import HunterReports from '../../components/gestion/fleet/HunterReports';
+import HunterReports from '../../components/gestion/fleet/HunterTablaDiaria';
 import HunterActividad from '../../components/gestion/fleet/HunterActividad';
 import FleetKilometrosDiarios from '../../components/gestion/fleet/FleetKilometrosDiarios';
 import MenuReportes, { GRUPOS } from '../../components/gestion/fleet/MenuReportes';

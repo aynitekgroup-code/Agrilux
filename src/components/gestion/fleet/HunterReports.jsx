@@ -9,7 +9,7 @@ import { supabase } from '../../../lib/supabase';
 const etiquetas = { distancia: 'Distancia', velocidad_maxima: 'Velocidad máxima', velocidad_promedio: 'Velocidad promedio', detenido: 'Tiempo detenido', movimiento: 'Movimiento', estacionado: 'Estacionado', ralenti: 'Ralentí', motor: 'Uso de motor', total: 'Tiempo total', parada_minima: 'Parada mínima' };
 const valor = (v) => v == null ? 'No disponible' : typeof v === 'object' ? (v.maxSpeed ?? v.total_hours ?? JSON.stringify(v)) : String(v);
 
-export default function HunterReports({ empresaId }) {
+export function HunterDetalle({ empresaId }) {
   const [resultado, setResultado] = useState(null);
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
