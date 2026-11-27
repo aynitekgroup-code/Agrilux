@@ -14,7 +14,17 @@ test('Hunter: normaliza un punto realista y conserva ignición y fuente', () => 
   assert.equal(r.puntos[0].velocidad_kmh, 9);
   assert.equal(r.puntos[0].ignicion, true);
   assert.match(r.puntos[0].clave_fuente, /^hunter:[a-f0-9]{64}$/);
-  assert.equal(r.resumen_hunter.distancia, '49.95 km');
+  assert.equal(r.resumen_hunter.distancia, null);
+  assert.equal(r.resumen_agrupado_disponible, false);
+});
+test('Hunter usa solo el resumen agrupado, no el resumen distinto de puntos sin agrupar', () => {
+  const c = captura([punto]);
+  c.agrupado = { data: [], distance: '10.91 km', time_stop: '23h 6m 37s' };
+  c.recorrido.distance = '26.26 km';
+  const r = prepararRecorrido(c);
+  assert.equal(r.resumen_agrupado_disponible, true);
+  assert.equal(r.resumen_hunter.distancia, '10.91 km');
+  assert.equal(r.resumen_hunter.detenido, '23h 6m 37s');
 });
 test('Hunter: descarta paradas agrupadas, duplicados y datos inválidos', () => {
   const r = prepararRecorrido(captura([punto, punto, { ...punto, id: '2', stopNum: 1 }, { ...punto, id: '3', velocidad: 'parado' }]));

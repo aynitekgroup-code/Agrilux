@@ -43,6 +43,9 @@ export function prepararRecorrido(captura, claveFuente = () => null) {
   }
   puntos.sort((a, b) => Date.parse(a.fecha) - Date.parse(b.fecha) || a.punto_id.localeCompare(b.punto_id));
   const r = captura.agrupado || captura.recorrido;
+  // La variante sin agrupar sirve para puntos, pero su resumen puede diferir
+  // sustancialmente del informe agrupado de Hunter; no sustituirlo.
+  const resumen = captura.agrupado || {};
   const viajes = Array.isArray(r.data_trips) ? r.data_trips.map((v) => ({
     tipo: v.type === 'stop' ? 'Parada' : v.type === 'trip' ? 'Viaje' : 'Desconocido',
     inicio: v.start ?? null, fin: v.end ?? null, duracion: v.time ?? null,
@@ -51,10 +54,10 @@ export function prepararRecorrido(captura, claveFuente = () => null) {
   })) : [];
   return { fuente: 'hunter360', equipo_id: String(captura.equipo), desde: captura.desde || null,
     hasta: captura.hasta || null, total_original: r.data.length, descartes, puntos,
-    viajes, viajes_disponibles: Array.isArray(r.data_trips),
-    resumen_hunter: { distancia: r.distance ?? null, distancia_recta: null,
-      velocidad_maxima: r.maximum_speed ?? null, velocidad_promedio: r.average_speed ?? null,
-      detenido: r.time_stop ?? null, movimiento: r.time_mov ?? null, estacionado: r.time_estacionado ?? null,
-      ralenti: r.time_ralenti ?? null, motor: r.use_engine ?? null, total: r.time_total ?? null,
-      parada_minima: r.time_min_stop ?? null } };
+    viajes, viajes_disponibles: Array.isArray(r.data_trips), resumen_agrupado_disponible: !!captura.agrupado,
+    resumen_hunter: { distancia: resumen.distance ?? null, distancia_recta: null,
+      velocidad_maxima: resumen.maximum_speed ?? null, velocidad_promedio: resumen.average_speed ?? null,
+      detenido: resumen.time_stop ?? null, movimiento: resumen.time_mov ?? null, estacionado: resumen.time_estacionado ?? null,
+      ralenti: resumen.time_ralenti ?? null, motor: resumen.use_engine ?? null, total: resumen.time_total ?? null,
+      parada_minima: resumen.time_min_stop ?? null } };
 }
