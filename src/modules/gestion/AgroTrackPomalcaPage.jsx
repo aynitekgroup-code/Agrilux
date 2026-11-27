@@ -313,6 +313,8 @@ export default function AgroTrackPomalcaPage({ initialSection = 'mapas' }) {
         onSectionChange={setSection}
         pendingAlerts={pendientes}
         fuente={fuentePosiciones}
+        modulos={{ reportes: GRUPOS, geocercas: [{ nombre: 'Geocercas', opciones: [['diaria', 'Tabla diaria de geocercas'], ['eventos', 'Entradas y salidas'], ['lotes', 'Tiempo en cada lote'], ['visitas', 'Visitas por geocerca'], ['catalogo', 'Catálogo de geocercas y rutas']] }] }}
+        onModuloChange={(seccion, id) => { if (seccion === 'reportes') abrirSeccionEn('reportes', id); else { setVistaGeocercas(id); setSection('geocercas'); } }}
       />
 
       {section === 'consola' ? (

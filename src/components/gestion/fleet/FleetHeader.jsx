@@ -28,9 +28,10 @@ export const FLEET_SECTIONS = [
   { id: 'corte', label: 'Corte remoto', icon: Power, tono: 'bg-red-100 text-red-600' },
 ];
 
-export default function FleetHeader({ activeSection, onSectionChange, pendingAlerts = 0, fuente = 'demo' }) {
+export default function FleetHeader({ activeSection, onSectionChange, pendingAlerts = 0, fuente = 'demo', modulos = {}, onModuloChange }) {
   const { user, empresa_activa_id, empresas_disponibles } = useAuth();
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [modulosAbiertos, setModulosAbiertos] = useState('');
   const listaEmpresas = Array.isArray(empresas_disponibles) ? empresas_disponibles : [];
   const empresaActiva = listaEmpresas.find((empresa) => empresa.id === empresa_activa_id) || null;
   const empresaNombre = empresaActiva?.nombre || 'Flota';
@@ -65,6 +66,7 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
   const elegirSeccion = (id) => {
     onSectionChange(id);
     setMenuAbierto(false);
+    setModulosAbiertos((actual) => modulos[id] ? (actual === id ? '' : id) : '');
   };
 
   return (
@@ -125,7 +127,8 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
               key={section.id}
               type="button"
               aria-current={active ? 'page' : undefined}
-              onClick={() => onSectionChange(section.id)}
+              onClick={() => elegirSeccion(section.id)}
+              aria-expanded={modulos[section.id] ? modulosAbiertos === section.id : undefined}
               className={`flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-t-md px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:text-sm ${
                 active
                   ? 'bg-white text-forest shadow-sm'
@@ -134,6 +137,7 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
             >
               <Icon size={16} />
               {section.label}
+              {modulos[section.id] && <ChevronRight size={14} className={modulosAbiertos === section.id ? 'rotate-90' : ''} />}
               {section.id === 'consola' && pendingAlerts > 0 ? (
                 <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${active ? 'bg-red-100 text-red-700' : 'bg-white/20 text-white'}`}>
                   {pendingAlerts}
@@ -143,6 +147,12 @@ export default function FleetHeader({ activeSection, onSectionChange, pendingAle
           );
         })}
       </nav>
+      {modulosAbiertos && modulos[modulosAbiertos] && <nav aria-label={`Módulos de ${modulosAbiertos}`} className="flex max-h-64 flex-wrap gap-2 overflow-y-auto border-t border-emerald-200 bg-emerald-50 p-3">
+        {modulos[modulosAbiertos].map((grupo) => <div key={grupo.nombre} className="min-w-48 flex-1">
+          <p className="px-2 py-1 text-xs font-bold uppercase text-emerald-800">{grupo.nombre}</p>
+          {grupo.opciones.map(([id, label]) => <button key={id} type="button" onClick={() => { onModuloChange(modulosAbiertos, id); setModulosAbiertos(''); }} className="block w-full rounded px-2 py-2 text-left text-sm text-slate-800 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700">{label}</button>)}
+        </div>)}
+      </nav>}
 
       {/* ── Menú lateral: entra desde la izquierda y se cierra al elegir ── */}
       {menuAbierto ? createPortal(

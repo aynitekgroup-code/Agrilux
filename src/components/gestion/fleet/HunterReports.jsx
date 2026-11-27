@@ -6,10 +6,14 @@ import { estimarHunterPorGeocerca } from '../../../lib/hunterGeocercasEstimadas'
 import { formatearDuracion } from '../../../lib/duracionReporte';
 import { supabase } from '../../../lib/supabase';
 
-const etiquetas = { distancia: 'Distancia', velocidad_maxima: 'Velocidad máxima', velocidad_promedio: 'Velocidad promedio', detenido: 'Tiempo detenido', movimiento: 'Movimiento', estacionado: 'Estacionado', ralenti: 'Ralentí', motor: 'Uso de motor', total: 'Tiempo total', parada_minima: 'Parada mínima' };
+const seccionesResumen = [
+  ['Distancia recorrida', [['distancia', 'Distancia'], ['distancia_recta', 'Distancia recta']]],
+  ['Velocidad', [['velocidad_maxima', 'Velocidad máxima'], ['velocidad_promedio', 'Velocidad promedio']]],
+  ['Tiempos', [['detenido', 'Tiempo total detenido'], ['movimiento', 'Tiempo en movimiento'], ['estacionado', 'Tiempo estacionado'], ['ralenti', 'Tiempo ralentí'], ['total', 'Tiempo total'], ['motor', 'Horas uso de motor'], ['parada_minima', 'Tiempo mínimo parada']]],
+];
 const valor = (v) => v == null ? 'No disponible' : typeof v === 'object' ? (v.maxSpeed ?? v.total_hours ?? JSON.stringify(v)) : String(v);
 
-export function HunterDetalle({ empresaId }) {
+export function HunterDetalle({ empresaId, equipoInicial = '', diaInicial = '' }) {
   const [resultado, setResultado] = useState(null);
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
@@ -18,8 +22,8 @@ export function HunterDetalle({ empresaId }) {
   const [errorGeocerca, setErrorGeocerca] = useState('');
   const [calculando, setCalculando] = useState(false);
   const [unidades, setUnidades] = useState([]);
-  const [equipo, setEquipo] = useState('');
-  const [dia, setDia] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
+  const [equipo, setEquipo] = useState(equipoInicial);
+  const [dia, setDia] = useState(() => diaInicial || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
   const [errorUnidades, setErrorUnidades] = useState('');
 
   useEffect(() => {
@@ -30,7 +34,7 @@ export function HunterDetalle({ empresaId }) {
       if (!activo) return;
       if (e) { setErrorUnidades('No se pudo cargar la lista de equipos Hunter.'); return; }
       setUnidades(data || []);
-      setEquipo((data || [])[0]?.equipo_id || '');
+      setEquipo((actual) => actual || (data || [])[0]?.equipo_id || '');
     })();
     return () => { activo = false; };
   }, [empresaId]);
@@ -44,10 +48,13 @@ export function HunterDetalle({ empresaId }) {
         const { data, error: e } = await supabase.functions.invoke('hunter-recorrido', { body: { equipo, dia } });
         if (e) throw new Error('No se pudo consultar el recorrido en Hunter.');
         const procesado = prepararRecorrido(data);
-        const geocercas = await listarGeocercas(empresaId);
-        const validas = geocercas.filter((g) => ['Polygon', 'MultiPolygon'].includes(g.geometria?.type) && Array.isArray(g.geometria?.coordinates));
-        if (!validas.length) throw new Error('No hay geocercas activas con geometría disponible.');
-        if (activo) { setResultado(procesado); setEstimacion(estimarHunterPorGeocerca(procesado.puntos, validas)); setPagina(0); }
+        if (activo) { setResultado(procesado); setPagina(0); }
+        try {
+          const geocercas = await listarGeocercas(empresaId);
+          const validas = geocercas.filter((g) => ['Polygon', 'MultiPolygon'].includes(g.geometria?.type) && Array.isArray(g.geometria?.coordinates));
+          if (!validas.length) throw new Error('No hay geocercas activas con geometría disponible.');
+          if (activo) setEstimacion(estimarHunterPorGeocerca(procesado.puntos, validas));
+        } catch (e) { if (activo) setErrorGeocerca(e.message || 'No se pudo calcular la estimación por geocerca.'); }
       } catch (e) { if (activo) setError(e.message || 'No se pudo cargar Hunter.'); }
       finally { if (activo) setCargando(false); }
     })();
@@ -85,7 +92,10 @@ export function HunterDetalle({ empresaId }) {
     {!resultado && !cargando && !error && <p className="text-sm text-slate-500">Selecciona una unidad y una fecha para consultar el reporte.</p>}
     {resultado && <>
       <p className="text-sm">Equipo: {resultado.equipo_id} · {resultado.desde} a {resultado.hasta} · {resultado.puntos.length} puntos válidos · {resultado.descartes.paradas_agrupadas} paradas agrupadas · {resultado.descartes.invalidos} inválidos · {resultado.descartes.duplicados} duplicados</p>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">{Object.entries(etiquetas).map(([k, titulo]) => <div className="rounded bg-slate-50 p-2 text-sm" key={k}><div className="text-slate-500">{titulo}</div><strong>{valor(resultado.resumen_hunter[k])}</strong></div>)}</div>
+      <section aria-label="Resumen informado por Hunter" className="overflow-hidden rounded-lg border border-slate-300 text-sm">
+        <div className="bg-slate-200 p-3"><h3 className="text-center font-bold">{unidades.find((u) => String(u.equipo_id) === String(equipo))?.unidad || 'Unidad Hunter'} · {resultado.equipo_id}</h3><p>Inicio: {resultado.desde}</p><p>Fin: {resultado.hasta}</p><p className="mt-1 text-xs">Valores informados por Hunter, independientes de la estimación por geocerca.</p></div>
+        <table className="w-full text-left"><tbody>{seccionesResumen.map(([titulo, campos]) => <React.Fragment key={titulo}><tr><th colSpan={2} className="bg-slate-300 px-3 py-2">{titulo}</th></tr>{campos.map(([clave, etiqueta]) => <tr key={clave} className="border-t border-slate-200"><th scope="row" className="w-1/2 px-3 py-2 font-normal">{etiqueta}</th><td className="px-3 py-2">{valor(resultado.resumen_hunter[clave])}</td></tr>)}</React.Fragment>)}</tbody></table>
+      </section>
       <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
         <h3 className="font-semibold">Tabla de revisión · tiempos estimados por geocerca</h3>
         <p className="text-sm">No es el tiempo oficial de Hunter ni una liquidación. Solo se asignan intervalos de hasta 5 minutos cuando ambos puntos tienen el mismo estado y coinciden en una única geocerca. Los cambios, solapamientos, datos faltantes y huecos mayores quedan sin asignar. Los períodos antes del primer punto y después del último no están incluidos. Contrasta con Hunter antes de cualquier pago.</p>
