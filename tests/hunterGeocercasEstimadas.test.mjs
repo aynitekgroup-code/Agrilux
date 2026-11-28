@@ -1,9 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estimarHunterPorGeocerca, coberturaHunter, escenarioApagadoHunter, tablaAproximadaHunter } from '../src/lib/hunterGeocercasEstimadas.js';
+import { estimarHunterPorGeocerca, coberturaHunter, escenarioApagadoHunter, tablaAproximadaHunter, intervalosHunter } from '../src/lib/hunterGeocercasEstimadas.js';
 
 const geo = [{ id: 'a', nombre: 'Campo', geometria: { type: 'Polygon', coordinates: [[[0,0],[2,0],[2,2],[0,2],[0,0]]] } }];
 const punto = (fecha, extra = {}) => ({ fecha, latitud: 1, longitud: 1, ignicion: true, velocidad_kmh: 0, ...extra });
+test('rangos unen solo intervalos contiguos y mantienen hipótesis separadas', () => {
+  const p = [punto('2026-11-25T00:00:00Z', { ignicion: false }), punto('2026-11-25T00:01:00Z', { ignicion: false }), punto('2026-11-25T00:02:00Z', { ignicion: false }), punto('2026-11-25T01:02:00Z', { ignicion: false })];
+  const e = estimarHunterPorGeocerca(p, geo);
+  assert.equal(intervalosHunter(e).length, 1);
+  const tramos = intervalosHunter(e, true);
+  assert.equal(tramos.length, 2);
+  assert.equal(tramos[0].segundos, 120);
+  assert.equal(tramos[1].segundos, 3600);
+  assert.equal(tramos[1].hipotesis, true);
+});
 test('computa solo intervalos coherentes y acotados', () => {
   const r = estimarHunterPorGeocerca([punto('2026-11-25T00:00:00Z'), punto('2026-11-25T00:01:00Z'), punto('2026-11-25T00:20:00Z')], geo);
   assert.equal(r.filas[0].detenido, 60);

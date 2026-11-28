@@ -57,7 +57,7 @@ import { cargarPaginaRecorrido, planearPaginas, textoVentana } from '../../../li
 import { STATUS_META } from './fleetTokens';
 import { supabase } from '../../../lib/supabase';
 import { textoUbicacionVoz } from '../../../lib/vozUbicacion';
-import { placasFoneticas, clavePlacaFonetica } from '../../../lib/placaFonetica';
+import { placasFoneticas, clavePlacaFonetica, aliasVozUnidad, unidadesAliasVoz } from '../../../lib/placaFonetica';
 
 const VozAgrilux = registerPlugin('VozAgrilux');
 
@@ -1383,14 +1383,15 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       return;
     }
     const foneticos = placasFoneticas(vehiclesConPosicion, stripVoiceCommand(transcript));
-    const candidatos = foneticos.length ? foneticos : vehiclesConPosicion.filter((vehicle) => {
+    const alias = unidadesAliasVoz(vehiclesConPosicion, stripVoiceCommand(transcript));
+    const candidatos = foneticos.length ? foneticos : alias.length ? alias : vehiclesConPosicion.filter((vehicle) => {
       const campos = [vehicle.placa, vehicle.descripcion, vehicle.modelo, vehicle.conductor_nombre, vehicle.ultimo_evento];
       return campos.filter(Boolean).some((campo) => (
         normalizarVozPlaca(campo).includes(query) || normalizeText(campo).includes(queryTexto)
       ));
     });
     if (!candidatos.length && query) {
-      setBusquedaRuta(stripVoiceCommand(transcript));
+      setBusquedaRuta(aliasVozUnidad(stripVoiceCommand(transcript)) || stripVoiceCommand(transcript));
       setVoiceUnitMessage(`No encontré una máquina para "${transcript}". Intenta decir solo la placa.`);
       return;
     }
@@ -1403,7 +1404,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       return;
     }
     if (candidatos.length > 1) {
-      setBusquedaRuta(stripVoiceCommand(transcript));
+      setBusquedaRuta(alias.length ? aliasVozUnidad(stripVoiceCommand(transcript)) : stripVoiceCommand(transcript));
       setVoiceUnitMessage(`Hay ${candidatos.length} coincidencias. Elige la unidad en la lista.`);
       decir('Encontré varias máquinas. Selecciona una en la lista.');
       return;
@@ -1839,17 +1840,18 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     const unidades = [...new Map([...unidadesMaestro, ...vehiclesConPosicion].filter((v) => v.placa).map((v) => [v.placa, v])).values()];
     const candidatas = unidades.filter((v) => [v.placa, v.descripcion, v.modelo, v.area, v.area_operativa, areasHunter[normalizarVozPlaca(v.placa)], v.grupo, gruposPorPlaca[v.placa]].filter(Boolean).some((campo) => normalizeText(campo).includes(query) || (clave.length >= 2 && normalizarVozPlaca(campo).includes(clave))));
     const foneticas = placasFoneticas(unidades, cleaned);
+    const alias = unidadesAliasVoz(unidades, cleaned);
     const exactas = candidatas.filter((v) => normalizarVozPlaca(v.placa) === clave);
-    const seleccionables = foneticas.length ? foneticas : exactas.length ? exactas : candidatas;
+    const seleccionables = foneticas.length ? foneticas : exactas.length ? exactas : candidatas.length ? candidatas : alias;
     if (seleccionables.length === 1) {
       setGeofenceSearch(''); setResultsOpen(false); setBusquedaRuta('');
       selectUnidadRuta(seleccionables[0].placa);
-      setVoiceMessage(`Seleccionada la máquina «${seleccionables[0].placa}»${normalizarVozPlaca(seleccionables[0].placa) !== clave ? ' (coincidencia B/V)' : ''}.`);
+      setVoiceMessage(`Seleccionada la máquina «${seleccionables[0].placa}»${alias.includes(seleccionables[0]) && !candidatas.includes(seleccionables[0]) ? ' (posible coincidencia de voz; comprueba la unidad)' : foneticas.length && normalizarVozPlaca(seleccionables[0].placa) !== clave ? ' (coincidencia B/V)' : ''}.`);
       leerVentanaUnidad(seleccionables[0]);
       return;
     }
     if (seleccionables.length > 1) {
-      setGeofenceSearch(''); setResultsOpen(false); setBusquedaRuta(cleaned);
+      setGeofenceSearch(''); setResultsOpen(false); setBusquedaRuta(alias.length && !candidatas.length ? aliasVozUnidad(cleaned) : cleaned);
       setVoiceMessage(`Encontré ${seleccionables.length} máquinas. Elige una en la lista de máquinas.`);
       decir('Encontré varias máquinas. Selecciona una en la lista.');
       return;

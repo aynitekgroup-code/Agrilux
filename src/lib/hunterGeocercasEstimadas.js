@@ -37,6 +37,7 @@ export function estimarHunterPorGeocerca(puntos, geocercas, maxIntervaloSegundos
   const asignar = (p) => geocercas.filter((g) => contiene(p, g.geometria));
   const grupos = new Map();
   const hipotesis = [];
+  const intervalos = [];
   let incierto = 0;
   for (let i = 1; i < ordenados.length; i++) {
     const a = ordenados[i - 1], b = ordenados[i];
@@ -61,8 +62,23 @@ export function estimarHunterPorGeocerca(puntos, geocercas, maxIntervaloSegundos
     const fila = grupos.get(g.id) || { id: g.id, geocerca: g.nombre, apagado: 0, detenido: 0, ralenti: 0, movimiento: 0 };
     fila[clasificado] += segundos;
     grupos.set(g.id, fila);
+    intervalos.push({ inicio: a.fecha, fin: b.fecha, segundos, geocerca: g.nombre, geocerca_id: g.id, estado: clasificado, hipotesis: false });
   }
-  return { filas: [...grupos.values()], incierto, hipotesisApagado: hipotesis };
+  return { filas: [...grupos.values()], incierto, hipotesisApagado: hipotesis, intervalos };
+}
+
+/** Tramos contiguos con igual estado, geocerca y nivel de hipótesis. */
+export function intervalosHunter(estimacion, incluirHipotesis = false) {
+  const tramos = [...(estimacion?.intervalos || []), ...(incluirHipotesis ? (estimacion?.hipotesisApagado || []).map((h) => ({ ...h, estado: 'apagado', hipotesis: true })) : [])]
+    .sort((a, b) => Date.parse(a.inicio) - Date.parse(b.inicio));
+  return tramos.reduce((resultado, tramo) => {
+    const anterior = resultado.at(-1);
+    if (anterior && Date.parse(anterior.fin) === Date.parse(tramo.inicio) && anterior.geocerca_id === tramo.geocerca_id && anterior.estado === tramo.estado && anterior.hipotesis === tramo.hipotesis) {
+      anterior.fin = tramo.fin;
+      anterior.segundos += tramo.segundos;
+    } else resultado.push({ ...tramo });
+    return resultado;
+  }, []);
 }
 
 /** Cobertura del periodo solicitado: nunca interpretar huecos como cero medido. */
