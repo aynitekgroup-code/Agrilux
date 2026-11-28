@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { prepararRecorrido } from '../../../../agentes/hunter/parse-core.mjs';
 import { listarGeocercas } from '../../../lib/agrotrackGeocercas';
-import { coberturaHunter, estimarHunterPorGeocerca, escenarioApagadoHunter, tablaAproximadaHunter } from '../../../lib/hunterGeocercasEstimadas';
+import { coberturaHunter, estimarHunterPorGeocerca, tablaAproximadaHunter } from '../../../lib/hunterGeocercasEstimadas';
 import { formatearDuracion } from '../../../lib/duracionReporte';
 import { supabase } from '../../../lib/supabase';
 import { HunterDetalle } from './HunterReports';
@@ -83,15 +83,6 @@ export default function HunterTablaDiaria({ empresaId }) {
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <p role="status" className="text-xs text-slate-600">{cargando ? `Consultando Hunter: ${terminadas} de ${filas.length || '…'} unidades.` : `${terminadas} unidades consultadas · ${filas.filter((f) => f.estado === 'error').length} con error.`}{' '}{areasMensaje(filas)}</p>
       {!error && filas.length > 0 && !visibles.length && <p className="text-sm text-slate-600">No hay unidades que coincidan con la búsqueda.</p>}
-      <section className="space-y-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-slate-800" aria-label="Escenario aproximado de apagado">
-        <h3 className="font-bold">Escenario aproximado · posible apagado por geocerca</h3>
-        <p>Es una hipótesis, no una medición ni el resultado oficial de Hunter. Supone que no faltan eventos ni cambios de ubicación entre puntos apagados cercanos, de velocidad cero y misma geocerca única, separados hasta 90 minutos; también admite que el último punto sea un evento de encendido. Se muestra aparte y no valida pagos. Los intervalos sin evidencia suficiente permanecen sin asignar.</p>
-        {visibles.filter((u) => u.estado === 'listo' && u.estimacion && u.cobertura).map((u) => {
-          const escenario = escenarioApagadoHunter(u.estimacion, u.cobertura);
-          if (!escenario) return <p key={u.equipo_id}>{u.unidad || u.equipo_id}: escenario no disponible.</p>;
-          return <div key={u.equipo_id} className="rounded border border-blue-100 bg-white p-2"><strong>{u.unidad || u.equipo_id}</strong> · asignado por puntos: {duracionBalance(u.cobertura.asignado)} · posible apagado adicional: {duracionBalance(escenario.estimado)} · restante sin evidencia: {duracionBalance(escenario.resto)} · pendiente del día: {duracionBalance(escenario.pendiente)} · total: {duracionBalance(escenario.totalDia)}<p>Estimación adicional por geocerca: {escenario.filas.length ? escenario.filas.map((f) => `${f.geocerca}: ${duracionBalance(f.segundos)}`).join(' · ') : 'no hay intervalos que cumplan la regla.'}</p></div>;
-        })}
-      </section>
       {visibles.length > 0 && <div className="max-h-[65vh] overflow-auto rounded-lg border border-slate-200"><table className="w-full min-w-[1100px] text-left text-xs"><thead className="sticky top-0 z-10 bg-emerald-50 text-[11px] uppercase tracking-wide text-emerald-900"><tr>{['Unidad', 'Área', 'Geocerca', 'Apagado', 'Encendido / detenido', 'Encendido / movimiento lento', 'Movimiento', 'Transcurrido sin determinar', 'Pendiente del día', 'Cobertura estimada'].map((x) => <th key={x} className="border-b px-3 py-2">{x}</th>)}</tr></thead><tbody>{visibles.flatMap((u) => {
         const proyeccion = aproximar ? tablaAproximadaHunter(u.estimacion, u.cobertura) : null;
         const geos = proyeccion?.filas || u.estimacion?.filas || [];
