@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FileSpreadsheet, MapPinned, RefreshCw, Search } from 'lucide-react';
+import { FileSpreadsheet, MapPinned, RefreshCw, Search, Share2 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { compararUnidades } from '../../../lib/agrotrackReporteFilas';
 import { exportarStatusHunterExcel, geocercaHunter } from '../../../lib/hunterStatusExport';
 import { agruparUnidadesHunter, filtrarUnidadesHunter, opcionesFiltrosHunter } from '../../../lib/hunterStatusFiltros';
 import { estadoHunter as estado } from '../../../lib/hunterEstado';
+import { imagenStatusHunter, prepararStatusCompartido } from '../../../lib/hunterCompartir';
 import { ControlesFiltroUnidadGrupo } from './reportesComunes';
 
 const COLUMNAS = ['Unidad', 'Área', 'Última posición', 'Estado', 'Velocidad', 'Geocerca', 'Dirección', 'Sincronización'];
@@ -28,6 +29,8 @@ export default function HunterEstadoVivo({ empresaId }) {
   const [geocercasDisponibles, setGeocercasDisponibles] = useState(true);
   const [departamentosDisponibles, setDepartamentosDisponibles] = useState(true);
   const [errorDescarga, setErrorDescarga] = useState('');
+  const [compartiendo, setCompartiendo] = useState(false);
+  const [avisoCompartir, setAvisoCompartir] = useState('');
   useEffect(() => {
     if (!empresaId) return undefined;
     let activo = true;
@@ -116,10 +119,31 @@ export default function HunterEstadoVivo({ empresaId }) {
     try { await exportarStatusHunterExcel(visibles, { fecha, clasificar: (f) => estado(f, ahora) }); }
     catch (e) { setErrorDescarga(e?.message || 'No se pudo generar el Excel.'); }
   }
+  async function compartir() {
+    setAvisoCompartir('');
+    if (visibles.length > 150) { setAvisoCompartir('Aplica un filtro para compartir hasta 150 unidades por imagen.'); return; }
+    setCompartiendo(true);
+    try {
+      const filtros = [opcionFiltro && `${mostrar === 'grupos' ? 'Grupo' : 'Unidad'}: ${opcionFiltro}`, filtroArea && `Área: ${filtroArea}`, filtroGeocerca && `Geocerca: ${filtroGeocerca}`, filtroEstado !== 'todos' && `Estado: ${filtroEstado}`, busqueda && `Búsqueda: ${busqueda}`].filter(Boolean).join(' · ');
+      const reporte = prepararStatusCompartido(visibles, { fecha, clasificar: (f) => estado(f, ahora), geocerca: geocercaHunter, filtros, generado: new Date().toISOString() });
+      const blob = await imagenStatusHunter(reporte);
+      const archivo = new File([blob], 'agrilux-status-hunter.png', { type: 'image/png' });
+      if (navigator.share && navigator.canShare?.({ files: [archivo] })) {
+        await navigator.share({ title: 'Status de maquinaria · Hunter 360', files: [archivo] });
+      } else {
+        const url = URL.createObjectURL(blob); const a = document.createElement('a');
+        a.href = url; a.download = archivo.name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setAvisoCompartir('Imagen descargada. Ábrela desde Descargas para compartirla.');
+      }
+    } catch (e) { if (e?.name !== 'AbortError') setAvisoCompartir('No se pudo compartir la imagen. Intenta de nuevo o usa Descargar Excel.'); }
+    finally { setCompartiendo(false); }
+  }
   return <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
     <div className="border-b border-slate-100 p-4 sm:p-5 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><MapPinned size={19} /></span><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-base font-bold text-slate-900">Status de maquinaria</h2><span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">Hunter 360</span></div><p className="mt-0.5 text-xs text-slate-500">Última posición informada por Hunter · consulta de pantalla cada minuto</p></div></div><div className="flex gap-2"><button type="button" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50" onClick={() => setIntento((n) => n + 1)}><RefreshCw size={14} /> Actualizar</button><button type="button" disabled={estadoCarga !== 'listo' || !visibles.length} onClick={descargar} className="inline-flex items-center gap-2 rounded-lg bg-emerald-800 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-900 disabled:opacity-40"><FileSpreadsheet size={14} /> Descargar Excel</button></div></div>
       {errorDescarga && <p role="alert" className="text-xs text-red-700">{errorDescarga}</p>}
+      <button type="button" disabled={estadoCarga !== 'listo' || !visibles.length || compartiendo} onClick={compartir} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"><Share2 size={14} />{compartiendo ? 'Preparando imagen…' : 'Compartir reporte'}</button>
+      {avisoCompartir && <p role="status" className="text-xs text-slate-600">{avisoCompartir}</p>}
       {estadoCarga === 'listo' && filas.length > 0 && <div className="flex flex-wrap gap-2" aria-label="Filtrar por estado"><button type="button" aria-pressed={filtroEstado === 'todos'} onClick={() => setFiltroEstado('todos')} className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${filtroEstado === 'todos' ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-slate-200 text-slate-600'}`}>Todas <span className="ml-1 tabular-nums">{filas.length}</span></button>{categorias.map((c) => <button type="button" key={c} aria-pressed={filtroEstado === c} onClick={() => setFiltroEstado(c)} className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${filtroEstado === c ? 'ring-2 ring-emerald-500 ring-offset-1' : ''} ${tonos[c]}`}>{c} <span className="ml-1 tabular-nums">{conteos[c]}</span></button>)}</div>}
       <div className="flex flex-wrap items-end gap-3">
         <ControlesFiltroUnidadGrupo

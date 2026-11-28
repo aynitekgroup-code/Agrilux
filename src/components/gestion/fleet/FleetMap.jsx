@@ -41,7 +41,7 @@ import { MenuSecciones, SECCIONES as SECCIONES_FLOTA, ZonasPanel, Proximamente }
 import ConfiguracionPrincipal from './ConfiguracionPrincipal';
 import { cargarVehiculosMaestro } from '../../../lib/agrotrackVehiculos';
 import { ControlVistaSatelite, FichaGeocerca, LeyendaGrupos, PanelGruposUnidades, TablaCoordenadas, TablaRecorrido } from './MapaControles';
-import { COLORES_GRUPO, ETIQUETAS_GRUPO, resumenGeocercasParaIA } from '../../../lib/asistenteMapa';
+import { COLORES_GRUPO, ETIQUETAS_GRUPO, resumenGeocercasParaIA, resumenUnidadesParaIA } from '../../../lib/asistenteMapa';
 import {
   formatearFechaHora,
   formatearFechaLarga,
@@ -55,6 +55,7 @@ import { describirPosicion } from '../../../lib/agrotrackReporteFilas.js';
 import { cargarGruposUnidades, guardarGrupoUnidad, listaGruposConocidos } from '../../../lib/agrotrackGrupos';
 import { cargarPaginaRecorrido, planearPaginas, textoVentana } from '../../../lib/agrotrackMapaHistorico';
 import { STATUS_META } from './fleetTokens';
+import { supabase } from '../../../lib/supabase';
 
 /* ---------- Z-order de geocercas ---------- */
 
@@ -251,7 +252,7 @@ function stripVoiceCommand(transcript) {
   const text = normalizeText(transcript).replace(/[.,;:!?¿¡]/g, ' ').replace(/\s+/g, ' ').trim();
   const cleaned = text
     .replace(
-      /^(?:(?:busca|buscar|buscame|llevame|muestrame|muestra|mostrar|ubica|ubicame|quiero ver|ir|ve|vamos)\s+)?(?:(?:a|al|a la|hacia|en)\s+)?(?:(?:la|el)\s+)?(?:(?:geocerca|zona|lote|division|maquina|máquina|placa|unidad|vehiculo|vehículo|camion|camión|tractor)\s+)?/,
+      /^(?:(?:busca|buscar|buscame|llevame|muestrame|muestra|mostrar|ubica|ubicame|quiero ver|ir|ve|vamos)\s+)?(?:(?:a|al|a la|hacia|en)\s+)?(?:(?:la|el|las|los)\s+)?(?:(?:geocerca|zona|lote|division|area|maquina|maquinas|placa|unidad|unidades|vehiculo|camion|tractor)\s+)?/,
       '',
     )
     .trim();
@@ -704,6 +705,27 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
 
   // Padrón maestro de unidades (agrotrack_vehiculos) para el recorrido.
   const [unidadesMaestro, setUnidadesMaestro] = useState([]);
+  const [areasHunter, setAreasHunter] = useState({});
+  useEffect(() => {
+    if (!empresaId) { setAreasHunter({}); return undefined; }
+    let activo = true;
+    setAreasHunter({});
+    (async () => {
+      const [areas, unidades] = await Promise.all([
+        supabase.from('agrotrack_hunter_areas').select('equipo_id,area').eq('empresa_id', empresaId).limit(1000),
+        supabase.from('agrotrack_hunter_estado_vivo').select('equipo_id,unidad').eq('empresa_id', empresaId).limit(1000),
+      ]);
+      if (!activo || areas.error || unidades.error) return;
+      const nombres = new Map((unidades.data || []).map((u) => [String(u.equipo_id), u.unidad]));
+      const resultado = {};
+      for (const a of areas.data || []) {
+        const nombre = nombres.get(String(a.equipo_id));
+        if (nombre && a.area) resultado[normalizarVozPlaca(nombre)] = a.area;
+      }
+      setAreasHunter(resultado);
+    })().catch(() => {});
+    return () => { activo = false; };
+  }, [empresaId]);
   useEffect(() => {
     if (!empresaId) return undefined;
     let cancelado = false;
@@ -1217,11 +1239,11 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       ...unidadesMaestro.filter((u) => !conocidas.has(u.placa)),
     ];
     return candidatas
-      .filter((v) => [v.placa, v.descripcion, v.modelo, v.conductor_nombre, v.ultimo_evento, v.area, v.area_operativa, v.grupo]
+      .filter((v) => [v.placa, v.descripcion, v.modelo, v.conductor_nombre, v.ultimo_evento, v.area, v.area_operativa, areasHunter[normalizarVozPlaca(v.placa)], v.grupo, gruposPorPlaca[v.placa]]
         .filter(Boolean)
         .some((campo) => normalizeText(campo).includes(term) || (placaBuscada.length >= 3 && normalizarVozPlaca(campo).includes(placaBuscada))))
       .slice(0, 8);
-  }, [busquedaRuta, vehiclesConPosicion, unidadesMaestro]);
+  }, [busquedaRuta, vehiclesConPosicion, unidadesMaestro, gruposPorPlaca, areasHunter]);
 
   const selectUnidadRuta = (placa) => {
     if (onSelect) onSelect(placa);
@@ -1807,8 +1829,26 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
 
   /* ----- Búsqueda por voz ----- */
 
-  const applyVoiceResult = (transcript) => {
+  const applyVoiceResult = async (transcript) => {
     const cleaned = stripVoiceCommand(transcript);
+    const query = normalizeText(cleaned);
+    const clave = normalizarVozPlaca(cleaned);
+    if (!query) { setVoiceMessage('Di el nombre de una máquina, placa, área o geocerca.'); return; }
+    const unidades = [...new Map([...vehiclesConPosicion, ...unidadesMaestro].filter((v) => v.placa).map((v) => [v.placa, v])).values()];
+    const candidatas = unidades.filter((v) => [v.placa, v.descripcion, v.modelo, v.area, v.area_operativa, areasHunter[normalizarVozPlaca(v.placa)], v.grupo, gruposPorPlaca[v.placa]].filter(Boolean).some((campo) => normalizeText(campo).includes(query) || (clave.length >= 2 && normalizarVozPlaca(campo).includes(clave))));
+    const exactas = candidatas.filter((v) => normalizarVozPlaca(v.placa) === clave);
+    const seleccionables = exactas.length ? exactas : candidatas;
+    if (seleccionables.length === 1) {
+      setGeofenceSearch(''); setResultsOpen(false); setBusquedaRuta('');
+      selectUnidadRuta(seleccionables[0].placa);
+      setVoiceMessage(`Seleccionada la máquina «${seleccionables[0].placa}».`);
+      return;
+    }
+    if (seleccionables.length > 1) {
+      setGeofenceSearch(''); setResultsOpen(false); setBusquedaRuta(cleaned);
+      setVoiceMessage(`Encontré ${seleccionables.length} máquinas. Elige una en la lista de máquinas.`);
+      return;
+    }
     let matches = searchGeofences(geofences, cleaned);
     let usedQuery = cleaned;
     if (!matches.length) {
@@ -1817,8 +1857,22 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     }
     setGeofenceSearch(usedQuery);
     if (!matches.length) {
-      setResultsOpen(true);
-      setVoiceMessage(`No encontré geocercas para "${transcript}". Intenta decir solo el nombre.`);
+      setResultsOpen(false);
+      setVoiceMessage('Buscando una coincidencia con el asistente…');
+      try {
+        const respuesta = await fetch('/api/voice-assistant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo: 'mapa', mensaje: transcript, historial: [], geocercas: resumenGeocercasParaIA(geofences), unidades: resumenUnidadesParaIA(unidades), seleccion: null }) });
+        if (!respuesta.ok) throw new Error('Asistente no disponible');
+        const data = await respuesta.json();
+        const acciones = (Array.isArray(data.acciones) ? data.acciones : []).filter((a) => ['enfocar_unidad', 'enfocar', 'seleccionar'].includes(a?.tipo));
+        if (acciones.length === 1) {
+          const accion = acciones[0];
+          const unidad = accion.tipo === 'enfocar_unidad' && unidades.find((v) => normalizeText(v.placa) === normalizeText(accion.placa));
+          const geocerca = accion.tipo !== 'enfocar_unidad' && geofences.find((g) => String(g.id) === String(accion.geocerca_id));
+          if (unidad) { setGeofenceSearch(''); selectUnidadRuta(unidad.placa); setVoiceMessage(`El asistente sugirió la máquina «${unidad.placa}». Comprueba que sea la correcta.`); return; }
+          if (geocerca) { setGeofenceSearch(geocerca.nombre); focusGeofence(geocerca); setVoiceMessage(`El asistente sugirió la geocerca «${geocerca.nombre}». Comprueba que sea la correcta.`); return; }
+        }
+      } catch { /* La búsqueda local sigue disponible si falla el asistente. */ }
+      setVoiceMessage(`No encontré «${transcript}». Prueba el nombre completo, placa o área.`);
       return;
     }
     const [best] = matches;
@@ -1853,8 +1907,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           return;
         }
         setListening(true);
-        setVoiceMessage('Escuchando… di el nombre de la geocerca.');
-        const resultado = await plugin.start({ language: 'es-PE', maxResults: 5, prompt: 'Di el nombre de la geocerca', popup: true, partialResults: false });
+        setVoiceMessage('Escuchando… di una máquina, placa, área o geocerca.');
+        const resultado = await plugin.start({ language: 'es-PE', maxResults: 5, prompt: 'Di una máquina, placa, área o geocerca', popup: true, partialResults: false });
         const texto = (resultado?.matches || []).find((valor) => valor?.trim())?.trim();
         if (texto) applyVoiceRef.current?.(texto);
         else setVoiceMessage('No te escuché. Toca el micrófono e inténtalo de nuevo.');
@@ -1882,7 +1936,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
 
     recognition.onstart = () => {
       setListening(true);
-      setVoiceMessage('Escuchando… di el nombre de la geocerca.');
+      setVoiceMessage('Escuchando… di una máquina, placa, área o geocerca.');
     };
     recognition.onresult = (event) => {
       const transcript = Array.from(event.results)
@@ -2258,7 +2312,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
         <button
           type="button"
           onClick={toggleVoiceSearch}
-          aria-label={listening ? 'Detener búsqueda por voz' : 'Buscar geocerca por voz'}
+          aria-label={listening ? 'Detener búsqueda por voz' : 'Buscar máquina, placa, área o geocerca por voz'}
           aria-pressed={listening}
           title={SpeechRecognitionCtor ? 'Buscar por voz' : 'Tu navegador no soporta voz'}
           className={`relative grid h-9 w-9 shrink-0 place-items-center rounded-full transition-all hover:scale-105 focus:outline-none focus:ring-4 ${
@@ -2447,7 +2501,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
                   ? 'animate-pulse bg-gradient-to-br from-red-400 to-red-600 text-white shadow-[0_0_18px_rgba(239,68,68,0.6)] focus:ring-red-200'
                   : 'bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 text-white shadow-[0_4px_16px_rgba(16,185,129,0.5)] focus:ring-emerald-200'
               }`}
-              aria-label={listening ? 'Detener búsqueda por voz' : 'Buscar geocerca por voz'}
+              aria-label={listening ? 'Detener búsqueda por voz' : 'Buscar máquina, placa, área o geocerca por voz'}
               aria-pressed={listening}
               title={SpeechRecognitionCtor || Capacitor.isNativePlatform() ? 'Buscar por voz' : 'Tu navegador no soporta voz'}
             >
