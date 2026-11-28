@@ -18,7 +18,7 @@ import {
   Volume2,
   X,
 } from 'lucide-react';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import 'leaflet/dist/leaflet.css';
 import {
   crearGeocerca,
@@ -56,6 +56,9 @@ import { cargarGruposUnidades, guardarGrupoUnidad, listaGruposConocidos } from '
 import { cargarPaginaRecorrido, planearPaginas, textoVentana } from '../../../lib/agrotrackMapaHistorico';
 import { STATUS_META } from './fleetTokens';
 import { supabase } from '../../../lib/supabase';
+import { textoUbicacionVoz } from '../../../lib/vozUbicacion';
+
+const VozAgrilux = registerPlugin('VozAgrilux');
 
 /* ---------- Z-order de geocercas ---------- */
 
@@ -1349,29 +1352,24 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     [filasCoordenadas],
   );
 
+  const decir = async (texto) => {
+    try {
+      if (Capacitor.isNativePlatform()) { await VozAgrilux.hablar({ texto }); return; }
+      if (!('speechSynthesis' in window)) throw new Error('Voz no disponible');
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(texto);
+      utterance.lang = 'es-PE'; utterance.rate = 0.9;
+      utterance.onerror = () => setVoiceMessage('No se pudo reproducir el audio. Revisa el volumen y la voz del dispositivo.');
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      setVoiceMessage('No se pudo reproducir el audio. Revisa el volumen multimedia y el motor de texto a voz en español.');
+    }
+  };
+
   const leerVentanaUnidad = (vehicle) => {
-    if (!('speechSynthesis' in window)) return;
     const estadoPlaca = estadoPorPlaca.get(vehicle?.placa) || null;
-    const velocidad = Number(vehicle?.velocidad_kmh);
-    const geocerca = geocercaActualUnidad(vehicle);
-    const partes = [
-      `Unidad ${vehicle?.placa || ''}`.trim(),
-      vehicle?.descripcion || vehicle?.modelo || '',
-      (estadoPlaca?.ultimo_evento || vehicle?.ultimo_evento) ? `último evento ${estadoPlaca?.ultimo_evento || vehicle?.ultimo_evento}` : '',
-      Number.isFinite(velocidad) && velocidad > 0 ? `a ${velocidad} kilómetros por hora` : 'detenida o sin dato',
-      `geocerca ${geocerca}`,
-      (estadoPlaca?.direccion || (fuentePosiciones === 'real' ? vehicle?.ultima_ubicacion : '')) ? `dirección ${estadoPlaca?.direccion || vehicle?.ultima_ubicacion}` : '',
-      vehicle?.conductor_nombre ? `conductor ${vehicle.conductor_nombre}` : '',
-      Number.isFinite(Number(vehicle?.km_recorridos)) && Number(vehicle.km_recorridos) > 0 ? `${Number(vehicle.km_recorridos)} kilómetros recorridos en 24 horas` : '',
-    ].filter(Boolean);
-    const texto = partes.join(', ');
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(texto);
-    utterance.lang = 'es-PE';
-    utterance.rate = 0.9;
-    const vozEs = window.speechSynthesis.getVoices().find((voz) => (voz.lang || '').startsWith('es'));
-    if (vozEs) utterance.voice = vozEs;
-    window.speechSynthesis.speak(utterance);
+    const geocerca = estadoPlaca?.geocerca || geocercaDePunto(Number(vehicle?.lat), Number(vehicle?.lng), geofences);
+    decir(textoUbicacionVoz({ unidad: vehicle?.placa, geocerca, fecha: estadoPlaca?.ultima_fecha || vehicle?.ultima_fecha, ahora: ahoraPosiciones, evento: estadoPlaca?.ultimo_evento || vehicle?.ultimo_evento }));
   };
 
   const aplicarVozUnidad = (transcript) => {
@@ -1403,6 +1401,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     if (candidatos.length > 1) {
       setBusquedaRuta(stripVoiceCommand(transcript));
       setVoiceUnitMessage(`Hay ${candidatos.length} coincidencias. Elige la unidad en la lista.`);
+      decir('Encontré varias máquinas. Selecciona una en la lista.');
       return;
     }
     setBusquedaRuta(stripVoiceCommand(transcript));
@@ -1578,7 +1577,6 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       if (!objetivo) throw new Error(`No encontré la unidad «${placa}».`);
       if (onSelect) onSelect(objetivo.placa);
       enfocarUnidad(objetivo.placa);
-      leerVentanaUnidad(objetivo);
       return `Llevándote a «${objetivo.placa}» · geocerca ${geocercaActualUnidad(objetivo)}.`;
     }
     if (accion.tipo === 'filtrar_grupo') {
@@ -1834,7 +1832,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     const query = normalizeText(cleaned);
     const clave = normalizarVozPlaca(cleaned);
     if (!query) { setVoiceMessage('Di el nombre de una máquina, placa, área o geocerca.'); return; }
-    const unidades = [...new Map([...vehiclesConPosicion, ...unidadesMaestro].filter((v) => v.placa).map((v) => [v.placa, v])).values()];
+    const unidades = [...new Map([...unidadesMaestro, ...vehiclesConPosicion].filter((v) => v.placa).map((v) => [v.placa, v])).values()];
     const candidatas = unidades.filter((v) => [v.placa, v.descripcion, v.modelo, v.area, v.area_operativa, areasHunter[normalizarVozPlaca(v.placa)], v.grupo, gruposPorPlaca[v.placa]].filter(Boolean).some((campo) => normalizeText(campo).includes(query) || (clave.length >= 2 && normalizarVozPlaca(campo).includes(clave))));
     const exactas = candidatas.filter((v) => normalizarVozPlaca(v.placa) === clave);
     const seleccionables = exactas.length ? exactas : candidatas;
@@ -1842,11 +1840,13 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       setGeofenceSearch(''); setResultsOpen(false); setBusquedaRuta('');
       selectUnidadRuta(seleccionables[0].placa);
       setVoiceMessage(`Seleccionada la máquina «${seleccionables[0].placa}».`);
+      leerVentanaUnidad(seleccionables[0]);
       return;
     }
     if (seleccionables.length > 1) {
       setGeofenceSearch(''); setResultsOpen(false); setBusquedaRuta(cleaned);
       setVoiceMessage(`Encontré ${seleccionables.length} máquinas. Elige una en la lista de máquinas.`);
+      decir('Encontré varias máquinas. Selecciona una en la lista.');
       return;
     }
     let matches = searchGeofences(geofences, cleaned);
@@ -1868,7 +1868,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
           const accion = acciones[0];
           const unidad = accion.tipo === 'enfocar_unidad' && unidades.find((v) => normalizeText(v.placa) === normalizeText(accion.placa));
           const geocerca = accion.tipo !== 'enfocar_unidad' && geofences.find((g) => String(g.id) === String(accion.geocerca_id));
-          if (unidad) { setGeofenceSearch(''); selectUnidadRuta(unidad.placa); setVoiceMessage(`El asistente sugirió la máquina «${unidad.placa}». Comprueba que sea la correcta.`); return; }
+          if (unidad) { setGeofenceSearch(''); selectUnidadRuta(unidad.placa); setVoiceMessage(`El asistente sugirió la máquina «${unidad.placa}». Comprueba que sea la correcta.`); leerVentanaUnidad(unidad); return; }
           if (geocerca) { setGeofenceSearch(geocerca.nombre); focusGeofence(geocerca); setVoiceMessage(`El asistente sugirió la geocerca «${geocerca.nombre}». Comprueba que sea la correcta.`); return; }
         }
       } catch { /* La búsqueda local sigue disponible si falla el asistente. */ }
