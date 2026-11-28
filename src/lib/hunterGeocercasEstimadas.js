@@ -78,3 +78,22 @@ export function coberturaHunter(puntos, estimacion, desde, hasta, ahora = Date.n
   if (!Number.isFinite(asignado) || asignado > total || asignado < 0) return null;
   return { total, totalDia: (finDia - inicio) / 1000, pendiente: (finDia - fin) / 1000, corte: fin, asignado, inciertoEntre: estimacion?.incierto ?? 0, sinCoberturaExterna: Math.max(0, total - entre), sinAsignar: total - asignado, porcentaje: total ? 100 * asignado / total : 0 };
 }
+
+/** Escenario alternativo: continuidad de apagado suponiendo ausencia de eventos
+ * no recibidos. No modifica el balance conservador ni el resumen de Hunter. */
+export function escenarioApagadoHunter(estimacion, cobertura) {
+  if (!cobertura || !estimacion || !Array.isArray(estimacion.hipotesisApagado)) return null;
+  const grupos = new Map();
+  let anterior = -Infinity, total = 0;
+  for (const h of [...estimacion.hipotesisApagado].sort((a, b) => Date.parse(a.inicio) - Date.parse(b.inicio))) {
+    const inicio = Date.parse(h.inicio), fin = Date.parse(h.fin);
+    if (!Number.isFinite(inicio) || !Number.isFinite(fin) || inicio < anterior || fin > cobertura.corte || fin <= inicio || (fin - inicio) / 1000 !== h.segundos || !h.geocerca_id) return null;
+    anterior = fin;
+    total += h.segundos;
+    const fila = grupos.get(h.geocerca_id) || { id: h.geocerca_id, geocerca: h.geocerca, segundos: 0 };
+    fila.segundos += h.segundos;
+    grupos.set(h.geocerca_id, fila);
+  }
+  if (total > cobertura.sinAsignar) return null;
+  return { filas: [...grupos.values()], estimado: total, resto: cobertura.sinAsignar - total, asignado: cobertura.asignado + total, pendiente: cobertura.pendiente, totalDia: cobertura.totalDia };
+}

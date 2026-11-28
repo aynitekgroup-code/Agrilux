@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estimarHunterPorGeocerca, coberturaHunter } from '../src/lib/hunterGeocercasEstimadas.js';
+import { estimarHunterPorGeocerca, coberturaHunter, escenarioApagadoHunter } from '../src/lib/hunterGeocercasEstimadas.js';
 
 const geo = [{ id: 'a', nombre: 'Campo', geometria: { type: 'Polygon', coordinates: [[[0,0],[2,0],[2,2],[0,2],[0,0]]] } }];
 const punto = (fecha, extra = {}) => ({ fecha, latitud: 1, longitud: 1, ignicion: true, velocidad_kmh: 0, ...extra });
@@ -70,6 +70,24 @@ test('hueco largo que termina con evento Ignición ON permanece incierto', () =>
   assert.equal(r.filas.length, 0);
   assert.equal(r.incierto, 3600);
   assert.equal(r.hipotesisApagado.length, 1);
+});
+
+test('escenario aproximado reduce solo el resto sin modificar el balance conservador', () => {
+  const p = [punto('2026-11-25T05:00:00Z', { ignicion: false }), punto('2026-11-25T06:00:00Z', { ignicion: false })];
+  const e = estimarHunterPorGeocerca(p, geo);
+  const c = coberturaHunter(p, e, '2026-11-25T05:00:00Z', '2026-11-26T05:00:00Z', Date.parse('2026-11-27T05:00:00Z'));
+  const s = escenarioApagadoHunter(e, c);
+  assert.equal(s.estimado, 3600);
+  assert.equal(s.resto, 82800);
+  assert.equal(s.asignado + s.resto + s.pendiente, 86400);
+  assert.equal(c.sinAsignar, 86400);
+  assert.equal(s.filas[0].geocerca, 'Campo');
+});
+test('escenario rechaza intervalos futuros, solapados o mayores al tiempo sin asignar', () => {
+  const c = { corte: Date.parse('2026-11-25T06:00:00Z'), sinAsignar: 3600, asignado: 0, pendiente: 0, totalDia: 3600 };
+  const h = { inicio: '2026-11-25T05:00:00Z', fin: '2026-11-25T06:00:00Z', segundos: 3600, geocerca_id: 'a', geocerca: 'Campo' };
+  assert.equal(escenarioApagadoHunter({ hipotesisApagado: [h, h] }, c), null);
+  assert.equal(escenarioApagadoHunter({ hipotesisApagado: [{ ...h, fin: '2026-11-25T07:00:00Z', segundos: 7200 }] }, c), null);
 });
 
 test('hueco largo con encendido al final sin evento de ignición sigue sin determinar', () => {
