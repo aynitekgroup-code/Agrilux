@@ -1360,6 +1360,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(texto);
       utterance.lang = 'es-PE'; utterance.rate = 0.9;
+      const voces = window.speechSynthesis.getVoices();
+      utterance.voice = voces.find((v) => /^es[-_]PE$/i.test(v.lang)) || voces.find((v) => /^es([-_]|$)/i.test(v.lang)) || null;
       utterance.onerror = () => setVoiceMessage('No se pudo reproducir el audio. Revisa el volumen y la voz del dispositivo.');
       window.speechSynthesis.speak(utterance);
     } catch {

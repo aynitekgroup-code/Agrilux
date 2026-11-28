@@ -1,6 +1,7 @@
 package com.agrilux.app2;
 
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.Voice;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -25,11 +26,19 @@ public class VozAgriluxPlugin extends Plugin {
     }
 
     private void reproducir(PluginCall call, String texto) {
-        int idioma = voz.setLanguage(new Locale("es", "PE"));
-        if (idioma == TextToSpeech.LANG_MISSING_DATA || idioma == TextToSpeech.LANG_NOT_SUPPORTED) {
-            idioma = voz.setLanguage(new Locale("es"));
+        Voice preferida = null;
+        int mejor = -1;
+        if (voz.getVoices() != null) {
+            for (Voice candidata : voz.getVoices()) {
+                Locale locale = candidata.getLocale();
+                if (locale == null || !"es".equalsIgnoreCase(locale.getLanguage()) || (candidata.getFeatures() != null && candidata.getFeatures().contains("notInstalled"))) continue;
+                int prioridad = (candidata.isNetworkConnectionRequired() ? 0 : 10) + ("PE".equalsIgnoreCase(locale.getCountry()) ? 3 : "MX".equalsIgnoreCase(locale.getCountry()) ? 2 : 1);
+                if (prioridad > mejor) { preferida = candidata; mejor = prioridad; }
+            }
         }
-        if (idioma == TextToSpeech.LANG_MISSING_DATA || idioma == TextToSpeech.LANG_NOT_SUPPORTED) {
+        if (preferida == null || voz.setVoice(preferida) == TextToSpeech.ERROR
+                || voz.getVoice() == null || voz.getVoice().getLocale() == null
+                || !"es".equalsIgnoreCase(voz.getVoice().getLocale().getLanguage())) {
             call.reject("Instala una voz en español en los ajustes de texto a voz."); return;
         }
         voz.setSpeechRate(0.9f);
