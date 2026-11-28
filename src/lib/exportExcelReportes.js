@@ -317,10 +317,11 @@ function textoDuracion(seg) {
 /**
  * @param {Array} visitas  filas de agrotrack_visitas_dia_flota
  * @param {{ matriz: object, infoPlaca: object, desdeDia: string, hastaDia: string,
- *           metricaLabel?: string }} opciones
+ *           metricaLabel?: string, columnasMode?: 'division'|'geocerca' }} opciones
  */
 export function exportarTablaDinamicaGeocercasExcel(visitas, {
   matriz, infoPlaca = {}, desdeDia = '', hastaDia = '', metricaLabel = 'Total en geocerca',
+  columnasMode = 'geocerca',
 } = {}) {
   const wb = XLSX.utils.book_new();
 
@@ -401,6 +402,12 @@ export function exportarTablaDinamicaGeocercasExcel(visitas, {
 
   agregarCriterio(wb, [
     { Concepto: 'Reporte', Detalle: 'Tabla dinámica de geocercas · todas las unidades (Agrilux)' },
+    {
+      Concepto: 'Columnas',
+      Detalle: columnasMode === 'division'
+        ? 'Por división: cada división agrupa sus geocercas de campo (equivalente a Zonar, que solo reporta divisiones). La hoja Data conserva la geocerca de campo.'
+        : 'Por geocerca de campo (más detalle que Zonar, que solo reporta divisiones).',
+    },
     { Concepto: 'Días', Detalle: desdeDia === hastaDia ? desdeDia : `${desdeDia} a ${hastaDia}` },
     { Concepto: 'Valores', Detalle: `${metricaLabel} en horas (Duración3 / Resumen Geocer)` },
     { Concepto: 'Corte', Detalle: 'Cada día de 00:00:00 a 23:59:59 hora de Perú. Una visita que cruza la medianoche se parte en dos (sale a las 23:59:59 y vuelve a entrar a las 00:00:00).' },

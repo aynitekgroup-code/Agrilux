@@ -15,6 +15,7 @@
  */
 
 import { llamarRpcReporte } from './rpcReportes.js';
+import { normalizarDivision } from './agrotrackDivisiones.js';
 
 const PAGINA = 1000;
 const MAX_PAGINAS = 50; // 50 000 visitas: un mes completo de toda la flota
@@ -229,6 +230,35 @@ export async function leerTablaGeocercasDia(empresaId, { desdeDia, hastaDia, pla
   );
 }
 
+/**
+ * Mapa geocerca -> división desde el catálogo public.agrotrack_geocercas.
+ * La tabla diaria solo guarda el nombre de la geocerca; la división (Pamp,
+ * Pom1, Pom2, Sal-Sip…) vive en el catálogo. Si no se puede leer, la tabla
+ * sigue funcionando con el nombre de la geocerca.
+ */
+export async function leerDivisionesGeocercas(empresaId) {
+  if (!empresaId) return {};
+  try {
+    const sb = await cliente();
+    const { data, error } = await sb
+      .from('agrotrack_geocercas')
+      .select('nombre, division, activa')
+      .eq('empresa_id', empresaId)
+      .eq('activa', true)
+      .limit(1000);
+    if (error) throw error;
+    const mapa = {};
+    (data || []).forEach((g) => {
+      const nombre = String(g?.nombre || '').trim();
+      if (nombre) mapa[nombre] = normalizarDivision(g?.division, nombre);
+    });
+    return mapa;
+  } catch (e) {
+    console.warn('No se pudo leer la división de las geocercas:', e?.message || e);
+    return {};
+  }
+}
+
 /* ------------------------------------------------------------------------
  * Funciones puras
  * ---------------------------------------------------------------------- */
@@ -275,13 +305,31 @@ export const METRICAS = [
 
 /**
  * Matriz de la tabla dinámica: filas = placa (con su área/grupo),
- * columnas = geocercas, valor = horas de la métrica elegida.
+ * columnas = división o geocerca de campo, valor = horas de la métrica.
+ *
+ * Zonar solo reporta geocercas de división (Pamp, Pom1, Pom2, Sal-Sip) y no
+ * las geocercas de los campos; Agrilux tiene las de campo. Para comparar con
+ * Zonar se agrupan los campos en su división (`columnasMode: 'division'`);
+ * cargar ambas juntas duplicaría la información, porque una división agrupa
+ * varios campos. La geocerca de campo sigue disponible en el detalle.
+ *
  * @param {Array} tabla        filas de agrotrack_tabla_geocercas_dia
  * @param {Object} infoPlaca   { placa: { area, grupo } }
  * @param {string} metrica     una de METRICAS[].id
+ * @param {{columnasMode?: 'division'|'geocerca', divisionPorGeocerca?: Object}} opciones
  */
-export function armarMatriz(tabla, infoPlaca = {}, metrica = 'duracion_segundos') {
-  const geocercas = [...new Set((tabla || []).map((f) => f.geocerca))].sort((a, b) => a.localeCompare(b, 'es'));
+export function armarMatriz(tabla, infoPlaca = {}, metrica = 'duracion_segundos', {
+  columnasMode = 'geocerca',
+  divisionPorGeocerca = {},
+} = {}) {
+  const nombreColumna = (fila) => {
+    const geocerca = String(fila?.geocerca || '').trim();
+    if (columnasMode !== 'division') return geocerca;
+    const division = divisionPorGeocerca[geocerca] ?? fila?.division;
+    return normalizarDivision(division, geocerca) || geocerca;
+  };
+
+  const geocercas = [...new Set((tabla || []).map(nombreColumna))].sort((a, b) => a.localeCompare(b, 'es'));
   const porPlaca = new Map();
   for (const f of tabla || []) {
     const fila = porPlaca.get(f.placa) || {
@@ -292,7 +340,8 @@ export function armarMatriz(tabla, infoPlaca = {}, metrica = 'duracion_segundos'
       total: 0,
     };
     const seg = Number(f[metrica] || 0);
-    fila.valores[f.geocerca] = (fila.valores[f.geocerca] || 0) + seg;
+    const columna = nombreColumna(f);
+    fila.valores[columna] = (fila.valores[columna] || 0) + seg;
     fila.total += seg;
     porPlaca.set(f.placa, fila);
   }
