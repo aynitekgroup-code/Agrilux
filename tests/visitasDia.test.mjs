@@ -33,3 +33,53 @@ test('matriz placa x geocerca con totales', () => {
   const ap = armarMatriz(tabla, {}, 'apagado_segundos');
   assert.equal(ap.totalGeneral, 2700);
 });
+
+test('columnas por división: agrupa los campos como Zonar', () => {
+  const tabla = [
+    { placa: 'A', geocerca: 'San Carlos A', duracion_segundos: 3600 },
+    { placa: 'A', geocerca: 'Boris B', duracion_segundos: 1800 },
+    { placa: 'B', geocerca: 'Fabrica', duracion_segundos: 600 },
+    { placa: 'B', geocerca: 'Distrito Pomalca', duracion_segundos: 900 },
+  ];
+  const m = armarMatriz(tabla, {}, 'duracion_segundos', {
+    columnasMode: 'division',
+    divisionPorGeocerca: {
+      'San Carlos A': 'Pomalca 1',
+      'Boris B': 'pom1', // alias homologado
+      Fabrica: 'Pomalca 2',
+      'Distrito Pomalca': '', // sin división: usa su propio nombre
+    },
+  });
+
+  assert.deepEqual(m.geocercas, ['Distrito Pomalca', 'Pomalca 1', 'Pomalca 2']);
+  assert.equal(m.filas.find((f) => f.placa === 'A').valores['Pomalca 1'], 5400);
+  assert.equal(m.filas.find((f) => f.placa === 'B').valores['Pomalca 2'], 600);
+  assert.equal(m.totales['Pomalca 1'], 5400);
+  assert.equal(m.totales['Pomalca 2'], 600);
+  assert.equal(m.totales['Distrito Pomalca'], 900);
+  assert.equal(m.totalGeneral, 6900);
+});
+
+test('sin división conocida la columna usa la geocerca de campo', () => {
+  const m = armarMatriz(
+    [{ placa: 'A', geocerca: 'Servicentro', duracion_segundos: 120 }],
+    {},
+    'duracion_segundos',
+    { columnasMode: 'division', divisionPorGeocerca: {} },
+  );
+  assert.deepEqual(m.geocercas, ['Servicentro']);
+  assert.equal(m.totales.Servicentro, 120);
+});
+
+test('por geocerca de campo no agrupa divisiones (compatibilidad)', () => {
+  const tabla = [
+    { placa: 'A', geocerca: 'San Carlos A', duracion_segundos: 60 },
+    { placa: 'A', geocerca: 'Boris B', duracion_segundos: 60 },
+  ];
+  const m = armarMatriz(tabla, {}, 'duracion_segundos', {
+    columnasMode: 'geocerca',
+    divisionPorGeocerca: { 'San Carlos A': 'Pomalca 1', 'Boris B': 'Pomalca 1' },
+  });
+  assert.deepEqual(m.geocercas, ['Boris B', 'San Carlos A']);
+  assert.equal(m.totales['Pomalca 1'], undefined);
+});

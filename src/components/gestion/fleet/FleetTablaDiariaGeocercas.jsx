@@ -6,7 +6,7 @@ import { ultimoDiaLima } from '../../../lib/agrotrackFlota';
 import { cargarGruposUnidades } from '../../../lib/agrotrackGrupos';
 import {
   asegurarVisitasCalculadas, pendientesVisitasDia, leerVisitasDia, leerTablaGeocercasDia,
-  armarMatriz, METRICAS, partesLima, duracionTexto, horasDecimal, codigoArea,
+  leerDivisionesGeocercas, armarMatriz, METRICAS, partesLima, duracionTexto, horasDecimal, codigoArea,
 } from '../../../lib/agrotrackVisitasDia';
 import { hoyLima, rangoRapido, useLimiteFilas, BotonVerMas } from './reportesComunes';
 
@@ -97,6 +97,11 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
   const [hasta, setHasta] = useState('');
   const [geocerca, setGeocerca] = useState('');
   const [grupo, setGrupo] = useState('');
+  // Columnas de la tabla dinámica: por división (lo que reporta Zonar) o por
+  // geocerca de campo (más detalle). Nunca las dos juntas: una división
+  // agrupa varios campos y se duplicaría la información.
+  const [columnas, setColumnas] = useState('division');
+  const [divisionPorGeocerca, setDivisionPorGeocerca] = useState({});
   const [metrica, setMetrica] = useState('duracion_segundos');
   const [estado, setEstado] = useState('inactivo'); // inactivo | calculando | cargando | ok | vacio | error
   const [progreso, setProgreso] = useState(null);
@@ -132,6 +137,17 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
   useEffect(() => {
     if (!empresaId) return;
     cargarGruposUnidades(empresaId).then((r) => setGrupos(r.grupos || {})).catch(() => setGrupos({}));
+  }, [empresaId]);
+
+  // División de cada geocerca (catálogo). Sin catálogo, la columna usa el
+  // nombre de la geocerca y la tabla sigue funcionando.
+  useEffect(() => {
+    if (!empresaId) return undefined;
+    let cancelado = false;
+    leerDivisionesGeocercas(empresaId).then((mapa) => {
+      if (!cancelado) setDivisionPorGeocerca(mapa || {});
+    });
+    return () => { cancelado = true; };
   }, [empresaId]);
 
   const rangoValido = desdeDia && hastaDia && hastaDia >= desdeDia && diasEntre(desdeDia, hastaDia) < MAX_DIAS;
@@ -216,7 +232,10 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
 
   const tablaFiltrada = useMemo(() => tabla.filter((f) => pasaFiltros(f.placa, f.geocerca)), [tabla, pasaFiltros]);
   const visitasFiltradas = useMemo(() => visitas.filter((v) => pasaFiltros(v.placa, v.geocerca)), [visitas, pasaFiltros]);
-  const matriz = useMemo(() => armarMatriz(tablaFiltrada, infoPlaca, metrica), [tablaFiltrada, infoPlaca, metrica]);
+  const matriz = useMemo(
+    () => armarMatriz(tablaFiltrada, infoPlaca, metrica, { columnasMode: columnas, divisionPorGeocerca }),
+    [tablaFiltrada, infoPlaca, metrica, columnas, divisionPorGeocerca],
+  );
   const { filasVistas: filasMatriz, expandido: expandidoMatriz, alternar: alternarMatriz, total: totalMatrizFilas } = useLimiteFilas(matriz.filas);
 
   const kpis = useMemo(() => {
@@ -256,6 +275,7 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
       const { exportarTablaDinamicaGeocercasExcel } = await import('../../../lib/exportExcelReportes');
       exportarTablaDinamicaGeocercasExcel(visitasFiltradas, {
         matriz, infoPlaca, desdeDia, hastaDia,
+        columnasMode: columnas,
         metricaLabel: METRICAS.find((m) => m.id === metrica)?.label,
       });
     } catch (e) {
@@ -276,7 +296,7 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
           <div className="min-w-0">
             <h2 className="text-base font-bold text-slate-900">Tabla diaria de geocercas · todas las unidades</h2>
             <p className="text-xs text-slate-500">
-              Dónde estuvo cada unidad y cuántas horas (apagado, ralentí y viajando). Es la tabla dinámica de las 6:30 a. m., lista para Excel.
+              Dónde estuvo cada unidad y cuántas horas (apagado, ralentí y viajando). Columnas por división, como Zonar, o por geocerca de campo. Es la tabla dinámica de las 6:30 a. m., lista para Excel.
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">
@@ -349,6 +369,15 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
               {METRICAS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
           </label>
+          <label className="min-w-0">
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Columnas</span>
+            <select value={columnas} onChange={(e) => setColumnas(e.target.value)}
+              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 bg-white"
+              title="Zonar solo reporta divisiones; Agrilux tiene además las geocercas de los campos.">
+              <option value="division">Por división (como Zonar)</option>
+              <option value="geocerca">Por geocerca de campo</option>
+            </select>
+          </label>
         </div>
         {desdeDia && hastaDia && !rangoValido ? (
           <p className="text-[11px] text-amber-700">Elige un rango de máximo {MAX_DIAS} días con “Hasta” igual o posterior a “Desde”.</p>
@@ -412,7 +441,7 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
           <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2 p-4">
             {[
               ['Unidades', kpis.unidades],
-              ['Geocercas', kpis.geocercas],
+              [columnas === 'division' ? 'Divisiones' : 'Geocercas', matriz.geocercas.length],
               ['Visitas', kpis.visitas],
               ['Horas en geocercas', h2(kpis.total)],
               ['Apagado (h)', h2(kpis.apagado)],
@@ -428,7 +457,13 @@ export default function FleetTablaDiariaGeocercas({ empresaId, periodo = null, f
 
           <div className="px-4 pb-1 text-[11px] text-slate-500">
             Suma de <b>{etiquetaMetrica}</b> (horas) · {fechaHoraCorta(desde)}{desde !== hasta ? ` a ${fechaHoraCorta(hasta)}` : ''}
+            {' · '}columnas por <b>{columnas === 'division' ? 'división' : 'geocerca de campo'}</b>
           </div>
+          <p className="px-4 pb-2 text-[10px] text-slate-400 leading-relaxed">
+            {columnas === 'division'
+              ? 'Cada división agrupa sus geocercas de campo, como en Zonar. El detalle de visitas de abajo conserva la geocerca de campo.'
+              : 'Una columna por geocerca de campo (más detalle que Zonar, que solo reporta divisiones).'}
+          </p>
           <div className="overflow-x-auto mx-4 mb-4 rounded-xl border border-slate-100">
             <table className="text-[11px] text-slate-700 border-collapse">
               <thead>
