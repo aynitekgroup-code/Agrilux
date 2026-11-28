@@ -57,6 +57,7 @@ import { cargarPaginaRecorrido, planearPaginas, textoVentana } from '../../../li
 import { STATUS_META } from './fleetTokens';
 import { supabase } from '../../../lib/supabase';
 import { textoUbicacionVoz } from '../../../lib/vozUbicacion';
+import { placasFoneticas, clavePlacaFonetica } from '../../../lib/placaFonetica';
 
 const VozAgrilux = registerPlugin('VozAgrilux');
 
@@ -1244,7 +1245,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     return candidatas
       .filter((v) => [v.placa, v.descripcion, v.modelo, v.conductor_nombre, v.ultimo_evento, v.area, v.area_operativa, areasHunter[normalizarVozPlaca(v.placa)], v.grupo, gruposPorPlaca[v.placa]]
         .filter(Boolean)
-        .some((campo) => normalizeText(campo).includes(term) || (placaBuscada.length >= 3 && normalizarVozPlaca(campo).includes(placaBuscada))))
+        .some((campo) => normalizeText(campo).includes(term) || (placaBuscada.length >= 3 && normalizarVozPlaca(campo).includes(placaBuscada))) || (clavePlacaFonetica(busquedaRuta) && clavePlacaFonetica(v.placa) === clavePlacaFonetica(busquedaRuta)))
       .slice(0, 8);
   }, [busquedaRuta, vehiclesConPosicion, unidadesMaestro, gruposPorPlaca, areasHunter]);
 
@@ -1379,7 +1380,8 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       setVoiceUnitMessage('No se reconoció una placa. Intenta decir solo la placa o escríbela.');
       return;
     }
-    const candidatos = vehiclesConPosicion.filter((vehicle) => {
+    const foneticos = placasFoneticas(vehiclesConPosicion, stripVoiceCommand(transcript));
+    const candidatos = foneticos.length ? foneticos : vehiclesConPosicion.filter((vehicle) => {
       const campos = [vehicle.placa, vehicle.descripcion, vehicle.modelo, vehicle.conductor_nombre, vehicle.ultimo_evento];
       return campos.filter(Boolean).some((campo) => (
         normalizarVozPlaca(campo).includes(query) || normalizeText(campo).includes(queryTexto)
@@ -1390,7 +1392,7 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
       setVoiceUnitMessage(`No encontré una máquina para "${transcript}". Intenta decir solo la placa.`);
       return;
     }
-    const exacto = candidatos.find((vehicle) => normalizarVozPlaca(vehicle.placa) === query) || null;
+    const exacto = foneticos.length > 1 ? null : candidatos.find((vehicle) => normalizarVozPlaca(vehicle.placa) === query) || null;
     const elegida = exacto || (candidatos.length === 1 ? candidatos[0] : null);
     if (elegida) {
       selectUnidadRuta(elegida.placa);
@@ -1834,12 +1836,13 @@ export default function FleetMap({ empresaId, userId, canImport = false, canDele
     if (!query) { setVoiceMessage('Di el nombre de una máquina, placa, área o geocerca.'); return; }
     const unidades = [...new Map([...unidadesMaestro, ...vehiclesConPosicion].filter((v) => v.placa).map((v) => [v.placa, v])).values()];
     const candidatas = unidades.filter((v) => [v.placa, v.descripcion, v.modelo, v.area, v.area_operativa, areasHunter[normalizarVozPlaca(v.placa)], v.grupo, gruposPorPlaca[v.placa]].filter(Boolean).some((campo) => normalizeText(campo).includes(query) || (clave.length >= 2 && normalizarVozPlaca(campo).includes(clave))));
+    const foneticas = placasFoneticas(unidades, cleaned);
     const exactas = candidatas.filter((v) => normalizarVozPlaca(v.placa) === clave);
-    const seleccionables = exactas.length ? exactas : candidatas;
+    const seleccionables = foneticas.length ? foneticas : exactas.length ? exactas : candidatas;
     if (seleccionables.length === 1) {
       setGeofenceSearch(''); setResultsOpen(false); setBusquedaRuta('');
       selectUnidadRuta(seleccionables[0].placa);
-      setVoiceMessage(`Seleccionada la máquina «${seleccionables[0].placa}».`);
+      setVoiceMessage(`Seleccionada la máquina «${seleccionables[0].placa}»${normalizarVozPlaca(seleccionables[0].placa) !== clave ? ' (coincidencia B/V)' : ''}.`);
       leerVentanaUnidad(seleccionables[0]);
       return;
     }
