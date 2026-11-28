@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estimarHunterPorGeocerca, coberturaHunter, escenarioApagadoHunter } from '../src/lib/hunterGeocercasEstimadas.js';
+import { estimarHunterPorGeocerca, coberturaHunter, escenarioApagadoHunter, tablaAproximadaHunter } from '../src/lib/hunterGeocercasEstimadas.js';
 
 const geo = [{ id: 'a', nombre: 'Campo', geometria: { type: 'Polygon', coordinates: [[[0,0],[2,0],[2,2],[0,2],[0,0]]] } }];
 const punto = (fecha, extra = {}) => ({ fecha, latitud: 1, longitud: 1, ignicion: true, velocidad_kmh: 0, ...extra });
@@ -82,6 +82,10 @@ test('escenario aproximado reduce solo el resto sin modificar el balance conserv
   assert.equal(s.asignado + s.resto + s.pendiente, 86400);
   assert.equal(c.sinAsignar, 86400);
   assert.equal(s.filas[0].geocerca, 'Campo');
+  const tabla = tablaAproximadaHunter(e, c);
+  assert.equal(tabla.filas[0].apagado, 3600);
+  assert.equal(tabla.filas[0].apagadoHipotesis, 3600);
+  assert.equal(tabla.escenario.resto, 82800);
 });
 test('escenario rechaza intervalos futuros, solapados o mayores al tiempo sin asignar', () => {
   const c = { corte: Date.parse('2026-11-25T06:00:00Z'), sinAsignar: 3600, asignado: 0, pendiente: 0, totalDia: 3600 };

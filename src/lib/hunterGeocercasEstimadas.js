@@ -97,3 +97,17 @@ export function escenarioApagadoHunter(estimacion, cobertura) {
   if (total > cobertura.sinAsignar) return null;
   return { filas: [...grupos.values()], estimado: total, resto: cobertura.sinAsignar - total, asignado: cobertura.asignado + total, pendiente: cobertura.pendiente, totalDia: cobertura.totalDia };
 }
+
+/** Proyección para la tabla, manteniendo separado cuánto se supuso por huecos. */
+export function tablaAproximadaHunter(estimacion, cobertura) {
+  const escenario = escenarioApagadoHunter(estimacion, cobertura);
+  if (!escenario) return null;
+  const filas = new Map((estimacion.filas || []).map((f) => [f.id, { ...f, apagadoHipotesis: 0 }]));
+  for (const h of escenario.filas) {
+    const fila = filas.get(h.id) || { id: h.id, geocerca: h.geocerca, apagado: 0, detenido: 0, ralenti: 0, movimiento: 0, apagadoHipotesis: 0 };
+    fila.apagado += h.segundos;
+    fila.apagadoHipotesis += h.segundos;
+    filas.set(h.id, fila);
+  }
+  return { filas: [...filas.values()], escenario };
+}
